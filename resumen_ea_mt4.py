@@ -5,15 +5,16 @@ import pandas as pd
 from datetime import datetime
 
 st.set_page_config(page_title="Resumen de EAs MT4", layout="wide")
-st.title("📈 Comparativa de estrategias por EA (MetaTrader 4)")
+st.title("📈 Comparativa de estrategias JMLZ por EA (MetaTrader 4)")
 
-archivo = st.file_uploader("📤 Sube tu archivo HTML exportado de MetaTrader 4", type=["htm", "html"])
+archivo = st.file_uploader("📤 Sube tu archivo HTML exportado de MetaTrader 4 (solo procesará trades con comentarios JMLZ)", type=["htm", "html"])
 
 if archivo:
     soup = BeautifulSoup(archivo, 'html.parser')
     rows = soup.find_all('tr', align='right')
 
     datos = []
+    trades_filtrados = 0
 
     for i in range(0, len(rows), 2):
         try:
@@ -30,8 +31,23 @@ if archivo:
 
             if "cancelled" in ea_raw.lower():
                 continue
+            
+            # Filtrar trades sin comentarios (EA vacío)
+            if not ea_raw or ea_raw.strip() == "":
+                trades_filtrados += 1
+                continue
 
-            ea_name = ea_raw.split('[')[0]
+            ea_name = ea_raw.split('[')[0].strip()
+            
+            # Filtrar si el nombre del EA está vacío después del procesamiento
+            if not ea_name or ea_name == "":
+                trades_filtrados += 1
+                continue
+            
+            # Filtrar solo trades que contengan "JMLZ" en el comentario
+            if "JMLZ" not in ea_name.upper():
+                trades_filtrados += 1
+                continue
 
             datos.append({
                 "EA": ea_name,
@@ -46,6 +62,10 @@ if archivo:
             continue
 
     if datos:
+        # Mostrar información sobre trades filtrados
+        if trades_filtrados > 0:
+            st.info(f"ℹ️ Se filtraron {trades_filtrados} trades que no contienen 'JMLZ' en sus comentarios")
+        
         df = pd.DataFrame(datos)
 
         resumen = df.groupby(["EA", "Símbolo"]).agg(
@@ -116,11 +136,10 @@ if archivo:
 
         # Mostrar tabla resumen
         st.subheader("📊 Comparativa de EAs")
-        st.dataframe(
-            resumen_filtrado.style.applymap(resaltar_beneficio, subset=['Beneficio_total_raw']).format(None, subset=['Beneficio_total_raw']),
-            use_container_width=True,
-            column_config={"Beneficio_total_raw": None}
-        )
+        
+        # Crear una copia para mostrar sin la columna raw
+        resumen_mostrar = resumen_filtrado.drop(columns=['Beneficio_total_raw'])
+        st.dataframe(resumen_mostrar, use_container_width=True)
 
         # Crear gráfico de beneficio acumulado
         df_filtrado['Fecha'] = df_filtrado['Close'].dt.date
@@ -140,10 +159,8 @@ if archivo:
         # Añadir tooltip personalizado
         fig.update_traces(
             hovertemplate=
-            "<b> %{customdata[0]} </b><br>" +
             "<b>Fecha:</b> %{x|%d-%m-%Y}<br>" +
-            "<b>Beneficio acumulado:</b> $%{y:.2f}<extra></extra>",
-            customdata=beneficios_diarios[["EA"]]
+            "<b>Beneficio acumulado:</b> $%{y:.2f}<extra></extra>"
         )
 
         fig.update_layout(height=400, margin=dict(l=20, r=20, t=40, b=20))
