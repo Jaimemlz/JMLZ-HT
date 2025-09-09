@@ -1,185 +1,1072 @@
 import streamlit as st
 import plotly.express as px
+import plotly.io as pio
 from bs4 import BeautifulSoup
 import pandas as pd
 from datetime import datetime
+import numpy as np
 
-st.set_page_config(page_title="Resumen de EAs MT4", layout="wide")
-st.title("📈 Comparativa de estrategias JMLZ por EA (MetaTrader 4)")
+# Configurar tema claro por defecto para Plotly
+pio.templates.default = "plotly_white"
 
-archivo = st.file_uploader("📤 Sube tu archivo HTML exportado de MetaTrader 4 (solo procesará trades con comentarios JMLZ)", type=["htm", "html"])
+# Funciones para calcular ranking de riesgo-beneficio
+def es_ea_valida(nombre_ea):
+    """
+    Verifica si un nombre de EA es válido (contiene letras).
+    Descarta strings vacíos, solo números, o valores como 0.70, -0.02, etc.
+    """
+    if not nombre_ea or nombre_ea.strip() == "":
+        return False
+    
+    # Verificar si contiene al menos una letra
+    return any(c.isalpha() for c in nombre_ea)
 
-if archivo:
-    soup = BeautifulSoup(archivo, 'html.parser')
-    rows = soup.find_all('tr', align='right')
+def calcular_ratio_riesgo_beneficio(df_ea):
+    """
+    Calcula el ratio riesgo-beneficio para una EA específica.
+    Ratio = (Beneficio promedio de operaciones ganadoras) / (Pérdida promedio de operaciones perdedoras)
+    """
+    operaciones_ganadoras = df_ea[df_ea['Beneficio'] > 0]
+    operaciones_perdedoras = df_ea[df_ea['Beneficio'] < 0]
+    
+    if len(operaciones_ganadoras) == 0:
+        return 0  # Si no hay operaciones ganadoras, ratio es 0
+    
+    if len(operaciones_perdedoras) == 0:
+        return float('inf')  # Si no hay operaciones perdedoras, ratio es infinito
+    
+    beneficio_promedio = operaciones_ganadoras['Beneficio'].mean()
+    perdida_promedio = abs(operaciones_perdedoras['Beneficio'].mean())
+    
+    if perdida_promedio == 0:
+        return float('inf')  # Evitar división por cero
+    
+    return beneficio_promedio / perdida_promedio
 
-    datos = []
-    trades_filtrados = 0
-
-    for i in range(0, len(rows), 2):
-        try:
-            fila_op = rows[i].find_all('td')
-            fila_ea = rows[i+1].find_all('td')
-
-            tipo = fila_op[2].text.strip().lower()
-            size = float(fila_op[3].text)
-            symbol = fila_op[4].text.strip().lower()
-            open_time = datetime.strptime(fila_op[1].text.strip(), "%Y.%m.%d %H:%M:%S")
-            close_time = datetime.strptime(fila_op[8].text.strip(), "%Y.%m.%d %H:%M:%S")
-            profit = float(fila_op[13].text)
-            ea_raw = fila_ea[-1].text.strip()
-
-            if "cancelled" in ea_raw.lower():
-                continue
-            
-            # Filtrar trades sin comentarios (EA vacío)
-            if not ea_raw or ea_raw.strip() == "":
-                trades_filtrados += 1
-                continue
-
-            ea_name = ea_raw.split('[')[0].strip()
-            
-            # Filtrar si el nombre del EA está vacío después del procesamiento
-            if not ea_name or ea_name == "":
-                trades_filtrados += 1
-                continue
-            
-            # Filtrar solo trades que contengan "JMLZ" en el comentario
-            if "JMLZ" not in ea_name.upper():
-                trades_filtrados += 1
-                continue
-
-            datos.append({
-                "EA": ea_name,
-                "Símbolo": symbol,
-                "Tipo": tipo,
-                "Beneficio": profit,
-                "Open": open_time,
-                "Close": close_time,
-                "Duración": (close_time - open_time).total_seconds() / 60  # en minutos
-            })
-        except Exception:
-            continue
-
-    if datos:
-        # Mostrar información sobre trades filtrados
-        if trades_filtrados > 0:
-            st.info(f"ℹ️ Se filtraron {trades_filtrados} trades que no contienen 'JMLZ' en sus comentarios")
-        
-        df = pd.DataFrame(datos)
-
-        resumen = df.groupby(["EA", "Símbolo"]).agg(
-            Ops=('Beneficio', 'count'),
-            Win_pct=('Beneficio', lambda x: 100 * (x > 0).sum() / len(x)),
-            Profit_medio=('Beneficio', 'mean'),
-            Max_Loss=('Beneficio', 'min'),
-            Duracion_media_min=('Duración', 'mean'),
-            Beneficio_total=('Beneficio', 'sum')
-        ).reset_index()
-
-        # Redondear numéricos primero
-        resumen = resumen.round({
-            "Win_pct": 2,
-            "Profit_medio": 2,
-            "Max_Loss": 2,
-            "Duracion_media_min": 1,
-            "Beneficio_total": 2
-        })
-
-        resumen["Beneficio_total_raw"] = resumen["Beneficio_total"]
-
-        # 💡 Formatear columnas para presentación legible
-        def formatear_duracion(minutos):
-            horas = int(minutos) // 60
-            mins = int(minutos) % 60
-            return f"{horas}h {mins}m"
-
-        resumen["Win_pct"] = resumen["Win_pct"].astype(str) + " %"
-        resumen["Profit_medio"] = resumen["Profit_medio"].apply(lambda x: f"${x:.2f}")
-        resumen["Max_Loss"] = resumen["Max_Loss"].apply(lambda x: f"${x:.2f}")
-        resumen["Beneficio_total"] = resumen["Beneficio_total"].apply(lambda x: f"${x:.2f}")
-        resumen["Duracion_media"] = resumen["Duracion_media_min"].apply(formatear_duracion)
-        resumen = resumen.drop(columns=["Duracion_media_min"])  # Quitamos la versión cruda
-
-        # Ordenar
-          # Ordenar y preparar resumen
-        resumen = resumen.sort_values(by="Beneficio_total_raw", ascending=False)
-
-        def resaltar_beneficio(val):
-            color = '#b6f3c0' if val > 0 else '#f3b6b6'
-            return f'background-color: {color}; color: black;'
-
-        styler = resumen.style.applymap(resaltar_beneficio, subset=['Beneficio_total_raw'])
-
-        styled_df = styler.format(None, subset=['Beneficio_total_raw']).set_table_styles([{
-            'selector': f'.col_heading.level0:nth-child({resumen.columns.get_loc("Beneficio_total_raw")+1})',
-            'props': [('display', 'none')]
-        }, {
-            'selector': f'.rowheading:nth-child({resumen.columns.get_loc("Beneficio_total_raw")+1})',
-            'props': [('display', 'none')]
-        }, {
-            'selector': f'.data:nth-child({resumen.columns.get_loc("Beneficio_total_raw")+1})',
-            'props': [('display', 'none')]
-        }])
-
-        # Selector de EA para filtrar
-        ea_opciones = ["Todas"] + sorted(resumen["EA"].unique())
-        ea_seleccionada = st.selectbox("🧠 Selecciona una EA para filtrar", ea_opciones)
-
-        # Filtrar datos según selección
-        if ea_seleccionada != "Todas":
-            resumen_filtrado = resumen[resumen["EA"] == ea_seleccionada]
-            df_filtrado = df[df["EA"] == ea_seleccionada]
-        else:
-            resumen_filtrado = resumen
-            df_filtrado = df
-
-        # Mostrar tabla resumen
-        st.subheader("📊 Comparativa de EAs")
-        
-        # Crear una copia para mostrar sin la columna raw
-        resumen_mostrar = resumen_filtrado.drop(columns=['Beneficio_total_raw'])
-        st.dataframe(resumen_mostrar, use_container_width=True)
-
-        # Crear gráfico de beneficio acumulado
-        df_filtrado['Fecha'] = df_filtrado['Close'].dt.date
-        beneficios_diarios = df_filtrado.groupby(['EA', 'Fecha'])['Beneficio'].sum().reset_index()
-        beneficios_diarios['Beneficio_acumulado'] = beneficios_diarios.groupby('EA')['Beneficio'].cumsum()
-
-        fig = px.line(
-            beneficios_diarios,
-            x="Fecha",
-            y="Beneficio_acumulado",
-            color="EA",
-            markers=True,
-            title="📈 Evolución del beneficio acumulado",
-            labels={"Beneficio_acumulado": "Beneficio acumulado", "Fecha": "Fecha"}
-        )
-
-        # Añadir tooltip personalizado
-        fig.update_traces(
-            hovertemplate=
-            "<b>Fecha:</b> %{x|%d-%m-%Y}<br>" +
-            "<b>Beneficio acumulado:</b> $%{y:.2f}<extra></extra>"
-        )
-
-        fig.update_layout(height=400, margin=dict(l=20, r=20, t=40, b=20))
-
-        st.subheader("📉 Beneficio acumulado por EA")
-        st.plotly_chart(fig, use_container_width=True)
-
-        # Mostrar operaciones individuales por EA y símbolo
-        grupos_ordenados = df_filtrado.groupby(["EA", "Símbolo"]).agg(Beneficio_total=('Beneficio', 'sum')).reset_index()
-        grupos_ordenados = grupos_ordenados.sort_values(by="Beneficio_total", ascending=False)
-
-        for _, row in grupos_ordenados.iterrows():
-            ea = row["EA"]
-            symbol = row["Símbolo"]
-            grupo = df_filtrado[(df_filtrado["EA"] == ea) & (df_filtrado["Símbolo"] == symbol)]
-            with st.expander(f"📌 {ea} - {symbol} ({len(grupo)} operaciones)"):
-                st.dataframe(grupo.sort_values(by="Open"), use_container_width=True)
-
-        st.subheader("📎 Detalle completo de operaciones")
-        st.dataframe(df, use_container_width=True)
+def calcular_estadisticas_ea(df_ea):
+    """
+    Calcula estadísticas detalladas para una EA específica.
+    """
+    total_ops = len(df_ea)
+    ops_ganadoras = len(df_ea[df_ea['Beneficio'] > 0])
+    ops_perdedoras = len(df_ea[df_ea['Beneficio'] < 0])
+    
+    win_rate = (ops_ganadoras / total_ops * 100) if total_ops > 0 else 0
+    
+    if ops_ganadoras > 0:
+        beneficio_promedio = df_ea[df_ea['Beneficio'] > 0]['Beneficio'].mean()
     else:
-        st.warning("No se encontraron operaciones válidas en el archivo.")
+        beneficio_promedio = 0
+    
+    if ops_perdedoras > 0:
+        perdida_promedio = abs(df_ea[df_ea['Beneficio'] < 0]['Beneficio'].mean())
+    else:
+        perdida_promedio = 0
+    
+    ratio_riesgo_beneficio = calcular_ratio_riesgo_beneficio(df_ea)
+    
+    beneficio_total = df_ea['Beneficio'].sum()
+    
+    return {
+        'EA': df_ea['EA'].iloc[0],
+        'Símbolo': df_ea['Símbolo'].iloc[0],
+        'Total_Ops': total_ops,
+        'Ops_Ganadoras': ops_ganadoras,
+        'Ops_Perdedoras': ops_perdedoras,
+        'Win_Rate': win_rate,
+        'Beneficio_Promedio': beneficio_promedio,
+        'Perdida_Promedio': perdida_promedio,
+        'Ratio_Riesgo_Beneficio': ratio_riesgo_beneficio,
+        'Beneficio_Total': beneficio_total
+    }
+
+def crear_ranking_ea(df):
+    """
+    Crea un ranking de todas las EAs basado en el ratio riesgo-beneficio.
+    """
+    if df.empty:
+        return pd.DataFrame()
+    
+    # Agrupar por EA y Símbolo
+    grupos = df.groupby(['EA', 'Símbolo'])
+    
+    ranking_data = []
+    for (ea, simbolo), grupo in grupos:
+        stats = calcular_estadisticas_ea(grupo)
+        ranking_data.append(stats)
+    
+    ranking_df = pd.DataFrame(ranking_data)
+    
+    # Ordenar por ratio riesgo-beneficio (descendente)
+    ranking_df = ranking_df.sort_values('Ratio_Riesgo_Beneficio', ascending=False)
+    
+    # Agregar posición en el ranking
+    ranking_df['Posicion'] = range(1, len(ranking_df) + 1)
+    
+    # Formatear columnas para presentación
+    ranking_df['Win_Rate_Formateado'] = ranking_df['Win_Rate'].apply(lambda x: f"{x:.1f}%")
+    ranking_df['Beneficio_Promedio_Formateado'] = ranking_df['Beneficio_Promedio'].apply(lambda x: f"${x:.2f}")
+    ranking_df['Perdida_Promedio_Formateado'] = ranking_df['Perdida_Promedio'].apply(lambda x: f"${x:.2f}")
+    ranking_df['Ratio_Formateado'] = ranking_df['Ratio_Riesgo_Beneficio'].apply(
+        lambda x: f"{x:.2f}" if x != float('inf') else "∞"
+    )
+    ranking_df['Beneficio_Total_Formateado'] = ranking_df['Beneficio_Total'].apply(lambda x: f"${x:.2f}")
+    
+    return ranking_df
+
+# Configurar tema claro para Streamlit
+import streamlit.components.v1 as components
+
+# Configuración de la página
+st.set_page_config(
+    page_title="Análisis de EA", 
+    layout="wide", 
+    initial_sidebar_state="collapsed"
+)
+
+# Configurar tema claro para Streamlit
+st.markdown("""
+<style>
+    /* Forzar tema claro en Streamlit */
+    .stApp {
+        color-scheme: light !important;
+        background-color: #f8f9fa !important;
+    }
+    
+    /* Configuración específica para tablas con tema claro - MÁS ESPECÍFICO */
+    [data-testid="stDataFrame"] {
+        background-color: white !important;
+        color: #495057 !important;
+    }
+    
+    [data-testid="stDataFrame"] table {
+        background-color: white !important;
+        color: #495057 !important;
+    }
+    
+    [data-testid="stDataFrame"] thead th {
+        background-color: #f8f9fa !important;
+        color: #495057 !important;
+        border: 1px solid #e9ecef !important;
+    }
+    
+    [data-testid="stDataFrame"] tbody td {
+        background-color: white !important;
+        color: #495057 !important;
+        border: 1px solid #e9ecef !important;
+    }
+    
+    [data-testid="stDataFrame"] tbody tr:nth-child(even) {
+        background-color: #f8f9fa !important;
+    }
+    
+    [data-testid="stDataFrame"] tbody tr:nth-child(even) td {
+        background-color: #f8f9fa !important;
+    }
+    
+    /* CSS MÁS ESPECÍFICO PARA FORZAR TEMA CLARO */
+    div[data-testid="stDataFrame"] {
+        background-color: white !important;
+        color: #495057 !important;
+    }
+    
+    div[data-testid="stDataFrame"] table {
+        background-color: white !important;
+        color: #495057 !important;
+    }
+    
+    div[data-testid="stDataFrame"] thead th {
+        background-color: #f8f9fa !important;
+        color: #495057 !important;
+        border: 1px solid #e9ecef !important;
+    }
+    
+    div[data-testid="stDataFrame"] tbody td {
+        background-color: white !important;
+        color: #495057 !important;
+        border: 1px solid #e9ecef !important;
+    }
+    
+    div[data-testid="stDataFrame"] tbody tr {
+        background-color: white !important;
+    }
+    
+    div[data-testid="stDataFrame"] tbody tr:nth-child(even) {
+        background-color: #f8f9fa !important;
+    }
+    
+    div[data-testid="stDataFrame"] tbody tr:nth-child(even) td {
+        background-color: #f8f9fa !important;
+    }
+    
+    /* Forzar todos los elementos de tabla */
+    div[data-testid="stDataFrame"] * {
+        color: #495057 !important;
+    }
+    
+    /* CSS ULTRA ESPECÍFICO PARA FORZAR TEMA CLARO */
+    .stDataFrame div[data-testid="stDataFrame"] {
+        background-color: white !important;
+        color: #495057 !important;
+    }
+    
+    .stDataFrame div[data-testid="stDataFrame"] table {
+        background-color: white !important;
+        color: #495057 !important;
+    }
+    
+    .stDataFrame div[data-testid="stDataFrame"] thead th {
+        background-color: #f8f9fa !important;
+        color: #495057 !important;
+        border: 1px solid #e9ecef !important;
+    }
+    
+    .stDataFrame div[data-testid="stDataFrame"] tbody td {
+        background-color: white !important;
+        color: #495057 !important;
+        border: 1px solid #e9ecef !important;
+    }
+    
+    .stDataFrame div[data-testid="stDataFrame"] tbody tr {
+        background-color: white !important;
+    }
+    
+    .stDataFrame div[data-testid="stDataFrame"] tbody tr:nth-child(even) {
+        background-color: #f8f9fa !important;
+    }
+    
+    .stDataFrame div[data-testid="stDataFrame"] tbody tr:nth-child(even) td {
+        background-color: #f8f9fa !important;
+    }
+    
+    /* Forzar todos los elementos de tabla */
+    .stDataFrame div[data-testid="stDataFrame"] * {
+        color: #495057 !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# JavaScript para forzar tema claro en las tablas
+st.markdown("""
+<script>
+// Función para forzar tema claro en tablas
+function forzarTemaClaro() {
+    // Buscar todas las tablas de Streamlit
+    const tablas = document.querySelectorAll('[data-testid="stDataFrame"]');
+    
+    tablas.forEach(tabla => {
+        // Forzar fondo blanco
+        tabla.style.backgroundColor = 'white';
+        tabla.style.color = '#495057';
+        
+        // Forzar estilos en la tabla interna
+        const tablaInterna = tabla.querySelector('table');
+        if (tablaInterna) {
+            tablaInterna.style.backgroundColor = 'white';
+            tablaInterna.style.color = '#495057';
+            
+            // Forzar estilos en encabezados
+            const encabezados = tablaInterna.querySelectorAll('thead th');
+            encabezados.forEach(th => {
+                th.style.backgroundColor = '#f8f9fa';
+                th.style.color = '#495057';
+                th.style.border = '1px solid #e9ecef';
+            });
+            
+            // Forzar estilos en celdas
+            const celdas = tablaInterna.querySelectorAll('tbody td');
+            celdas.forEach(td => {
+                td.style.backgroundColor = 'white';
+                td.style.color = '#495057';
+                td.style.border = '1px solid #e9ecef';
+            });
+            
+            // Forzar estilos en filas
+            const filas = tablaInterna.querySelectorAll('tbody tr');
+            filas.forEach((fila, index) => {
+                fila.style.backgroundColor = 'white';
+                fila.style.color = '#495057';
+                
+                // Filas pares
+                if (index % 2 === 1) {
+                    fila.style.backgroundColor = '#f8f9fa';
+                    const celdasFila = fila.querySelectorAll('td');
+                    celdasFila.forEach(td => {
+                        td.style.backgroundColor = '#f8f9fa';
+                    });
+                }
+            });
+        }
+    });
+}
+
+// Ejecutar cuando se carga la página
+document.addEventListener('DOMContentLoaded', forzarTemaClaro);
+
+// Ejecutar cuando se actualiza el contenido
+const observer = new MutationObserver(function(mutations) {
+    mutations.forEach(function(mutation) {
+        if (mutation.type === 'childList') {
+            forzarTemaClaro();
+        }
+    });
+});
+
+// Observar cambios en el DOM
+observer.observe(document.body, {
+    childList: true,
+    subtree: true
+});
+
+// Ejecutar periódicamente para asegurar que se aplique
+setInterval(forzarTemaClaro, 1000);
+</script>
+""", unsafe_allow_html=True)
+
+# CSS personalizado para el estilo moderno en blanco y grises
+st.markdown("""
+<style>
+    /* Box sizing global */
+    *, *::before, *::after {
+        box-sizing: border-box !important;
+    }
+    
+    /* Fondo principal */
+    .stApp {
+        background-color: #f8f9fa;
+    }
+    
+    /* Ocultar elementos por defecto de Streamlit */
+    .main .block-container {
+        padding-top: 0rem;
+        padding-bottom: 0rem;
+        padding-left: 0rem;
+        padding-right: 0rem;
+        max-width: 100%;
+    }
+    
+    /* Barra de navegación superior */
+    .nav-container {
+        background-color: #e9ecef;
+        padding: 1rem 2rem;
+        margin-bottom: 2rem;
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .nav-tabs {
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+    }
+    
+    .nav-tab {
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.5rem;
+        text-decoration: none;
+        font-weight: 500;
+        transition: all 0.2s;
+        cursor: pointer;
+        border: none;
+        background: none;
+        color: #6c757d;
+    }
+    
+    .nav-tab.active {
+        background-color: #6c757d;
+        color: white;
+    }
+    
+    .nav-tab:hover {
+        background-color: #f8f9fa;
+        color: #495057;
+    }
+    
+    .nav-tab.active:hover {
+        background-color: #5a6268;
+        color: white;
+    }
+    
+    /* Contenedor principal */
+    .main-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 0 2rem;
+    }
+    
+    /* Tarjetas */
+    .card {
+        background-color: white;
+        border-radius: 0.75rem;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        padding: 2rem;
+        margin-bottom: 2rem;
+        border: 1px solid #e9ecef;
+        box-sizing: border-box;
+    }
+    
+    .card-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #495057;
+    }
+    
+    /* Botones personalizados */
+    .btn-primary {
+        background-color: #6c757d;
+        color: white;
+        border: none;
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.5rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    
+    .btn-primary:hover {
+        background-color: #5a6268;
+    }
+    
+    /* Mensajes de estado */
+    .status-success {
+        color: #6c757d;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .status-error {
+        color: #6c757d;
+        font-weight: 500;
+    }
+    
+    /* Estilos para elementos de Streamlit */
+    .stSelectbox > div > div {
+        background-color: white;
+        border: 1px solid #e9ecef;
+        border-radius: 0.5rem;
+    }
+    
+    .stDataFrame {
+        border: 1px solid #e9ecef;
+        border-radius: 0.5rem;
+    }
+    
+    .stExpander {
+        border: 1px solid #e9ecef;
+        border-radius: 0.5rem;
+    }
+    
+    .stExpander > div {
+        background-color: white;
+    }
+    
+    /* Ocultar elementos de Streamlit */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    
+    /* Estilo para el contenido de tabs */
+    .tab-content {
+        display: none;
+    }
+    
+    .tab-content.active {
+        display: block;
+    }
+
+    /* Estilos para tabs de Streamlit */
+    .stTabs [data-baseweb="tab-list"] {
+        background-color: #e9ecef !important;
+        border-bottom: 1px solid #dee2e6 !important;
+        padding: 1rem 2rem !important;
+        margin-bottom: 2rem !important;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        background-color: transparent !important;
+        color: #6c757d !important;
+        border-radius: 0.5rem !important;
+        margin-right: 1rem !important;
+        padding: 0.75rem 1.5rem !important;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background-color: #cdd5dc !important;
+        color: white !important;
+    }
+    
+    .stTabs [data-baseweb="tab"]:hover {
+        background-color: #f8f9fa !important;
+        color: #495057 !important;
+    }
+    
+    .stTabs [aria-selected="true"]:hover {
+        background-color: #f8f9fa !important;
+        color: white !important;
+    }
+    
+    /* Panel de contenido de tabs */
+    .stTabs [data-baseweb="tab-panel"] {
+        background-color: #f8f9fa !important;
+        border: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    
+    /* Contenedor del contenido del tab */
+    .stTabs > div > div > div > div {
+        background-color: #f8f9fa !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    
+    /* Estilos adicionales para el contenido de tabs */
+    .stTabs [role="tabpanel"] {
+        background-color: #f8f9fa !important;
+        border: 1px solid #e9ecef !important;
+        border-radius: 0.5rem !important;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075) !important;
+        padding: 2rem !important;
+        margin-top: 1rem !important;
+    }
+    
+    /* Asegurar que el fondo se aplique a todo el contenido */
+    .stTabs .stMarkdown {
+        background-color: transparent !important;
+    }
+    
+    .stTabs .stDataFrame {
+        background-color: white !important;
+    }
+    
+    /* Títulos y texto */
+    h1, h2, h3, h4, h5, h6 {
+        color: #495057 !important;
+    }
+    
+    p, div, span {
+        color: #495057 !important;
+    }
+    
+    /* Estilo para el file uploader */
+    .stFileUploader > div {
+        background-color: white !important;
+        border: 1px solid #e9ecef !important;
+        border-radius: 0.75rem !important;
+    }
+    
+    .stFileUploader [data-testid="stFileUploaderDropzone"] {
+        background-color: white !important;
+        border: 2px dashed #e9ecef !important;
+        border-radius: 0.75rem !important;
+        color: #495057 !important;
+    }
+    
+    .stFileUploader [data-testid="stFileUploaderDropzone"]:hover {
+        background-color: #f8f9fa !important;
+        border-color: #6c757d !important;
+    }
+    
+    .stFileUploader button {
+        background-color: #6c757d !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 0.5rem !important;
+    }
+    
+    .stFileUploader button:hover {
+        background-color: #5a6268 !important;
+    }
+    
+    /* Estilos para gráficos de Plotly - forzar tema claro */
+    .stPlotlyChart {
+        border-radius: 0.75rem !important;
+        border: 1px solid #e9ecef !important;
+        box-sizing: border-box !important;
+    }
+    
+    /* Forzar colores de texto y líneas */
+    .stPlotlyChart text {
+        fill: #495057 !important;
+    }
+    
+    .stPlotlyChart .xtick text,
+    .stPlotlyChart .ytick text {
+        fill: #495057 !important;
+    }
+    
+    .stPlotlyChart .xaxis-title,
+    .stPlotlyChart .yaxis-title {
+        fill: #495057 !important;
+    }
+    
+    /* Forzar líneas de cuadrícula claras */
+    .stPlotlyChart .gridlayer .xgrid,
+    .stPlotlyChart .gridlayer .ygrid {
+        stroke: #e9ecef !important;
+    }
+    
+    /* Forzar bordes de ejes */
+    .stPlotlyChart .xaxis .domain,
+    .stPlotlyChart .yaxis .domain {
+        stroke: #e9ecef !important;
+    }
+    
+    /* Forzar tema claro en el contenedor SVG específico */
+    .stPlotlyChart .user-select-none {
+    }
+    
+    .stPlotlyChart .svg-container {
+    }
+    
+    /* Forzar todos los elementos de Plotly a tema claro */
+    .stPlotlyChart * {
+    }
+    
+    .stPlotlyChart .plot-container * {
+    }
+    
+    /* Estilos para el selectbox */
+    .stSelectbox > div > div {
+        border: 1px solid #e9ecef !important;
+        border-radius: 0.75rem !important;
+    }
+    
+    .stSelectbox > div > div:hover {
+        border-color: #6c757d !important;
+    }
+    
+    /* Estilos para expanders */
+    .streamlit-expanderHeader {
+        border: 1px solid #e9ecef !important;
+        border-radius: 0.75rem !important;
+        color: #495057 !important;
+    }
+    
+    .streamlit-expanderContent {
+        border: 1px solid #e9ecef !important;
+        border-top: none !important;
+        border-radius: 0 0 0.75rem 0.75rem !important;
+    }
+    
+    /* Estilos para tablas de Streamlit - Tema claro forzado */
+    .stDataFrame {
+        background-color: white !important;
+        color: #495057 !important;
+    }
+    
+    .stDataFrame table {
+        background-color: white !important;
+        color: #495057 !important;
+        border-collapse: collapse !important;
+    }
+    
+    .stDataFrame thead {
+        background-color: #f8f9fa !important;
+    }
+    
+    .stDataFrame thead th {
+        background-color: #f8f9fa !important;
+        color: #495057 !important;
+        border: 1px solid #e9ecef !important;
+        font-weight: 600 !important;
+        padding: 0.75rem !important;
+    }
+    
+    .stDataFrame tbody {
+        background-color: white !important;
+    }
+    
+    .stDataFrame tbody td {
+        background-color: white !important;
+        color: #495057 !important;
+        border: 1px solid #e9ecef !important;
+        padding: 0.75rem !important;
+    }
+    
+    .stDataFrame tbody tr {
+        background-color: white !important;
+    }
+    
+    .stDataFrame tbody tr:nth-child(even) {
+        background-color: #f8f9fa !important;
+    }
+    
+    .stDataFrame tbody tr:nth-child(even) td {
+        background-color: #f8f9fa !important;
+    }
+    
+    .stDataFrame tbody tr:hover {
+        background-color: #e9ecef !important;
+    }
+    
+    .stDataFrame tbody tr:hover td {
+        background-color: #e9ecef !important;
+    }
+    
+    /* Estilos adicionales para el contenedor de la tabla */
+    .stDataFrame > div {
+        background-color: white !important;
+        border: 1px solid #e9ecef !important;
+        border-radius: 0.75rem !important;
+        overflow: hidden !important;
+    }
+    
+    /* Forzar tema claro en todos los elementos de tabla */
+    .stDataFrame * {
+        color: #495057 !important;
+    }
+    
+    /* Estilos específicos para el scrollbar de las tablas */
+    .stDataFrame::-webkit-scrollbar {
+        background-color: #f8f9fa !important;
+    }
+    
+    .stDataFrame::-webkit-scrollbar-thumb {
+        background-color: #e9ecef !important;
+        border-radius: 0.5rem !important;
+    }
+    
+    .stDataFrame::-webkit-scrollbar-thumb:hover {
+        background-color: #dee2e6 !important;
+    }
+    
+    /* Forzar tema claro en todos los elementos de tabla de Streamlit */
+    .stDataFrame div[data-testid="stDataFrame"] {
+        background-color: white !important;
+        color: #495057 !important;
+    }
+    
+    /* Estilos para elementos específicos de tabla que pueden usar tema oscuro */
+    .stDataFrame .dataframe {
+        background-color: white !important;
+        color: #495057 !important;
+    }
+    
+    .stDataFrame .dataframe thead th {
+        background-color: #f8f9fa !important;
+        color: #495057 !important;
+        border: 1px solid #e9ecef !important;
+    }
+    
+    .stDataFrame .dataframe tbody td {
+        background-color: white !important;
+        color: #495057 !important;
+        border: 1px solid #e9ecef !important;
+    }
+    
+    .stDataFrame .dataframe tbody tr:nth-child(even) {
+        background-color: #f8f9fa !important;
+    }
+    
+    .stDataFrame .dataframe tbody tr:nth-child(even) td {
+        background-color: #f8f9fa !important;
+    }
+    
+    /* Forzar colores de texto en todos los elementos de tabla */
+    .stDataFrame .dataframe * {
+        color: #495057 !important;
+    }
+    
+    /* Estilos para el contenedor de la tabla */
+    .stDataFrame .dataframe-container {
+        background-color: white !important;
+        border: 1px solid #e9ecef !important;
+        border-radius: 0.75rem !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Estado de la sesión para manejar tabs
+if 'active_tab' not in st.session_state:
+    st.session_state.active_tab = 'analisis'
+
+# Barra de navegación superior con tabs de Streamlit
+tab1, tab2, tab3 = st.tabs(["📊 Análisis", "🚀 Proyectos", "⚙️ Configuración"])
+
+# Contenedor principal
+st.markdown('<div class="main-container">', unsafe_allow_html=True)
+
+# Título principal
+st.markdown('<h1 style="text-align: center; font-size: 2.5rem; font-weight: 700; color: #495057; margin-bottom: 3rem;">Análisis de EA</h1>', unsafe_allow_html=True)
+
+# Panel central con contenido dinámico según el tab
+with tab1:
+    # Tarjeta de carga de archivo
+    st.markdown("""
+    <div class="card">
+        <div class="card-title">Cargar Statement.htm</div>
+    """, unsafe_allow_html=True)
+
+    archivo = st.file_uploader("Elegir archivo", type=["htm", "html"], label_visibility="collapsed")
+
+    if archivo:
+
+        try:
+            soup = BeautifulSoup(archivo, 'html.parser')
+            rows = soup.find_all('tr', align='right')
+
+            datos = []
+            eas_filtradas = 0
+            total_operaciones = 0
+
+            for i in range(0, len(rows), 2):
+                try:
+                    fila_op = rows[i].find_all('td')
+                    fila_ea = rows[i+1].find_all('td')
+
+                    tipo = fila_op[2].text.strip().lower()
+                    size = float(fila_op[3].text)
+                    symbol = fila_op[4].text.strip().lower()
+                    open_time = datetime.strptime(fila_op[1].text.strip(), "%Y.%m.%d %H:%M:%S")
+                    close_time = datetime.strptime(fila_op[8].text.strip(), "%Y.%m.%d %H:%M:%S")
+                    profit = float(fila_op[13].text)
+                    ea_raw = fila_ea[-1].text.strip()
+
+                    if "cancelled" in ea_raw.lower():
+                        continue
+
+                    ea_name = ea_raw.split('[')[0]
+                    total_operaciones += 1
+
+                    # Filtrar EAs válidas (que contengan letras)
+                    if not es_ea_valida(ea_name):
+                        eas_filtradas += 1
+                        continue
+
+                    datos.append({
+                        "EA": ea_name,
+                        "Símbolo": symbol,
+                        "Tipo": tipo,
+                        "Beneficio": profit,
+                        "Open": open_time,
+                        "Close": close_time,
+                        "Duración": (close_time - open_time).total_seconds() / 60  # en minutos
+                    })
+                except Exception:
+                    continue
+
+            if datos:
+                df = pd.DataFrame(datos)
+                
+                # Mostrar información sobre el filtrado
+                if eas_filtradas > 0:
+                    st.info(f"ℹ️ Se filtraron {eas_filtradas} operaciones con EAs inválidas (sin letras) de un total de {total_operaciones} operaciones. Se procesaron {len(datos)} operaciones válidas.")
+
+                resumen = df.groupby(["EA", "Símbolo"]).agg(
+                    Ops=('Beneficio', 'count'),
+                    Win_pct=('Beneficio', lambda x: 100 * (x > 0).sum() / len(x)),
+                    Profit_medio=('Beneficio', 'mean'),
+                    Max_Loss=('Beneficio', 'min'),
+                    Duracion_media_min=('Duración', 'mean'),
+                    Beneficio_total=('Beneficio', 'sum')
+                ).reset_index()
+
+                # Redondear numéricos primero
+                resumen = resumen.round({
+                    "Win_pct": 2,
+                    "Profit_medio": 2,
+                    "Max_Loss": 2,
+                    "Duracion_media_min": 1,
+                    "Beneficio_total": 2
+                })
+
+                resumen["Beneficio_total_raw"] = resumen["Beneficio_total"]
+
+                # 💡 Formatear columnas para presentación legible
+                def formatear_duracion(minutos):
+                    horas = int(minutos) // 60
+                    mins = int(minutos) % 60
+                    return f"{horas}h {mins}m"
+
+                resumen["Win_pct"] = resumen["Win_pct"].astype(str) + " %"
+                resumen["Profit_medio"] = resumen["Profit_medio"].apply(lambda x: f"${x:.2f}")
+                resumen["Max_Loss"] = resumen["Max_Loss"].apply(lambda x: f"${x:.2f}")
+                resumen["Beneficio_total"] = resumen["Beneficio_total"].apply(lambda x: f"${x:.2f}")
+                resumen["Duracion_media"] = resumen["Duracion_media_min"].apply(formatear_duracion)
+                resumen = resumen.drop(columns=["Duracion_media_min"])  # Quitamos la versión cruda
+
+                # Ordenar y preparar resumen
+                resumen = resumen.sort_values(by="Beneficio_total_raw", ascending=False)
+
+                # Selector de EA para filtrar
+                ea_opciones = ["Todas"] + sorted(resumen["EA"].unique())
+                ea_seleccionada = st.selectbox("🧠 Selecciona una EA para filtrar", ea_opciones)
+
+                # Filtrar datos según selección
+                if ea_seleccionada != "Todas":
+                    resumen_filtrado = resumen[resumen["EA"] == ea_seleccionada]
+                    df_filtrado = df[df["EA"] == ea_seleccionada]
+                else:
+                    resumen_filtrado = resumen
+                    df_filtrado = df
+
+                # Crear gráfico de beneficio acumulado
+                df_filtrado['Fecha'] = df_filtrado['Close'].dt.date
+                beneficios_diarios = df_filtrado.groupby(['EA', 'Fecha'])['Beneficio'].sum().reset_index()
+                beneficios_diarios['Beneficio_acumulado'] = beneficios_diarios.groupby('EA')['Beneficio'].cumsum()
+
+                if len(beneficios_diarios) > 0:
+                    fig = px.line(
+                        beneficios_diarios,
+                        x="Fecha",
+                        y="Beneficio_acumulado",
+                        color="EA",
+                        markers=True,
+                        labels={"Beneficio_acumulado": "Beneficio acumulado", "Fecha": "Fecha"}
+                    )
+
+                    # Añadir tooltip personalizado
+                    fig.update_traces(
+                        hovertemplate=
+                        "<b>Fecha:</b> %{x|%d-%m-%Y}<br>" +
+                        "<b>Beneficio acumulado:</b> $%{y:.2f}<extra></extra>"
+                    )
+
+                    fig.update_layout(
+                        height=400, 
+                        margin=dict(l=20, r=20, t=40, b=20),
+                        template="plotly_white",
+                        plot_bgcolor='white',
+                        paper_bgcolor='white',
+                        font=dict(color='#495057'),
+                        xaxis=dict(
+                            gridcolor='#e9ecef',
+                            linecolor='#e9ecef',
+                            tickcolor='#495057',
+                            tickfont=dict(color='#495057')
+                        ),
+                        yaxis=dict(
+                            gridcolor='#e9ecef',
+                            linecolor='#e9ecef',
+                            tickcolor='#495057',
+                            tickfont=dict(color='#495057')
+                        )
+                    )
+
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("No hay datos suficientes para mostrar el gráfico")
+                
+                # Cerrar tarjeta de análisis
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+                # Panel de Ranking de EAs por Ratio Riesgo-Beneficio
+                st.markdown("""
+                <div class="card">
+                    <div class="card-title">🏆 Ranking de EAs por Ratio Riesgo-Beneficio</div>
+                """, unsafe_allow_html=True)
+                
+                # Crear ranking
+                ranking_df = crear_ranking_ea(df_filtrado)
+                
+                if not ranking_df.empty:
+                    # Crear tabla de ranking con columnas formateadas
+                    ranking_mostrar = ranking_df[[
+                        'Posicion', 'EA', 'Símbolo', 'Total_Ops', 'Win_Rate_Formateado',
+                        'Beneficio_Promedio_Formateado', 'Perdida_Promedio_Formateado',
+                        'Ratio_Formateado', 'Beneficio_Total_Formateado'
+                    ]].copy()
+                    
+                    # Renombrar columnas para mejor presentación
+                    ranking_mostrar.columns = [
+                        'Posición', 'EA', 'Símbolo', 'Total Ops', 'Win Rate',
+                        'Beneficio Promedio', 'Pérdida Promedio', 'Ratio R/B', 'Beneficio Total'
+                    ]
+                    
+                    # Mostrar tabla de ranking
+                    st.dataframe(ranking_mostrar, use_container_width=True)
+                    
+                    # Explicación del ranking
+                    st.markdown("""
+                    <div style="margin-top: 1rem; padding: 1rem; background-color: #f8f9fa; border-radius: 0.5rem; border-left: 4px solid #6c757d;">
+                        <h4 style="margin: 0 0 0.5rem 0; color: #495057;">📊 Cómo se calcula el ranking:</h4>
+                        <p style="margin: 0; color: #6c757d; font-size: 0.9rem;">
+                            <strong>Ratio Riesgo-Beneficio = Beneficio Promedio de Operaciones Ganadoras ÷ Pérdida Promedio de Operaciones Perdedoras</strong><br>
+                            Un ratio mayor indica mejor eficiencia: gana más por cada dólar que pierde.
+                        </p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.info("No hay datos suficientes para crear el ranking")
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+                # Tarjeta de tabla resumen
+                st.markdown("""
+                <div class="card">
+                    <div class="card-title">Comparativa de EAs</div>
+                """, unsafe_allow_html=True)
+                
+                # Crear una copia para mostrar sin la columna raw
+                resumen_mostrar = resumen_filtrado.drop(columns=['Beneficio_total_raw'])
+                st.dataframe(resumen_mostrar, use_container_width=True)
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+                # Tarjeta de operaciones detalladas
+                st.markdown("""
+                <div class="card">
+                    <div class="card-title">Operaciones por EA</div>
+                """, unsafe_allow_html=True)
+                
+                # Mostrar operaciones individuales por EA y símbolo
+                grupos_ordenados = df_filtrado.groupby(["EA", "Símbolo"]).agg(Beneficio_total=('Beneficio', 'sum')).reset_index()
+                grupos_ordenados = grupos_ordenados.sort_values(by="Beneficio_total", ascending=False)
+
+                for _, row in grupos_ordenados.iterrows():
+                    ea = row["EA"]
+                    symbol = row["Símbolo"]
+                    grupo = df_filtrado[(df_filtrado["EA"] == ea) & (df_filtrado["Símbolo"] == symbol)]
+                    with st.expander(f"📌 {ea} - {symbol} ({len(grupo)} operaciones)"):
+                        st.dataframe(grupo.sort_values(by="Open"), use_container_width=True)
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+            else:
+                st.markdown("""
+                <div class="status-error">
+                    ❌ No se encontraron operaciones válidas en el archivo.
+                </div>
+                """, unsafe_allow_html=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+        except Exception as e:
+            st.markdown(f"""
+            <div class="status-error">
+                ❌ Error al procesar el archivo<br>
+                Verifica que sea un archivo HTML válido de MT4.<br>
+                Error: {str(e)}
+            </div>
+            """, unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+    else:
+        st.markdown("""
+        <div class="status-error">
+            ⚠️ Selecciona un archivo para comenzar el análisis
+        </div>
+        """, unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+# Tab de Proyectos
+with tab2:
+    st.markdown("""
+    <div class="card">
+        <div class="card-title">🚀 Proyectos</div>
+        <p>Esta sección estará disponible próximamente.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+# Tab de Configuración
+with tab3:
+    st.markdown("""
+    <div class="card">
+        <div class="card-title">⚙️ Configuración</div>
+        <p>Esta sección estará disponible próximamente.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+# Cerrar contenedor principal
+st.markdown('</div>', unsafe_allow_html=True)
