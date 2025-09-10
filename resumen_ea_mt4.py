@@ -82,7 +82,8 @@ def calcular_estadisticas_ea(df_ea):
 
 def crear_ranking_ea(df):
     """
-    Crea un ranking de todas las EAs basado en el ratio riesgo-beneficio.
+    Crea un ranking de todas las EAs basado en un score de rentabilidad que combina
+    ratio riesgo-beneficio y win rate.
     """
     if df.empty:
         return pd.DataFrame()
@@ -97,8 +98,28 @@ def crear_ranking_ea(df):
     
     ranking_df = pd.DataFrame(ranking_data)
     
-    # Ordenar por ratio riesgo-beneficio (descendente)
-    ranking_df = ranking_df.sort_values('Ratio_Riesgo_Beneficio', ascending=False)
+    # Calcular score de rentabilidad que combina ratio R/B y win rate
+    def calcular_score_rentabilidad(row):
+        win_rate = row['Win_Rate'] / 100  # Convertir a decimal
+        ratio_rb = row['Ratio_Riesgo_Beneficio']
+        
+        # Si no hay operaciones ganadoras, score es 0
+        if win_rate == 0:
+            return 0
+        
+        # Si no hay operaciones perdedoras (ratio infinito), usar un valor alto
+        if ratio_rb == float('inf'):
+            ratio_rb = 100  # Valor alto pero finito
+        
+        # Score = Win Rate * Ratio Riesgo-Beneficio
+        # Esto premia tanto la frecuencia de ganancias como la eficiencia
+        score = win_rate * ratio_rb
+        return score
+    
+    ranking_df['Score_Rentabilidad'] = ranking_df.apply(calcular_score_rentabilidad, axis=1)
+    
+    # Ordenar por score de rentabilidad (descendente)
+    ranking_df = ranking_df.sort_values('Score_Rentabilidad', ascending=False)
     
     # Agregar posición en el ranking
     ranking_df['Posicion'] = range(1, len(ranking_df) + 1)
@@ -111,6 +132,7 @@ def crear_ranking_ea(df):
         lambda x: f"{x:.2f}" if x != float('inf') else "∞"
     )
     ranking_df['Beneficio_Total_Formateado'] = ranking_df['Beneficio_Total'].apply(lambda x: f"${x:.2f}")
+    ranking_df['Score_Formateado'] = ranking_df['Score_Rentabilidad'].apply(lambda x: f"{x:.2f}")
     
     return ranking_df
 
@@ -129,6 +151,16 @@ st.set_page_config(
 # Estilos para las tarjetas y componentes
 st.markdown("""
 <style>
+    /* Ocultar el div del borde de los tabs */
+    div[data-baseweb="tab-border"] {
+        display: none !important;
+    }
+    
+    /* Corregir margin-bottom negativo en párrafos dentro de divs personalizados */
+    .st-emotion-cache-r44huj {
+        margin-bottom: 0 !important;
+    }
+    
     /* Configuración específica para tablas con tema claro - MÁS ESPECÍFICO */
     [data-testid="stDataFrame"] {
         background-color: white !important;
@@ -394,8 +426,9 @@ st.markdown("""
         background-color: white;
         border-radius: 0.75rem;
         box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-        padding: 2rem;
-        margin-bottom: 2rem;
+        padding: 1.25rem;
+        margin-top: 1rem;
+        margin-bottom: 0.5rem;
         border: 1px solid #e9ecef;
         box-sizing: border-box;
     }
@@ -948,10 +981,10 @@ with tab1:
                 # Cerrar tarjeta de análisis
                 st.markdown('</div>', unsafe_allow_html=True)
                 
-                # Panel de Ranking de EAs por Ratio Riesgo-Beneficio
+                # Panel de Ranking por Score de Rentabilidad
                 st.markdown("""
                 <div class="card">
-                    <div class="card-title">🏆 Ranking de EAs por Ratio Riesgo-Beneficio</div>
+                    <div class="card-title">🏆 Ranking por Score de Rentabilidad</div>
                 """, unsafe_allow_html=True)
                 
                 # Crear ranking
@@ -962,13 +995,13 @@ with tab1:
                     ranking_mostrar = ranking_df[[
                         'Posicion', 'EA', 'Símbolo', 'Total_Ops', 'Win_Rate_Formateado',
                         'Beneficio_Promedio_Formateado', 'Perdida_Promedio_Formateado',
-                        'Ratio_Formateado', 'Beneficio_Total_Formateado'
+                        'Ratio_Formateado', 'Score_Formateado', 'Beneficio_Total_Formateado'
                     ]].copy()
                     
                     # Renombrar columnas para mejor presentación
                     ranking_mostrar.columns = [
                         'Posición', 'EA', 'Símbolo', 'Total Ops', 'Win Rate',
-                        'Beneficio Promedio', 'Pérdida Promedio', 'Ratio R/B', 'Beneficio Total'
+                        'Beneficio Promedio', 'Pérdida Promedio', 'Ratio R/B', 'Score Rentabilidad', 'Beneficio Total'
                     ]
                     
                     # Configurar columnas para tema claro
@@ -1006,6 +1039,10 @@ with tab1:
                         "Ratio R/B": st.column_config.TextColumn(
                             "Ratio R/B",
                             help="Ratio Riesgo-Beneficio"
+                        ),
+                        "Score Rentabilidad": st.column_config.TextColumn(
+                            "Score Rentabilidad",
+                            help="Score que combina Win Rate y Ratio R/B (Win Rate × Ratio R/B)"
                         ),
                         "Beneficio Total": st.column_config.TextColumn(
                             "Beneficio Total",
@@ -1045,11 +1082,12 @@ with tab1:
                     
                     # Explicación del ranking
                     st.markdown("""
-                    <div style="margin-top: 1rem; padding: 1rem; background-color: #f8f9fa; border-radius: 0.5rem; border-left: 4px solid #6c757d;">
-                        <h4 style="margin: 0 0 0.5rem 0; color: #495057;">📊 Cómo se calcula el ranking:</h4>
+                    <div style="margin-top: -1rem; padding: 1rem; background-color: #f8f9fa; border-left: 4px solid #6c757d;">
+                        <h4 style="margin: 0 0 0.5rem 0; color: #495057;">📊 Cómo se calcula el Score de Rentabilidad:</h4>
                         <p style="margin: 0; color: #6c757d; font-size: 0.9rem;">
-                            <strong>Ratio Riesgo-Beneficio = Beneficio Promedio de Operaciones Ganadoras ÷ Pérdida Promedio de Operaciones Perdedoras</strong><br>
-                            Un ratio mayor indica mejor eficiencia: gana más por cada dólar que pierde.
+                            <strong>Score de Rentabilidad = Win Rate × Ratio Riesgo-Beneficio</strong><br>
+                            Este score combina la frecuencia de ganancias (Win Rate) con la eficiencia (Ratio R/B).<br>
+                            <em>Ejemplo:</em> EA con 60% Win Rate y Ratio 2:1 = Score 1.2, mientras que EA con 20% Win Rate y Ratio 4:1 = Score 0.8
                         </p>
                     </div>
                     """, unsafe_allow_html=True)
@@ -1061,7 +1099,7 @@ with tab1:
                 # Tarjeta de tabla resumen
                 st.markdown("""
                 <div class="card">
-                    <div class="card-title">Comparativa de EAs</div>
+                    <div class="card-title">💰 Ranking por beneficio total</div>
                 """, unsafe_allow_html=True)
                 
                 # Crear una copia para mostrar sin la columna raw
