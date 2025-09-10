@@ -124,15 +124,11 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Configurar tema claro para Streamlit
+
+
+# Estilos para las tarjetas y componentes
 st.markdown("""
 <style>
-    /* Forzar tema claro en Streamlit */
-    .stApp {
-        color-scheme: light !important;
-        background-color: #f8f9fa !important;
-    }
-    
     /* Configuración específica para tablas con tema claro - MÁS ESPECÍFICO */
     [data-testid="stDataFrame"] {
         background-color: white !important;
@@ -975,8 +971,77 @@ with tab1:
                         'Beneficio Promedio', 'Pérdida Promedio', 'Ratio R/B', 'Beneficio Total'
                     ]
                     
-                    # Mostrar tabla de ranking
-                    st.dataframe(ranking_mostrar, use_container_width=True)
+                    # Configurar columnas para tema claro
+                    column_config = {
+                        "Posición": st.column_config.NumberColumn(
+                            "Posición",
+                            help="Posición en el ranking",
+                            format="%d"
+                        ),
+                        "EA": st.column_config.TextColumn(
+                            "EA",
+                            help="Nombre del Expert Advisor"
+                        ),
+                        "Símbolo": st.column_config.TextColumn(
+                            "Símbolo",
+                            help="Símbolo de trading"
+                        ),
+                        "Total Ops": st.column_config.NumberColumn(
+                            "Total Ops",
+                            help="Total de operaciones",
+                            format="%d"
+                        ),
+                        "Win Rate": st.column_config.TextColumn(
+                            "Win Rate",
+                            help="Porcentaje de operaciones ganadoras"
+                        ),
+                        "Beneficio Promedio": st.column_config.TextColumn(
+                            "Beneficio Promedio",
+                            help="Beneficio promedio por operación ganadora"
+                        ),
+                        "Pérdida Promedio": st.column_config.TextColumn(
+                            "Pérdida Promedio",
+                            help="Pérdida promedio por operación perdedora"
+                        ),
+                        "Ratio R/B": st.column_config.TextColumn(
+                            "Ratio R/B",
+                            help="Ratio Riesgo-Beneficio"
+                        ),
+                        "Beneficio Total": st.column_config.TextColumn(
+                            "Beneficio Total",
+                            help="Beneficio total acumulado"
+                        )
+                    }
+                    
+                    # Mostrar tabla de ranking con configuración de tema claro
+                    st.dataframe(
+                        ranking_mostrar, 
+                        use_container_width=True,
+                        column_config=column_config,
+                        hide_index=True
+                    )
+                    
+                    # Forzar tema claro después de mostrar la tabla
+                    st.markdown("""
+                    <script>
+                    setTimeout(function() {
+                        const tablas = document.querySelectorAll('.stDataFrame table');
+                        tablas.forEach(tabla => {
+                            if (tabla && tabla.style) {
+                                tabla.style.setProperty('background-color', 'white', 'important');
+                                tabla.style.setProperty('color', '#495057', 'important');
+                            }
+                            const celdas = tabla.querySelectorAll('td, th');
+                            celdas.forEach(celda => {
+                                if (celda && celda.style) {
+                                    celda.style.setProperty('background-color', 'white', 'important');
+                                    celda.style.setProperty('color', '#495057', 'important');
+                                }
+                            });
+                        });
+                    }, 1000);
+                    </script>
+                    """, unsafe_allow_html=True)
                     
                     # Explicación del ranking
                     st.markdown("""
@@ -1001,7 +1066,72 @@ with tab1:
                 
                 # Crear una copia para mostrar sin la columna raw
                 resumen_mostrar = resumen_filtrado.drop(columns=['Beneficio_total_raw'])
-                st.dataframe(resumen_mostrar, use_container_width=True)
+                
+                # Configurar columnas para la tabla comparativa
+                column_config_resumen = {
+                    "EA": st.column_config.TextColumn(
+                        "EA",
+                        help="Nombre del Expert Advisor"
+                    ),
+                    "Símbolo": st.column_config.TextColumn(
+                        "Símbolo",
+                        help="Símbolo de trading"
+                    ),
+                    "Ops": st.column_config.NumberColumn(
+                        "Ops",
+                        help="Número de operaciones",
+                        format="%d"
+                    ),
+                    "Win_pct": st.column_config.TextColumn(
+                        "Win %",
+                        help="Porcentaje de operaciones ganadoras"
+                    ),
+                    "Profit_medio": st.column_config.TextColumn(
+                        "Profit Medio",
+                        help="Beneficio promedio por operación"
+                    ),
+                    "Max_Loss": st.column_config.TextColumn(
+                        "Max Loss",
+                        help="Pérdida máxima registrada"
+                    ),
+                    "Duracion_media": st.column_config.TextColumn(
+                        "Duración Media",
+                        help="Duración promedio de las operaciones"
+                    ),
+                    "Beneficio_total": st.column_config.TextColumn(
+                        "Beneficio Total",
+                        help="Beneficio total acumulado"
+                    )
+                }
+                
+                st.dataframe(
+                    resumen_mostrar, 
+                    use_container_width=True,
+                    column_config=column_config_resumen,
+                    hide_index=True
+                )
+                
+                # Forzar tema claro después de mostrar la tabla comparativa
+                st.markdown("""
+                <script>
+                setTimeout(function() {
+                    const tablas = document.querySelectorAll('.stDataFrame table');
+                    tablas.forEach(tabla => {
+                        if (tabla && tabla.style) {
+                            tabla.style.setProperty('background-color', 'white', 'important');
+                            tabla.style.setProperty('color', '#495057', 'important');
+                        }
+                        const celdas = tabla.querySelectorAll('td, th');
+                        celdas.forEach(celda => {
+                            if (celda && celda.style) {
+                                celda.style.setProperty('background-color', 'white', 'important');
+                                celda.style.setProperty('color', '#495057', 'important');
+                            }
+                        });
+                    });
+                }, 1000);
+                </script>
+                """, unsafe_allow_html=True)
                 
                 st.markdown('</div>', unsafe_allow_html=True)
                 
