@@ -489,6 +489,78 @@ st.markdown("""
     .stExpander > div {
         background-color: white;
     }
+
+    .stExpander [data-testid="stExpanderDetails"] {
+        background-color: white;
+    }
+    
+    /* Animaciones para páginas en construcción */
+    .loading-dots {
+        display: inline-flex;
+        gap: 0.3rem;
+    }
+    
+    .loading-dots span {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: #6c757d;
+        animation: loading-dots 1.4s infinite ease-in-out both;
+    }
+    
+    .loading-dots span:nth-child(1) {
+        animation-delay: -0.32s;
+    }
+    
+    .loading-dots span:nth-child(2) {
+        animation-delay: -0.16s;
+    }
+    
+    @keyframes loading-dots {
+        0%, 80%, 100% {
+            transform: scale(0);
+            opacity: 0.5;
+        }
+        40% {
+            transform: scale(1);
+            opacity: 1;
+        }
+    }
+    
+    .loading-spinner {
+        width: 20px;
+        height: 20px;
+        border: 2px solid #e9ecef;
+        border-top: 2px solid #6c757d;
+        border-radius: 50%;
+        animation: loading-spinner 1s linear infinite;
+    }
+    
+    @keyframes loading-spinner {
+        0% {
+            transform: rotate(0deg);
+        }
+        100% {
+            transform: rotate(360deg);
+        }
+    }
+    
+    /* Efecto de pulso para los iconos */
+    .construction-icon {
+        animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+        0% {
+            transform: scale(1);
+        }
+        50% {
+            transform: scale(1.05);
+        }
+        100% {
+            transform: scale(1);
+        }
+    }
     
     /* Ocultar elementos de Streamlit */
     #MainMenu {visibility: hidden;}
@@ -506,17 +578,13 @@ st.markdown("""
 
     /* Estilos para tabs de Streamlit */
     .stTabs [data-baseweb="tab-list"] {
-        background-color: #e9ecef !important;
-        border-bottom: 1px solid #dee2e6 !important;
-        padding: 1rem 2rem !important;
         margin-bottom: 2rem !important;
     }
     
     .stTabs [data-baseweb="tab"] {
-        background-color: transparent !important;
+        background-color: #e9ecef !important;
         color: #6c757d !important;
         border-radius: 0.5rem !important;
-        margin-right: 1rem !important;
         padding: 0.75rem 1.5rem !important;
     }
     
@@ -602,6 +670,11 @@ st.markdown("""
         color: white !important;
         border: none !important;
         border-radius: 0.5rem !important;
+    }
+
+    .stFileUploaderFile button {
+        width: 20px !important;
+        height: 20px !important;
     }
     
     .stFileUploader button:hover {
@@ -817,8 +890,6 @@ tab1, tab2, tab3 = st.tabs(["📊 Análisis", "🚀 Proyectos", "⚙️ Configur
 # Contenedor principal
 st.markdown('<div class="main-container">', unsafe_allow_html=True)
 
-# Título principal
-st.markdown('<h1 style="text-align: center; font-size: 2.5rem; font-weight: 700; color: #495057; margin-bottom: 3rem;">Análisis de EA</h1>', unsafe_allow_html=True)
 
 # Panel central con contenido dinámico según el tab
 with tab1:
@@ -881,7 +952,7 @@ with tab1:
                 
                 # Mostrar información sobre el filtrado
                 if eas_filtradas > 0:
-                    st.info(f"ℹ️ Se filtraron {eas_filtradas} operaciones con EAs inválidas (sin letras) de un total de {total_operaciones} operaciones. Se procesaron {len(datos)} operaciones válidas.")
+                    st.info(f"ℹ️ Se eliminaron {eas_filtradas} operaciones que no pertenecen a ninguna EA de un total de {total_operaciones} operaciones. Se procesaron {len(datos)} operaciones válidas.")
 
                 resumen = df.groupby(["EA", "Símbolo"]).agg(
                     Ops=('Beneficio', 'count'),
@@ -1223,7 +1294,21 @@ with tab2:
     st.markdown("""
     <div class="card">
         <div class="card-title">🚀 Proyectos</div>
-        <p>Esta sección estará disponible próximamente.</p>
+        <div style="text-align: center; padding: 2rem;">
+            <div style="font-size: 4rem; margin-bottom: 1rem;" class="construction-icon">🔨</div>
+            <h2 style="color: #6c757d; margin-bottom: 1rem;">¡En Construcción!</h2>
+            <p style="color: #6c757d; font-size: 1.1rem; margin-bottom: 2rem;">
+                Próximamente disponible.
+            </p>
+            <div style="display: flex; justify-content: center; align-items: center; gap: 0.5rem; color: #6c757d;">
+                <div class="loading-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+                <span style="margin-left: 1rem;">Trabajando en ello...</span>
+            </div>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -1232,7 +1317,19 @@ with tab3:
     st.markdown("""
     <div class="card">
         <div class="card-title">⚙️ Configuración</div>
-        <p>Esta sección estará disponible próximamente.</p>
+        <div style="text-align: center; padding: 2rem;">
+            <div style="font-size: 4rem; margin-bottom: 1rem;" class="construction-icon">⚡</div>
+            <h2 style="color: #6c757d; margin-bottom: 1rem;">¡En Desarrollo!</h2>
+            <p style="color: #6c757d; font-size: 1.1rem; margin-bottom: 2rem;">
+                Próximamente disponible.
+            </p>
+            <div style="display: flex; justify-content: center; align-items: center; gap: 0.5rem; color: #6c757d;">
+                <div class="loading-spinner">
+                    <div></div>
+                </div>
+                <span style="margin-left: 1rem;">Desarrollando...</span>
+            </div>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
