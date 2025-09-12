@@ -153,10 +153,6 @@ st.markdown("""
         display: none !important;
     }
 
-    .st-emotion-cache-zy6yx3 {
-        padding: 0 !important;
-    }
-
     header[data-testid="stHeader"] {display: none !important;}
 
     /* Ocultar el div del borde de los tabs */
@@ -287,6 +283,13 @@ st.markdown("""
     /* Fondo principal */
     .stApp {
         background-color: #f8f9fa;
+    }
+    
+    div[data-testid="stMainBlockContainer"] {
+        padding-top: 0 !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+        padding-bottom: 10rem !important; /* mantiene el bottom original si quieres */
     }
     
     /* Ocultar elementos por defecto de Streamlit */
@@ -488,7 +491,28 @@ st.markdown("""
     }
 
     .stMain{
-        padding: 2rem !important;
+        padding: 1rem !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+    }
+    
+    /* Asegurar que el contenido dentro de stMain se centre horizontalmente */
+    .stMain > div {
+        width: 100% !important;
+        max-width: 1200px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+    }
+    
+    /* Centrar el contenedor principal horizontalmente */
+    .main-container {
+        width: 100% !important;
+        max-width: 1200px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
     }
     
     /* Ocultar elementos de Streamlit */
@@ -497,6 +521,7 @@ st.markdown("""
     header {visibility: hidden; display: none; !important;}
     
     /* Estilo para el contenido de tabs */
+
     .tab-content {
         display: none;
     }
@@ -520,16 +545,19 @@ st.markdown("""
     .stTabs [aria-selected="true"] {
         background-color: #cdd5dc !important;
         color: white !important;
+        box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.25);
     }
     
+    .stTabs [data-baseweb="tab"] {
+        transition: box-shadow 0.5s ease;
+    }
+
     .stTabs [data-baseweb="tab"]:hover {
-        background-color: #f8f9fa !important;
-        color: #495057 !important;
+        box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.25);
     }
     
-    .stTabs [aria-selected="true"]:hover {
-        background-color: #f8f9fa !important;
-        color: white !important;
+    .stTabs [role="tab"] {
+        transition: background-color 0.5s ease, color 0.5s ease;
     }
     
     /* Panel de contenido de tabs */
@@ -549,11 +577,11 @@ st.markdown("""
     
     /* Estilos adicionales para el contenido de tabs */
     .stTabs [role="tabpanel"] {
+        padding: 1rem !important;
         background-color: #f8f9fa !important;
         border: 1px solid #e9ecef !important;
         border-radius: 0.5rem !important;
         box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075) !important;
-        margin-top: 1rem !important;
     }
     
     /* Asegurar que el fondo se aplique a todo el contenido */
@@ -571,7 +599,7 @@ st.markdown("""
     }
     
     p, div, span {
-        color: #495057 !important;
+        color: #495057;
     }
     
     /* Estilo para el file uploader */
