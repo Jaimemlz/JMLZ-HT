@@ -146,11 +146,19 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-
-
 # Estilos para las tarjetas y componentes
 st.markdown("""
 <style>
+    header[data-testid="stHeader"] {
+        display: none !important;
+    }
+
+    .st-emotion-cache-zy6yx3 {
+        padding: 0 !important;
+    }
+
+    header[data-testid="stHeader"] {display: none !important;}
+
     /* Ocultar el div del borde de los tabs */
     div[data-baseweb="tab-border"] {
         display: none !important;
@@ -271,90 +279,7 @@ st.markdown("""
     .stDataFrame div[data-testid="stDataFrame"] * {
         color: #495057 !important;
     }
-</style>
-""", unsafe_allow_html=True)
-
-# JavaScript para forzar tema claro en las tablas
-st.markdown("""
-<script>
-// Función para forzar tema claro en tablas
-function forzarTemaClaro() {
-    // Buscar todas las tablas de Streamlit
-    const tablas = document.querySelectorAll('[data-testid="stDataFrame"]');
-    
-    tablas.forEach(tabla => {
-        // Forzar fondo blanco
-        tabla.style.backgroundColor = 'white';
-        tabla.style.color = '#495057';
-        
-        // Forzar estilos en la tabla interna
-        const tablaInterna = tabla.querySelector('table');
-        if (tablaInterna) {
-            tablaInterna.style.backgroundColor = 'white';
-            tablaInterna.style.color = '#495057';
-            
-            // Forzar estilos en encabezados
-            const encabezados = tablaInterna.querySelectorAll('thead th');
-            encabezados.forEach(th => {
-                th.style.backgroundColor = '#f8f9fa';
-                th.style.color = '#495057';
-                th.style.border = '1px solid #e9ecef';
-            });
-            
-            // Forzar estilos en celdas
-            const celdas = tablaInterna.querySelectorAll('tbody td');
-            celdas.forEach(td => {
-                td.style.backgroundColor = 'white';
-                td.style.color = '#495057';
-                td.style.border = '1px solid #e9ecef';
-            });
-            
-            // Forzar estilos en filas
-            const filas = tablaInterna.querySelectorAll('tbody tr');
-            filas.forEach((fila, index) => {
-                fila.style.backgroundColor = 'white';
-                fila.style.color = '#495057';
-                
-                // Filas pares
-                if (index % 2 === 1) {
-                    fila.style.backgroundColor = '#f8f9fa';
-                    const celdasFila = fila.querySelectorAll('td');
-                    celdasFila.forEach(td => {
-                        td.style.backgroundColor = '#f8f9fa';
-                    });
-                }
-            });
-        }
-    });
-}
-
-// Ejecutar cuando se carga la página
-document.addEventListener('DOMContentLoaded', forzarTemaClaro);
-
-// Ejecutar cuando se actualiza el contenido
-const observer = new MutationObserver(function(mutations) {
-    mutations.forEach(function(mutation) {
-        if (mutation.type === 'childList') {
-            forzarTemaClaro();
-        }
-    });
-});
-
-// Observar cambios en el DOM
-observer.observe(document.body, {
-    childList: true,
-    subtree: true
-});
-
-// Ejecutar periódicamente para asegurar que se aplique
-setInterval(forzarTemaClaro, 1000);
-</script>
-""", unsafe_allow_html=True)
-
-# CSS personalizado para el estilo moderno en blanco y grises
-st.markdown("""
-<style>
-    /* Box sizing global */
+        /* Box sizing global */
     *, *::before, *::after {
         box-sizing: border-box !important;
     }
@@ -561,11 +486,15 @@ st.markdown("""
             transform: scale(1);
         }
     }
+
+    .stMain{
+        padding: 2rem !important;
+    }
     
     /* Ocultar elementos de Streamlit */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
+    #MainMenu {visibility: hidden; display: none; !important;}
+    footer {visibility: hidden; display: none; !important;}
+    header {visibility: hidden; display: none; !important;}
     
     /* Estilo para el contenido de tabs */
     .tab-content {
@@ -624,7 +553,6 @@ st.markdown("""
         border: 1px solid #e9ecef !important;
         border-radius: 0.5rem !important;
         box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075) !important;
-        padding: 2rem !important;
         margin-top: 1rem !important;
     }
     
@@ -879,7 +807,6 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
-
 # Estado de la sesión para manejar tabs
 if 'active_tab' not in st.session_state:
     st.session_state.active_tab = 'analisis'
@@ -1129,28 +1056,6 @@ with tab1:
                         hide_index=True
                     )
                     
-                    # Forzar tema claro después de mostrar la tabla
-                    st.markdown("""
-                    <script>
-                    setTimeout(function() {
-                        const tablas = document.querySelectorAll('.stDataFrame table');
-                        tablas.forEach(tabla => {
-                            if (tabla && tabla.style) {
-                                tabla.style.setProperty('background-color', 'white', 'important');
-                                tabla.style.setProperty('color', '#495057', 'important');
-                            }
-                            const celdas = tabla.querySelectorAll('td, th');
-                            celdas.forEach(celda => {
-                                if (celda && celda.style) {
-                                    celda.style.setProperty('background-color', 'white', 'important');
-                                    celda.style.setProperty('color', '#495057', 'important');
-                                }
-                            });
-                        });
-                    }, 1000);
-                    </script>
-                    """, unsafe_allow_html=True)
-                    
                     # Explicación del ranking
                     st.markdown("""
                     <div style="margin-top: -1rem; padding: 1rem; background-color: #f8f9fa; border-left: 4px solid #6c757d;">
@@ -1219,28 +1124,6 @@ with tab1:
                     column_config=column_config_resumen,
                     hide_index=True
                 )
-                
-                # Forzar tema claro después de mostrar la tabla comparativa
-                st.markdown("""
-                <script>
-                setTimeout(function() {
-                    const tablas = document.querySelectorAll('.stDataFrame table');
-                    tablas.forEach(tabla => {
-                        if (tabla && tabla.style) {
-                            tabla.style.setProperty('background-color', 'white', 'important');
-                            tabla.style.setProperty('color', '#495057', 'important');
-                        }
-                        const celdas = tabla.querySelectorAll('td, th');
-                        celdas.forEach(celda => {
-                            if (celda && celda.style) {
-                                celda.style.setProperty('background-color', 'white', 'important');
-                                celda.style.setProperty('color', '#495057', 'important');
-                            }
-                        });
-                    });
-                }, 1000);
-                </script>
-                """, unsafe_allow_html=True)
                 
                 st.markdown('</div>', unsafe_allow_html=True)
                 
