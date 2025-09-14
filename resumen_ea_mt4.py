@@ -540,6 +540,63 @@ st.markdown("""
         align-items: center;
     }
     
+    /* Estilos para el botón de usuario */
+    .stButton > button {
+        background-color: #f8f9fa !important;
+        color: #495057 !important;
+        border: 1px solid #dee2e6 !important;
+        border-radius: 0.5rem !important;
+        padding: 0.5rem 1rem !important;
+        font-size: 1.2rem !important;
+        font-weight: 500 !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+        margin-top: 0.5rem !important;
+        width: 100% !important;
+    }
+    
+    .stButton > button:hover {
+        background-color: #e9ecef !important;
+        color: #212529 !important;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
+        transform: translateY(-1px) !important;
+    }
+    
+    .stButton > button:active {
+        transform: translateY(0) !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+    }
+    
+    /* Estilos para el menú de usuario */
+    .user-menu {
+        position: absolute;
+        top: 100%;
+        right: 0;
+        background-color: white;
+        border: 1px solid #dee2e6;
+        border-radius: 0.5rem;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        padding: 1rem;
+        min-width: 200px;
+        z-index: 1000;
+        margin-top: 0.5rem;
+    }
+    
+    .user-menu-item {
+        padding: 0.5rem 0;
+        border-bottom: 1px solid #f8f9fa;
+        cursor: pointer;
+        transition: color 0.2s ease;
+    }
+    
+    .user-menu-item:hover {
+        color: #6c757d;
+    }
+    
+    .user-menu-item:last-child {
+        border-bottom: none;
+    }
+    
     /* Contenedor principal de tabs */
     .stTabs {
         overflow: visible !important;
@@ -862,8 +919,28 @@ st.markdown("""
 if 'active_tab' not in st.session_state:
     st.session_state.active_tab = 'analisis'
 
-# Barra de navegación superior con tabs de Streamlit
-tab1, tab2, tab3 = st.tabs(["📊 Análisis", "🚀 Proyectos", "⚙️ Configuración"])
+# Barra de navegación superior con tabs de Streamlit y botón de usuario
+col1, col2 = st.columns([0.85, 0.15])
+
+with col1:
+    tab1, tab2, tab3 = st.tabs(["📊 Análisis", "🚀 Proyectos", "⚙️ Configuración"])
+
+with col2:
+    # Botón de usuario
+    if st.button("👤", key="user_button"):
+        st.session_state.show_user_menu = not st.session_state.get('show_user_menu', False)
+    
+    # Menú de usuario (se muestra si está activado)
+    if st.session_state.get('show_user_menu', False):
+        st.markdown("""
+        <div class="user-menu">
+            <div class="user-menu-item">👤 Mi Perfil</div>
+            <div class="user-menu-item">⚙️ Configuración</div>
+            <div class="user-menu-item">📊 Estadísticas</div>
+            <div class="user-menu-item">❓ Ayuda</div>
+            <div class="user-menu-item">🚪 Cerrar Sesión</div>
+        </div>
+        """, unsafe_allow_html=True)
 
 # Contenedor principal
 st.markdown('<div class="main-container">', unsafe_allow_html=True)
