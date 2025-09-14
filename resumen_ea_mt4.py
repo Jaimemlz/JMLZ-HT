@@ -533,40 +533,66 @@ st.markdown("""
     /* Estilos para tabs de Streamlit */
     .stTabs [data-baseweb="tab-list"] {
         margin-bottom: 2rem !important;
+        display: flex !important;
+        gap: 0.5rem !important;
+        padding: 0.5rem !important;
+        overflow: visible !important;
+        align-items: center;
     }
     
+    /* Contenedor principal de tabs */
+    .stTabs {
+        overflow: visible !important;
+    }
+    
+    /* Base de todos los tabs */
     .stTabs [data-baseweb="tab"] {
-        background-color: #e9ecef !important;
-        color: #6c757d !important;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem; /* espacio entre icono y texto */
+        background-color: #f1f3f5 !important;
+        color: #495057 !important;
         border-radius: 0.5rem !important;
-        padding: 0.75rem 1.5rem !important;
-    }
-    
-    .stTabs [aria-selected="true"] {
-        background-color: #cdd5dc !important;
-        color: white !important;
-        box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.25);
-    }
-    
-    .stTabs [data-baseweb="tab"] {
-        transition: box-shadow 0.5s ease;
+        padding: 0.5rem 1.25rem !important;
+        border: 1px solid #dee2e6 !important;
+        box-shadow: none !important;
+        transition: background-color 0.3s ease, 
+                    color 0.3s ease, 
+                    box-shadow 0.3s ease, 
+                    transform 0.2s ease;
+        font-weight: 500;
     }
 
-    .stTabs [data-baseweb="tab"]:hover {
-        box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.25);
+    /* Tab activo */
+    .stTabs [aria-selected="true"] {
+        background-color: #ffffff !important;
+        color: #212529 !important;
+        box-shadow: 0 3px 8px rgba(0,0,0,0.08) !important;
+        border: 1px solid #dee2e6 !important;
+        transform: translateY(-2px); /* levanta un poco el activo */
+        z-index: 5;
     }
-    
-    .stTabs [role="tab"] {
-        transition: background-color 0.5s ease, color 0.5s ease;
+
+    /* Hover en tabs inactivos */
+    .stTabs [data-baseweb="tab"]:not([aria-selected="true"]):hover {
+        background-color: #e9ecef !important;
+        box-shadow: inset 0 0 6px rgba(0,0,0,0.1);
     }
-    
-    /* Panel de contenido de tabs */
+
+    /* Contenedor de panel */
     .stTabs [data-baseweb="tab-panel"] {
         background-color: #f8f9fa !important;
-        border: none !important;
-        padding: 0 !important;
-        margin: 0 !important;
+        border-radius: 0.5rem !important;
+        padding: 1rem !important;
     }
+      
+    .stTabs [role="tab"] {
+        transition: background-color 0.7s ease, 
+                color 0.7s ease, 
+                padding 1s ease, 
+                box-shadow 0.5s ease;
+    }
+
     
     /* Contenedor del contenido del tab */
     .stTabs > div > div > div > div {
@@ -581,7 +607,7 @@ st.markdown("""
         background-color: #f8f9fa !important;
         border: 1px solid #e9ecef !important;
         border-radius: 0.5rem !important;
-        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075) !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
     }
     
     /* Asegurar que el fondo se aplique a todo el contenido */
@@ -604,9 +630,6 @@ st.markdown("""
     
     /* Estilo para el file uploader */
     .stFileUploader > div {
-        background-color: white !important;
-        border: 1px solid #e9ecef !important;
-        border-radius: 0.75rem !important;
     }
     
     .stFileUploader [data-testid="stFileUploaderDropzone"] {
@@ -851,7 +874,7 @@ with tab1:
     # Tarjeta de carga de archivo
     st.markdown("""
     <div class="card">
-        <div class="card-title">Cargar Statement.htm</div>
+        <div class="card-title">Analiza tu portafolio</div>
     """, unsafe_allow_html=True)
 
     archivo = st.file_uploader("Elegir archivo", type=["htm", "html"], label_visibility="collapsed")
