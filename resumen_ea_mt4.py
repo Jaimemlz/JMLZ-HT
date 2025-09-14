@@ -531,6 +531,11 @@ st.markdown("""
     }
 
     /* Estilos para tabs de Streamlit */
+    .stTabs {
+        position: relative !important;
+    }
+    
+    /* Estilos para tabs de Streamlit */
     .stTabs [data-baseweb="tab-list"] {
         margin-bottom: 2rem !important;
         display: flex !important;
@@ -540,62 +545,66 @@ st.markdown("""
         align-items: center;
     }
     
-    /* Estilos para el botón de usuario */
-    .stButton > button {
-        background-color: #f8f9fa !important;
-        color: #495057 !important;
-        border: 1px solid #dee2e6 !important;
-        border-radius: 0.5rem !important;
-        padding: 0.5rem 1rem !important;
-        font-size: 1.2rem !important;
-        font-weight: 500 !important;
-        transition: all 0.3s ease !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+    /* Estilos para tabs anidados (sub-tabs) - mismo estilo que tabs principales */
+    .stTabs .stTabs [data-baseweb="tab-list"] {
+        margin-bottom: 0.5rem !important;
         margin-top: 0.5rem !important;
-        width: 100% !important;
+        display: flex !important;
+        gap: 0.5rem !important;
+        padding: 0.5rem !important;
+        overflow: visible !important;
+        align-items: center;
     }
     
-    .stButton > button:hover {
-        background-color: #e9ecef !important;
+    /* Tabs anidados - mismo estilo que tabs principales */
+    .stTabs .stTabs [data-baseweb="tab"] {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem; /* espacio entre icono y texto */
+        background-color: #f1f3f5 !important;
+        color: #495057 !important;
+        border-radius: 0.5rem !important;
+        padding: 0.5rem 1.25rem !important;
+        border: 1px solid #dee2e6 !important;
+        box-shadow: none !important;
+        transition: background-color 0.3s ease, 
+                    color 0.3s ease, 
+                    box-shadow 0.3s ease, 
+                    transform 0.2s ease;
+        font-weight: 500;
+    }
+    
+    /* Tab anidado activo - mismo estilo que tabs principales */
+    .stTabs .stTabs [aria-selected="true"] {
+        background-color: #ffffff !important;
         color: #212529 !important;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
-        transform: translateY(-1px) !important;
+        box-shadow: 0 3px 8px rgba(0,0,0,0.08) !important;
+        border: 1px solid #dee2e6 !important;
+        transform: translateY(-2px); /* levanta un poco el activo */
+        z-index: 5;
     }
     
-    .stButton > button:active {
-        transform: translateY(0) !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+    /* Hover en tabs anidados inactivos - mismo estilo que tabs principales */
+    .stTabs .stTabs [data-baseweb="tab"]:not([aria-selected="true"]):hover {
+        background-color: #e9ecef !important;
+        box-shadow: inset 0 0 6px rgba(0,0,0,0.1);
     }
     
-    /* Estilos para el menú de usuario */
-    .user-menu {
-        position: absolute;
-        top: 100%;
-        right: 0;
-        background-color: white;
-        border: 1px solid #dee2e6;
-        border-radius: 0.5rem;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        padding: 1rem;
-        min-width: 200px;
-        z-index: 1000;
-        margin-top: 0.5rem;
+    /* Contenedor de panel para tabs anidados - mismo estilo que tabs principales */
+    .stTabs .stTabs [data-baseweb="tab-panel"] {
+        background-color: #f8f9fa !important;
+        border-radius: 0.5rem !important;
+        padding: 1rem !important;
     }
     
-    .user-menu-item {
-        padding: 0.5rem 0;
-        border-bottom: 1px solid #f8f9fa;
-        cursor: pointer;
-        transition: color 0.2s ease;
+    /* Transiciones para tabs anidados */
+    .stTabs .stTabs [role="tab"] {
+        transition: background-color 0.7s ease, 
+                color 0.7s ease, 
+                padding 1s ease, 
+                box-shadow 0.5s ease;
     }
     
-    .user-menu-item:hover {
-        color: #6c757d;
-    }
-    
-    .user-menu-item:last-child {
-        border-bottom: none;
-    }
     
     /* Contenedor principal de tabs */
     .stTabs {
@@ -913,34 +922,240 @@ st.markdown("""
         border: 1px solid #e9ecef !important;
         border-radius: 0.75rem !important;
     }
+    
+    /* Estilos para tarjetas de promociones completas */
+    .promo-card-full {
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        border: 1px solid #e9ecef;
+        border-radius: 1rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        min-height: 200px;
+    }
+    
+    .promo-card-full:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+    
+    .promo-image-section {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        padding: 2rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        width: 250px;
+        position: relative;
+    }
+    
+    .promo-main-logo {
+        height: 80px;
+        max-width: 200px;
+        object-fit: contain;
+        margin-bottom: 1rem;
+    }
+    
+    .promo-badge {
+        background: linear-gradient(45deg, #ff6b6b, #ff8e8e);
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 1rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+    }
+    
+    .promo-content-section {
+        flex: 1;
+        padding: 2rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .promo-info {
+        flex: 1;
+        margin-right: 2rem;
+    }
+    
+    .promo-info h3 {
+        color: #212529;
+        margin: 0 0 1rem 0;
+        font-size: 1.5rem;
+        font-weight: 700;
+    }
+    
+    .promo-description {
+        color: #495057;
+        font-size: 1rem;
+        line-height: 1.6;
+        margin: 0 0 1.5rem 0;
+    }
+    
+    .promo-discount {
+        background: linear-gradient(45deg, #28a745, #20c997);
+        color: white;
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.5rem;
+        font-size: 1.2rem;
+        font-weight: 700;
+        text-align: center;
+        margin: 0 0 1rem 0;
+        box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
+        display: inline-block;
+    }
+    
+    .promo-code {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin: 1rem 0;
+        padding: 1rem;
+        background-color: #f8f9fa;
+        border-radius: 0.5rem;
+        border: 1px solid #e9ecef;
+    }
+    
+    .promo-code code {
+        background-color: #e9ecef;
+        padding: 0.5rem 1rem;
+        border-radius: 0.25rem;
+        font-family: 'Courier New', monospace;
+        font-weight: 600;
+        color: #495057;
+        flex: 1;
+        font-size: 1.1rem;
+    }
+    
+    .copy-btn {
+        background-color: #6c757d;
+        color: white;
+        border: none;
+        padding: 0.75rem;
+        border-radius: 0.25rem;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        font-size: 1.1rem;
+    }
+    
+    .copy-btn:hover {
+        background-color: #5a6268;
+    }
+    
+    .promo-actions {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1.5rem;
+        min-width: 200px;
+    }
+    
+    .countdown-timer {
+        text-align: center;
+        padding: 1rem;
+        background: linear-gradient(135deg, #ff6b6b, #ff8e8e);
+        border-radius: 0.75rem;
+        color: white;
+        box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);
+    }
+    
+    .timer-label {
+        font-size: 0.9rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .timer-display {
+        font-size: 1.5rem;
+        font-weight: 700;
+        font-family: 'Courier New', monospace;
+    }
+    
+    .timer-display span {
+        background-color: rgba(255, 255, 255, 0.2);
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        margin: 0 0.25rem;
+    }
+    
+    .promo-link {
+        text-decoration: none;
+        display: block;
+    }
+    
+    .promo-button {
+        background: linear-gradient(45deg, #007bff, #0056b3);
+        color: white;
+        border: none;
+        padding: 1rem 2rem;
+        border-radius: 0.5rem;
+        font-size: 1.1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        min-width: 180px;
+    }
+    
+    .promo-button:hover {
+        background: linear-gradient(45deg, #0056b3, #004085);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 15px rgba(0, 123, 255, 0.3);
+    }
+    
+    /* Animación de copiado */
+    .copy-success {
+        background-color: #28a745 !important;
+        animation: copyPulse 0.6s ease;
+    }
+    
+    @keyframes copyPulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.1); }
+        100% { transform: scale(1); }
+    }
 </style>
+
+<script>
+function copyCode(elementId) {
+    const codeElement = document.getElementById(elementId);
+    const code = codeElement.textContent;
+    
+    navigator.clipboard.writeText(code).then(function() {
+        const button = codeElement.nextElementSibling;
+        const originalText = button.innerHTML;
+        button.innerHTML = '✅';
+        button.classList.add('copy-success');
+        
+        setTimeout(function() {
+            button.innerHTML = originalText;
+            button.classList.remove('copy-success');
+        }, 2000);
+    }).catch(function(err) {
+        console.error('Error al copiar: ', err);
+        alert('Código copiado: ' + code);
+    });
+}
+</script>
 """, unsafe_allow_html=True)
 # Estado de la sesión para manejar tabs
 if 'active_tab' not in st.session_state:
     st.session_state.active_tab = 'analisis'
 
-# Barra de navegación superior con tabs de Streamlit y botón de usuario
-col1, col2 = st.columns([0.85, 0.15])
-
-with col1:
-    tab1, tab2, tab3 = st.tabs(["📊 Análisis", "🚀 Proyectos", "⚙️ Configuración"])
-
-with col2:
-    # Botón de usuario
-    if st.button("👤", key="user_button"):
-        st.session_state.show_user_menu = not st.session_state.get('show_user_menu', False)
-    
-    # Menú de usuario (se muestra si está activado)
-    if st.session_state.get('show_user_menu', False):
-        st.markdown("""
-        <div class="user-menu">
-            <div class="user-menu-item">👤 Mi Perfil</div>
-            <div class="user-menu-item">⚙️ Configuración</div>
-            <div class="user-menu-item">📊 Estadísticas</div>
-            <div class="user-menu-item">❓ Ayuda</div>
-            <div class="user-menu-item">🚪 Cerrar Sesión</div>
-        </div>
-        """, unsafe_allow_html=True)
+# Usar tabs de Streamlit para el contenido
+tab1, tab2, tab3 = st.tabs(["📊 Análisis", "% Descuentos", "⚙️ Configuración"])
 
 # Contenedor principal
 st.markdown('<div class="main-container">', unsafe_allow_html=True)
@@ -948,195 +1163,272 @@ st.markdown('<div class="main-container">', unsafe_allow_html=True)
 
 # Panel central con contenido dinámico según el tab
 with tab1:
-    # Tarjeta de carga de archivo
-    st.markdown("""
-    <div class="card">
-        <div class="card-title">Analiza tu portafolio</div>
-    """, unsafe_allow_html=True)
+    # Crear tabs anidados dentro del tab 1
+    sub_tab1, sub_tab2 = st.tabs(["📈 Análisis General", "🔍 Análisis Detallado"])
+    
+    with sub_tab1:
+        # Tarjeta de carga de archivo
+        st.markdown("""
+        <div class="card">
+            <div class="card-title">Analiza tu portafolio</div>
+        """, unsafe_allow_html=True)
 
-    archivo = st.file_uploader("Elegir archivo", type=["htm", "html"], label_visibility="collapsed")
+        archivo = st.file_uploader("Elegir archivo", type=["htm", "html"], label_visibility="collapsed")
 
-    if archivo:
+        if archivo:
+            try:
+                soup = BeautifulSoup(archivo, 'html.parser')
+                rows = soup.find_all('tr', align='right')
 
-        try:
-            soup = BeautifulSoup(archivo, 'html.parser')
-            rows = soup.find_all('tr', align='right')
+                datos = []
+                eas_filtradas = 0
+                total_operaciones = 0
 
-            datos = []
-            eas_filtradas = 0
-            total_operaciones = 0
+                for i in range(0, len(rows), 2):
+                    try:
+                        fila_op = rows[i].find_all('td')
+                        fila_ea = rows[i+1].find_all('td')
 
-            for i in range(0, len(rows), 2):
-                try:
-                    fila_op = rows[i].find_all('td')
-                    fila_ea = rows[i+1].find_all('td')
+                        tipo = fila_op[2].text.strip().lower()
+                        size = float(fila_op[3].text)
+                        symbol = fila_op[4].text.strip().lower()
+                        open_time = datetime.strptime(fila_op[1].text.strip(), "%Y.%m.%d %H:%M:%S")
+                        close_time = datetime.strptime(fila_op[8].text.strip(), "%Y.%m.%d %H:%M:%S")
+                        profit = float(fila_op[13].text)
+                        ea_raw = fila_ea[-1].text.strip()
 
-                    tipo = fila_op[2].text.strip().lower()
-                    size = float(fila_op[3].text)
-                    symbol = fila_op[4].text.strip().lower()
-                    open_time = datetime.strptime(fila_op[1].text.strip(), "%Y.%m.%d %H:%M:%S")
-                    close_time = datetime.strptime(fila_op[8].text.strip(), "%Y.%m.%d %H:%M:%S")
-                    profit = float(fila_op[13].text)
-                    ea_raw = fila_ea[-1].text.strip()
+                        if "cancelled" in ea_raw.lower():
+                            continue
 
-                    if "cancelled" in ea_raw.lower():
+                        ea_name = ea_raw.split('[')[0]
+                        total_operaciones += 1
+
+                        # Filtrar EAs válidas (que contengan letras)
+                        if not es_ea_valida(ea_name):
+                            eas_filtradas += 1
+                            continue
+
+                        datos.append({
+                            "EA": ea_name,
+                            "Símbolo": symbol,
+                            "Tipo": tipo,
+                            "Beneficio": profit,
+                            "Open": open_time,
+                            "Close": close_time,
+                            "Duración": (close_time - open_time).total_seconds() / 60  # en minutos
+                        })
+                    except Exception:
                         continue
 
-                    ea_name = ea_raw.split('[')[0]
-                    total_operaciones += 1
+                if datos:
+                    df = pd.DataFrame(datos)
+                    
+                    # Mostrar información sobre el filtrado
+                    if eas_filtradas > 0:
+                        st.info(f"ℹ️ Se eliminaron {eas_filtradas} operaciones que no pertenecen a ninguna EA de un total de {total_operaciones} operaciones. Se procesaron {len(datos)} operaciones válidas.")
 
-                    # Filtrar EAs válidas (que contengan letras)
-                    if not es_ea_valida(ea_name):
-                        eas_filtradas += 1
-                        continue
+                    resumen = df.groupby(["EA", "Símbolo"]).agg(
+                        Ops=('Beneficio', 'count'),
+                        Win_pct=('Beneficio', lambda x: 100 * (x > 0).sum() / len(x)),
+                        Profit_medio=('Beneficio', 'mean'),
+                        Max_Loss=('Beneficio', 'min'),
+                        Duracion_media_min=('Duración', 'mean'),
+                        Beneficio_total=('Beneficio', 'sum')
+                    ).reset_index()
 
-                    datos.append({
-                        "EA": ea_name,
-                        "Símbolo": symbol,
-                        "Tipo": tipo,
-                        "Beneficio": profit,
-                        "Open": open_time,
-                        "Close": close_time,
-                        "Duración": (close_time - open_time).total_seconds() / 60  # en minutos
+                    # Redondear numéricos primero
+                    resumen = resumen.round({
+                        "Win_pct": 2,
+                        "Profit_medio": 2,
+                        "Max_Loss": 2,
+                        "Duracion_media_min": 1,
+                        "Beneficio_total": 2
                     })
-                except Exception:
-                    continue
 
-            if datos:
-                df = pd.DataFrame(datos)
-                
-                # Mostrar información sobre el filtrado
-                if eas_filtradas > 0:
-                    st.info(f"ℹ️ Se eliminaron {eas_filtradas} operaciones que no pertenecen a ninguna EA de un total de {total_operaciones} operaciones. Se procesaron {len(datos)} operaciones válidas.")
+                    resumen["Beneficio_total_raw"] = resumen["Beneficio_total"]
 
-                resumen = df.groupby(["EA", "Símbolo"]).agg(
-                    Ops=('Beneficio', 'count'),
-                    Win_pct=('Beneficio', lambda x: 100 * (x > 0).sum() / len(x)),
-                    Profit_medio=('Beneficio', 'mean'),
-                    Max_Loss=('Beneficio', 'min'),
-                    Duracion_media_min=('Duración', 'mean'),
-                    Beneficio_total=('Beneficio', 'sum')
-                ).reset_index()
+                    # 💡 Formatear columnas para presentación legible
+                    def formatear_duracion(minutos):
+                        horas = int(minutos) // 60
+                        mins = int(minutos) % 60
+                        return f"{horas}h {mins}m"
 
-                # Redondear numéricos primero
-                resumen = resumen.round({
-                    "Win_pct": 2,
-                    "Profit_medio": 2,
-                    "Max_Loss": 2,
-                    "Duracion_media_min": 1,
-                    "Beneficio_total": 2
-                })
+                    resumen["Win_pct"] = resumen["Win_pct"].astype(str) + " %"
+                    resumen["Profit_medio"] = resumen["Profit_medio"].apply(lambda x: f"${x:.2f}")
+                    resumen["Max_Loss"] = resumen["Max_Loss"].apply(lambda x: f"${x:.2f}")
+                    resumen["Beneficio_total"] = resumen["Beneficio_total"].apply(lambda x: f"${x:.2f}")
+                    resumen["Duracion_media"] = resumen["Duracion_media_min"].apply(formatear_duracion)
+                    resumen = resumen.drop(columns=["Duracion_media_min"])  # Quitamos la versión cruda
 
-                resumen["Beneficio_total_raw"] = resumen["Beneficio_total"]
+                    # Ordenar y preparar resumen
+                    resumen = resumen.sort_values(by="Beneficio_total_raw", ascending=False)
 
-                # 💡 Formatear columnas para presentación legible
-                def formatear_duracion(minutos):
-                    horas = int(minutos) // 60
-                    mins = int(minutos) % 60
-                    return f"{horas}h {mins}m"
+                    # Selector de EA para filtrar
+                    ea_opciones = ["Todas"] + sorted(resumen["EA"].unique())
+                    ea_seleccionada = st.selectbox("🧠 Selecciona una EA para filtrar", ea_opciones)
 
-                resumen["Win_pct"] = resumen["Win_pct"].astype(str) + " %"
-                resumen["Profit_medio"] = resumen["Profit_medio"].apply(lambda x: f"${x:.2f}")
-                resumen["Max_Loss"] = resumen["Max_Loss"].apply(lambda x: f"${x:.2f}")
-                resumen["Beneficio_total"] = resumen["Beneficio_total"].apply(lambda x: f"${x:.2f}")
-                resumen["Duracion_media"] = resumen["Duracion_media_min"].apply(formatear_duracion)
-                resumen = resumen.drop(columns=["Duracion_media_min"])  # Quitamos la versión cruda
+                    # Filtrar datos según selección
+                    if ea_seleccionada != "Todas":
+                        resumen_filtrado = resumen[resumen["EA"] == ea_seleccionada]
+                        df_filtrado = df[df["EA"] == ea_seleccionada]
+                    else:
+                        resumen_filtrado = resumen
+                        df_filtrado = df
 
-                # Ordenar y preparar resumen
-                resumen = resumen.sort_values(by="Beneficio_total_raw", ascending=False)
+                    # Crear gráfico de beneficio acumulado
+                    df_filtrado['Fecha'] = df_filtrado['Close'].dt.date
+                    beneficios_diarios = df_filtrado.groupby(['EA', 'Fecha'])['Beneficio'].sum().reset_index()
+                    beneficios_diarios['Beneficio_acumulado'] = beneficios_diarios.groupby('EA')['Beneficio'].cumsum()
 
-                # Selector de EA para filtrar
-                ea_opciones = ["Todas"] + sorted(resumen["EA"].unique())
-                ea_seleccionada = st.selectbox("🧠 Selecciona una EA para filtrar", ea_opciones)
-
-                # Filtrar datos según selección
-                if ea_seleccionada != "Todas":
-                    resumen_filtrado = resumen[resumen["EA"] == ea_seleccionada]
-                    df_filtrado = df[df["EA"] == ea_seleccionada]
-                else:
-                    resumen_filtrado = resumen
-                    df_filtrado = df
-
-                # Crear gráfico de beneficio acumulado
-                df_filtrado['Fecha'] = df_filtrado['Close'].dt.date
-                beneficios_diarios = df_filtrado.groupby(['EA', 'Fecha'])['Beneficio'].sum().reset_index()
-                beneficios_diarios['Beneficio_acumulado'] = beneficios_diarios.groupby('EA')['Beneficio'].cumsum()
-
-                if len(beneficios_diarios) > 0:
-                    fig = px.line(
-                        beneficios_diarios,
-                        x="Fecha",
-                        y="Beneficio_acumulado",
-                        color="EA",
-                        markers=True,
-                        labels={"Beneficio_acumulado": "Beneficio acumulado", "Fecha": "Fecha"}
-                    )
-
-                    # Añadir tooltip personalizado
-                    fig.update_traces(
-                        hovertemplate=
-                        "<b>Fecha:</b> %{x|%d-%m-%Y}<br>" +
-                        "<b>Beneficio acumulado:</b> $%{y:.2f}<extra></extra>"
-                    )
-
-                    fig.update_layout(
-                        height=400, 
-                        margin=dict(l=20, r=20, t=40, b=20),
-                        template="plotly_white",
-                        plot_bgcolor='white',
-                        paper_bgcolor='white',
-                        font=dict(color='#495057'),
-                        xaxis=dict(
-                            gridcolor='#e9ecef',
-                            linecolor='#e9ecef',
-                            tickcolor='#495057',
-                            tickfont=dict(color='#495057')
-                        ),
-                        yaxis=dict(
-                            gridcolor='#e9ecef',
-                            linecolor='#e9ecef',
-                            tickcolor='#495057',
-                            tickfont=dict(color='#495057')
+                    if len(beneficios_diarios) > 0:
+                        fig = px.line(
+                            beneficios_diarios,
+                            x="Fecha",
+                            y="Beneficio_acumulado",
+                            color="EA",
+                            markers=True,
+                            labels={"Beneficio_acumulado": "Beneficio acumulado", "Fecha": "Fecha"}
                         )
-                    )
 
-                    st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.info("No hay datos suficientes para mostrar el gráfico")
+                        # Añadir tooltip personalizado
+                        fig.update_traces(
+                            hovertemplate=
+                            "<b>Fecha:</b> %{x|%d-%m-%Y}<br>" +
+                            "<b>Beneficio acumulado:</b> $%{y:.2f}<extra></extra>"
+                        )
+
+                        fig.update_layout(
+                            height=400, 
+                            margin=dict(l=20, r=20, t=40, b=20),
+                            template="plotly_white",
+                            plot_bgcolor='white',
+                            paper_bgcolor='white',
+                            font=dict(color='#495057'),
+                            xaxis=dict(
+                                gridcolor='#e9ecef',
+                                linecolor='#e9ecef',
+                                tickcolor='#495057',
+                                tickfont=dict(color='#495057')
+                            ),
+                            yaxis=dict(
+                                gridcolor='#e9ecef',
+                                linecolor='#e9ecef',
+                                tickcolor='#495057',
+                                tickfont=dict(color='#495057')
+                            )
+                        )
+
+                        st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        st.info("No hay datos suficientes para mostrar el gráfico")
                 
-                # Cerrar tarjeta de análisis
-                st.markdown('</div>', unsafe_allow_html=True)
-                
-                # Panel de Ranking por Score de Rentabilidad
-                st.markdown("""
-                <div class="card">
-                    <div class="card-title">🏆 Ranking por Score de Rentabilidad</div>
-                """, unsafe_allow_html=True)
-                
-                # Crear ranking
-                ranking_df = crear_ranking_ea(df_filtrado)
-                
-                if not ranking_df.empty:
-                    # Crear tabla de ranking con columnas formateadas
-                    ranking_mostrar = ranking_df[[
-                        'Posicion', 'EA', 'Símbolo', 'Total_Ops', 'Win_Rate_Formateado',
-                        'Beneficio_Promedio_Formateado', 'Perdida_Promedio_Formateado',
-                        'Ratio_Formateado', 'Score_Formateado', 'Beneficio_Total_Formateado'
-                    ]].copy()
+                    # Cerrar tarjeta de análisis
+                    st.markdown('</div>', unsafe_allow_html=True)
                     
-                    # Renombrar columnas para mejor presentación
-                    ranking_mostrar.columns = [
-                        'Posición', 'EA', 'Símbolo', 'Total Ops', 'Win Rate',
-                        'Beneficio Promedio', 'Pérdida Promedio', 'Ratio R/B', 'Score Rentabilidad', 'Beneficio Total'
-                    ]
+                    # Panel de Ranking por Score de Rentabilidad
+                    st.markdown("""
+                    <div class="card">
+                        <div class="card-title">🏆 Ranking por Score de Rentabilidad</div>
+                    """, unsafe_allow_html=True)
+                
+                    # Crear ranking
+                    ranking_df = crear_ranking_ea(df_filtrado)
                     
-                    # Configurar columnas para tema claro
-                    column_config = {
-                        "Posición": st.column_config.NumberColumn(
-                            "Posición",
-                            help="Posición en el ranking",
-                            format="%d"
-                        ),
+                    if not ranking_df.empty:
+                        # Crear tabla de ranking con columnas formateadas
+                        ranking_mostrar = ranking_df[[
+                            'Posicion', 'EA', 'Símbolo', 'Total_Ops', 'Win_Rate_Formateado',
+                            'Beneficio_Promedio_Formateado', 'Perdida_Promedio_Formateado',
+                            'Ratio_Formateado', 'Score_Formateado', 'Beneficio_Total_Formateado'
+                        ]].copy()
+                        
+                        # Renombrar columnas para mejor presentación
+                        ranking_mostrar.columns = [
+                            'Posición', 'EA', 'Símbolo', 'Total Ops', 'Win Rate',
+                            'Beneficio Promedio', 'Pérdida Promedio', 'Ratio R/B', 'Score Rentabilidad', 'Beneficio Total'
+                        ]
+                    
+                        # Configurar columnas para tema claro
+                        column_config = {
+                            "Posición": st.column_config.NumberColumn(
+                                "Posición",
+                                help="Posición en el ranking",
+                                format="%d"
+                            ),
+                            "EA": st.column_config.TextColumn(
+                                "EA",
+                                help="Nombre del Expert Advisor"
+                            ),
+                            "Símbolo": st.column_config.TextColumn(
+                                "Símbolo",
+                                help="Símbolo de trading"
+                            ),
+                            "Total Ops": st.column_config.NumberColumn(
+                                "Total Ops",
+                                help="Total de operaciones",
+                                format="%d"
+                            ),
+                            "Win Rate": st.column_config.TextColumn(
+                                "Win Rate",
+                                help="Porcentaje de operaciones ganadoras"
+                            ),
+                            "Beneficio Promedio": st.column_config.TextColumn(
+                                "Beneficio Promedio",
+                                help="Beneficio promedio por operación ganadora"
+                            ),
+                            "Pérdida Promedio": st.column_config.TextColumn(
+                                "Pérdida Promedio",
+                                help="Pérdida promedio por operación perdedora"
+                            ),
+                            "Ratio R/B": st.column_config.TextColumn(
+                                "Ratio R/B",
+                                help="Ratio Riesgo-Beneficio"
+                            ),
+                            "Score Rentabilidad": st.column_config.TextColumn(
+                                "Score Rentabilidad",
+                                help="Score que combina Win Rate y Ratio R/B (Win Rate × Ratio R/B)"
+                            ),
+                            "Beneficio Total": st.column_config.TextColumn(
+                                "Beneficio Total",
+                                help="Beneficio total acumulado"
+                            )
+                        }
+                        
+                        # Mostrar tabla de ranking con configuración de tema claro
+                        st.dataframe(
+                            ranking_mostrar, 
+                            use_container_width=True,
+                            column_config=column_config,
+                            hide_index=True
+                        )
+                        
+                        # Explicación del ranking
+                        st.markdown("""
+                        <div style="margin-top: -1rem; padding: 1rem; background-color: #f8f9fa; border-left: 4px solid #6c757d;">
+                            <h4 style="margin: 0 0 0.5rem 0; color: #495057;">📊 Cómo se calcula el Score de Rentabilidad:</h4>
+                            <p style="margin: 0; color: #6c757d; font-size: 0.9rem;">
+                                <strong>Score de Rentabilidad = Win Rate × Ratio Riesgo-Beneficio</strong><br>
+                                Este score combina la frecuencia de ganancias (Win Rate) con la eficiencia (Ratio R/B).<br>
+                                <em>Ejemplo:</em> EA con 60% Win Rate y Ratio 2:1 = Score 1.2, mientras que EA con 20% Win Rate y Ratio 4:1 = Score 0.8
+                            </p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        st.info("No hay datos suficientes para crear el ranking")
+                    
+                    st.markdown('</div>', unsafe_allow_html=True)
+                    
+                    # Tarjeta de tabla resumen
+                    st.markdown("""
+                    <div class="card">
+                        <div class="card-title">💰 Ranking por beneficio total</div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Crear una copia para mostrar sin la columna raw
+                    resumen_mostrar = resumen_filtrado.drop(columns=['Beneficio_total_raw'])
+                    
+                    # Configurar columnas para la tabla comparativa
+                    column_config_resumen = {
                         "EA": st.column_config.TextColumn(
                             "EA",
                             help="Nombre del Expert Advisor"
@@ -1145,122 +1437,77 @@ with tab1:
                             "Símbolo",
                             help="Símbolo de trading"
                         ),
-                        "Total Ops": st.column_config.NumberColumn(
-                            "Total Ops",
-                            help="Total de operaciones",
+                        "Ops": st.column_config.NumberColumn(
+                            "Ops",
+                            help="Número de operaciones",
                             format="%d"
                         ),
-                        "Win Rate": st.column_config.TextColumn(
-                            "Win Rate",
+                        "Win_pct": st.column_config.TextColumn(
+                            "Win %",
                             help="Porcentaje de operaciones ganadoras"
                         ),
-                        "Beneficio Promedio": st.column_config.TextColumn(
-                            "Beneficio Promedio",
-                            help="Beneficio promedio por operación ganadora"
+                        "Profit_medio": st.column_config.TextColumn(
+                            "Profit Medio",
+                            help="Beneficio promedio por operación"
                         ),
-                        "Pérdida Promedio": st.column_config.TextColumn(
-                            "Pérdida Promedio",
-                            help="Pérdida promedio por operación perdedora"
+                        "Max_Loss": st.column_config.TextColumn(
+                            "Max Loss",
+                            help="Pérdida máxima registrada"
                         ),
-                        "Ratio R/B": st.column_config.TextColumn(
-                            "Ratio R/B",
-                            help="Ratio Riesgo-Beneficio"
+                        "Duracion_media": st.column_config.TextColumn(
+                            "Duración Media",
+                            help="Duración promedio de las operaciones"
                         ),
-                        "Score Rentabilidad": st.column_config.TextColumn(
-                            "Score Rentabilidad",
-                            help="Score que combina Win Rate y Ratio R/B (Win Rate × Ratio R/B)"
-                        ),
-                        "Beneficio Total": st.column_config.TextColumn(
+                        "Beneficio_total": st.column_config.TextColumn(
                             "Beneficio Total",
                             help="Beneficio total acumulado"
                         )
                     }
                     
-                    # Mostrar tabla de ranking con configuración de tema claro
                     st.dataframe(
-                        ranking_mostrar, 
+                        resumen_mostrar, 
                         use_container_width=True,
-                        column_config=column_config,
+                        column_config=column_config_resumen,
                         hide_index=True
                     )
                     
-                    # Explicación del ranking
+                    st.markdown('</div>', unsafe_allow_html=True)
+                
+                else:
                     st.markdown("""
-                    <div style="margin-top: -1rem; padding: 1rem; background-color: #f8f9fa; border-left: 4px solid #6c757d;">
-                        <h4 style="margin: 0 0 0.5rem 0; color: #495057;">📊 Cómo se calcula el Score de Rentabilidad:</h4>
-                        <p style="margin: 0; color: #6c757d; font-size: 0.9rem;">
-                            <strong>Score de Rentabilidad = Win Rate × Ratio Riesgo-Beneficio</strong><br>
-                            Este score combina la frecuencia de ganancias (Win Rate) con la eficiencia (Ratio R/B).<br>
-                            <em>Ejemplo:</em> EA con 60% Win Rate y Ratio 2:1 = Score 1.2, mientras que EA con 20% Win Rate y Ratio 4:1 = Score 0.8
-                        </p>
+                    <div class="status-error">
+                        ❌ No se encontraron operaciones válidas en el archivo.
                     </div>
                     """, unsafe_allow_html=True)
-                else:
-                    st.info("No hay datos suficientes para crear el ranking")
-                
-                st.markdown('</div>', unsafe_allow_html=True)
-                
-                # Tarjeta de tabla resumen
-                st.markdown("""
-                <div class="card">
-                    <div class="card-title">💰 Ranking por beneficio total</div>
+                    st.markdown('</div>', unsafe_allow_html=True)
+            
+            except Exception as e:
+                st.markdown(f"""
+                <div class="status-error">
+                    ❌ Error al procesar el archivo<br>
+                    Verifica que sea un archivo HTML válido de MT4.<br>
+                    Error: {str(e)}
+                </div>
                 """, unsafe_allow_html=True)
-                
-                # Crear una copia para mostrar sin la columna raw
-                resumen_mostrar = resumen_filtrado.drop(columns=['Beneficio_total_raw'])
-                
-                # Configurar columnas para la tabla comparativa
-                column_config_resumen = {
-                    "EA": st.column_config.TextColumn(
-                        "EA",
-                        help="Nombre del Expert Advisor"
-                    ),
-                    "Símbolo": st.column_config.TextColumn(
-                        "Símbolo",
-                        help="Símbolo de trading"
-                    ),
-                    "Ops": st.column_config.NumberColumn(
-                        "Ops",
-                        help="Número de operaciones",
-                        format="%d"
-                    ),
-                    "Win_pct": st.column_config.TextColumn(
-                        "Win %",
-                        help="Porcentaje de operaciones ganadoras"
-                    ),
-                    "Profit_medio": st.column_config.TextColumn(
-                        "Profit Medio",
-                        help="Beneficio promedio por operación"
-                    ),
-                    "Max_Loss": st.column_config.TextColumn(
-                        "Max Loss",
-                        help="Pérdida máxima registrada"
-                    ),
-                    "Duracion_media": st.column_config.TextColumn(
-                        "Duración Media",
-                        help="Duración promedio de las operaciones"
-                    ),
-                    "Beneficio_total": st.column_config.TextColumn(
-                        "Beneficio Total",
-                        help="Beneficio total acumulado"
-                    )
-                }
-                
-                st.dataframe(
-                    resumen_mostrar, 
-                    use_container_width=True,
-                    column_config=column_config_resumen,
-                    hide_index=True
-                )
-                
                 st.markdown('</div>', unsafe_allow_html=True)
-                
-                # Tarjeta de operaciones detalladas
-                st.markdown("""
-                <div class="card">
-                    <div class="card-title">Operaciones por EA</div>
-                """, unsafe_allow_html=True)
-                
+
+        else:
+            st.markdown("""
+            <div class="status-error">
+                ⚠️ Selecciona un archivo para comenzar el análisis
+            </div>
+            """, unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+    
+    with sub_tab2:
+        # Tarjeta de análisis detallado
+        st.markdown("""
+        <div class="card">
+            <div class="card-title">🔍 Análisis Detallado de Operaciones</div>
+        """, unsafe_allow_html=True)
+        
+        if 'archivo' in locals() and archivo:
+            try:
                 # Mostrar operaciones individuales por EA y símbolo
                 grupos_ordenados = df_filtrado.groupby(["EA", "Símbolo"]).agg(Beneficio_total=('Beneficio', 'sum')).reset_index()
                 grupos_ordenados = grupos_ordenados.sort_values(by="Beneficio_total", ascending=False)
@@ -1272,56 +1519,144 @@ with tab1:
                     with st.expander(f"📌 {ea} - {symbol} ({len(grupo)} operaciones)"):
                         st.dataframe(grupo.sort_values(by="Open"), use_container_width=True)
                 
+                # Análisis adicional por EA
+                st.markdown("""
+                <div class="card">
+                    <div class="card-title">📊 Estadísticas por EA</div>
+                """, unsafe_allow_html=True)
+                
+                # Crear análisis estadístico detallado
+                estadisticas_detalladas = []
+                for ea in df_filtrado['EA'].unique():
+                    df_ea = df_filtrado[df_filtrado['EA'] == ea]
+                    
+                    # Calcular estadísticas por EA
+                    total_ops = len(df_ea)
+                    ops_ganadoras = len(df_ea[df_ea['Beneficio'] > 0])
+                    ops_perdedoras = len(df_ea[df_ea['Beneficio'] < 0])
+                    ops_cero = len(df_ea[df_ea['Beneficio'] == 0])
+                    
+                    win_rate = (ops_ganadoras / total_ops * 100) if total_ops > 0 else 0
+                    beneficio_total = df_ea['Beneficio'].sum()
+                    beneficio_promedio = df_ea['Beneficio'].mean()
+                    beneficio_max = df_ea['Beneficio'].max()
+                    perdida_max = df_ea['Beneficio'].min()
+                    
+                    # Duración promedio
+                    duracion_promedio = df_ea['Duración'].mean()
+                    
+                    estadisticas_detalladas.append({
+                        'EA': ea,
+                        'Total_Operaciones': total_ops,
+                        'Operaciones_Ganadoras': ops_ganadoras,
+                        'Operaciones_Perdedoras': ops_perdedoras,
+                        'Operaciones_Cero': ops_cero,
+                        'Win_Rate_%': round(win_rate, 2),
+                        'Beneficio_Total': round(beneficio_total, 2),
+                        'Beneficio_Promedio': round(beneficio_promedio, 2),
+                        'Beneficio_Maximo': round(beneficio_max, 2),
+                        'Perdida_Maxima': round(perdida_max, 2),
+                        'Duracion_Promedio_Min': round(duracion_promedio, 1)
+                    })
+                
+                if estadisticas_detalladas:
+                    df_estadisticas = pd.DataFrame(estadisticas_detalladas)
+                    df_estadisticas = df_estadisticas.sort_values('Beneficio_Total', ascending=False)
+                    
+                    # Configurar columnas para la tabla de estadísticas
+                    column_config_stats = {
+                        "EA": st.column_config.TextColumn("EA", help="Nombre del Expert Advisor"),
+                        "Total_Operaciones": st.column_config.NumberColumn("Total Ops", help="Total de operaciones", format="%d"),
+                        "Operaciones_Ganadoras": st.column_config.NumberColumn("Ops Ganadoras", help="Operaciones ganadoras", format="%d"),
+                        "Operaciones_Perdedoras": st.column_config.NumberColumn("Ops Perdedoras", help="Operaciones perdedoras", format="%d"),
+                        "Operaciones_Cero": st.column_config.NumberColumn("Ops Cero", help="Operaciones con beneficio cero", format="%d"),
+                        "Win_Rate_%": st.column_config.NumberColumn("Win Rate %", help="Porcentaje de operaciones ganadoras", format="%.2f"),
+                        "Beneficio_Total": st.column_config.NumberColumn("Beneficio Total", help="Beneficio total acumulado", format="$%.2f"),
+                        "Beneficio_Promedio": st.column_config.NumberColumn("Beneficio Promedio", help="Beneficio promedio por operación", format="$%.2f"),
+                        "Beneficio_Maximo": st.column_config.NumberColumn("Beneficio Máximo", help="Mayor beneficio individual", format="$%.2f"),
+                        "Perdida_Maxima": st.column_config.NumberColumn("Pérdida Máxima", help="Mayor pérdida individual", format="$%.2f"),
+                        "Duracion_Promedio_Min": st.column_config.NumberColumn("Duración Promedio (min)", help="Duración promedio en minutos", format="%.1f")
+                    }
+                    
+                    st.dataframe(
+                        df_estadisticas, 
+                        use_container_width=True,
+                        column_config=column_config_stats,
+                        hide_index=True
+                    )
+                
                 st.markdown('</div>', unsafe_allow_html=True)
                 
-            else:
-                st.markdown("""
+            except Exception as e:
+                st.markdown(f"""
                 <div class="status-error">
-                    ❌ No se encontraron operaciones válidas en el archivo.
+                    ❌ Error al procesar el análisis detallado<br>
+                    Error: {str(e)}
                 </div>
                 """, unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
-                
-        except Exception as e:
-            st.markdown(f"""
+        else:
+            st.markdown("""
             <div class="status-error">
-                ❌ Error al procesar el archivo<br>
-                Verifica que sea un archivo HTML válido de MT4.<br>
-                Error: {str(e)}
+                ⚠️ Primero carga un archivo en el tab "Análisis General" para ver el análisis detallado
             </div>
             """, unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-
-    else:
-        st.markdown("""
-        <div class="status-error">
-            ⚠️ Selecciona un archivo para comenzar el análisis
-        </div>
-        """, unsafe_allow_html=True)
+        
         st.markdown('</div>', unsafe_allow_html=True)
 
-# Tab de Proyectos
+# Array de promociones de Prop Firms
+promociones = [
+    {
+        "id": "ftmo",
+        "nombre": "FTMO Challenge",
+        "logo": "https://tse2.mm.bing.net/th/id/OIP.YcCmzHSPPjrc2v3JTGTKNAHaB4?r=0&rs=1&pid=ImgDetMain&o=7&rm=3",
+        "badge": "🔥 HOT",
+        "descuento": "10% DESCUENTO",
+        "codigo": "FTMO10",
+        "descripcion": "Obtén hasta $400,000 en capital de trading con el 10% de descuento en tu primer challenge. La prop firm más confiable del mercado.",
+        "url": "https://ftmo.com",
+        "boton_texto": "Ir a FTMO",
+        "tiene_timer": True,
+        "timer": {
+            "dias": 15,
+            "horas": 12,
+            "minutos": 30
+        }
+    },
+    {
+        "id": "ttp",
+        "nombre": "The Trading Pit",
+        "logo": "https://www.thetradingpit.com/assets/global/logo-dark-4.svg",
+        "badge": "⭐ NUEVO",
+        "descuento": "15% DESCUENTO",
+        "codigo": "TTP15",
+        "descripcion": "Accede a hasta $200,000 en capital con condiciones de trading flexibles y sin límite de tiempo. Perfecto para traders principiantes.",
+        "url": "https://thetradingpit.com",
+        "boton_texto": "Ir a The Trading Pit",
+        "tiene_timer": False
+    }
+]
+
+def generar_promo_html(promo):
+    """Genera el HTML para una promoción individual"""
+    timer_html = ""
+    if promo.get("tiene_timer", False):
+        timer = promo["timer"]
+        timer_html = f'<div class="countdown-timer" id="{promo["id"]}-timer"><div class="timer-label">⏰ Oferta termina en:</div><div class="timer-display"><span id="{promo["id"]}-days">{timer["dias"]}</span>d<span id="{promo["id"]}-hours">{timer["horas"]}</span>h<span id="{promo["id"]}-minutes">{timer["minutos"]}</span>m</div></div>'
+    
+    return f'<div class="promo-card-full"><div class="promo-image-section"><img src="{promo["logo"]}" alt="{promo["nombre"]}" class="promo-main-logo"></div><div class="promo-content-section"><div class="promo-info"><div class="promo-discount">{promo["descuento"]}</div><div class="promo-code"><span>Código: </span><code id="{promo["id"]}-code">{promo["codigo"]}</code><button class="copy-btn" onclick="copyCode(\'{promo["id"]}-code\')">📋</button></div></div><div class="promo-actions">{timer_html}<a href="{promo["url"]}" target="_blank" class="promo-link"></a></div></div></div>'
+
+# Tab de Prop Firms
 with tab2:
     st.markdown("""
     <div class="card">
-        <div class="card-title">🚀 Proyectos</div>
-        <div style="text-align: center; padding: 2rem;">
-            <div style="font-size: 4rem; margin-bottom: 1rem;" class="construction-icon">🔨</div>
-            <h2 style="color: #6c757d; margin-bottom: 1rem;">¡En Construcción!</h2>
-            <p style="color: #6c757d; font-size: 1.1rem; margin-bottom: 2rem;">
-                Próximamente disponible.
-            </p>
-            <div style="display: flex; justify-content: center; align-items: center; gap: 0.5rem; color: #6c757d;">
-                <div class="loading-dots">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                </div>
-                <span style="margin-left: 1rem;">Trabajando en ello...</span>
-            </div>
-        </div>
+        <div class="card-title">🚀 Prop Firms - Ofertas Exclusivas</div>
+        <p style="color: #6c757d; margin-bottom: 2rem;">Descubre las mejores promociones de las principales prop firms del mercado</p>
     </div>
     """, unsafe_allow_html=True)
+    
+    # Generar promociones dinámicamente desde el array
+    for promo in promociones:
+        st.markdown(generar_promo_html(promo), unsafe_allow_html=True)
 
 # Tab de Configuración
 with tab3:
