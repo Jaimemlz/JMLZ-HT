@@ -139,246 +139,276 @@ def crear_ranking_ea(df):
     return ranking_df
 
 # =============================================================================
-# FUNCIONES PARA ANÁLISIS DE PROP FIRM
+# FUNCIONES PARA ANÁLISIS SECUENCIAL DE PROP FIRM
 # =============================================================================
 
-def simulate_prop_firm_challenge(df_trades, config):
+def simulate_sequential_prop_firm_challenges(df_trades, config):
     """
-    Simula un challenge de prop firm con lógica corregida
+    Simula múltiples challenges de prop firm de forma secuencial
+    usando los trades uno tras otro sin repetir.
     
     Args:
-        df_trades: DataFrame con las operaciones históricas
+        df_trades: DataFrame con operaciones históricas ordenadas
         config: Dict con configuración del challenge
     
     Returns:
-        Dict con resultados de múltiples simulaciones
+        Dict con estadísticas de todos los challenges simulados
     """
     
-    # Extraer configuración
+    # Preparar datos
+    df_processed = prepare_trading_data(df_trades, config)
+    
+    # Variables de seguimiento
+    challenges = []
+    current_trade_index = 0
+    challenge_number = 1
+    
+    # Ejecutar challenges secuenciales hasta agotar los trades
+    while current_trade_index < len(df_processed) - 10:  # Mínimo 10 trades por challenge
+        
+        # Ejecutar un challenge empezando desde current_trade_index
+        challenge_result, trades_used = run_sequential_challenge(
+            df_processed, current_trade_index, config, challenge_number
+        )
+        
+        challenges.append(challenge_result)
+        
+        # Avanzar al siguiente trade para el próximo challenge
+        current_trade_index += trades_used
+        challenge_number += 1
+        
+        # Límite de seguridad para evitar bucles infinitos
+        if len(challenges) >= 100:
+            break
+    
+    return analyze_sequential_results(challenges, config)
+
+def prepare_trading_data(df, config):
+    """Prepara y escala los datos de trading según el riesgo configurado"""
+    
+    df = df.copy()
+    
+    # Convertir y limpiar datos
+    df['Open time'] = pd.to_datetime(df['Open time'])
+    df['Close time'] = pd.to_datetime(df['Close time'])
+    df['profit_loss'] = pd.to_numeric(df['Profit/Loss'])
+    df['date'] = df['Close time'].dt.date
+    
+    # Ordenar por tiempo de cierre
+    df = df.sort_values('Close time').reset_index(drop=True)
+    
+    # Calcular factor de escalado
+    historical_risk = 2.0  # Riesgo promedio asumido en datos históricos
+    scaling_factor = config['risk_per_trade'] / historical_risk
+    
+    # Escalar profits según el riesgo seleccionado
+    df['scaled_profit'] = df['profit_loss'] * scaling_factor
+    df['scaled_profit_pct'] = (df['scaled_profit'] / config['account_size']) * 100
+    
+    return df
+
+def run_sequential_challenge(df_trades, start_index, config, challenge_num):
+    """
+    Ejecuta un challenge individual empezando desde start_index
+    
+    Returns:
+        (challenge_result, number_of_trades_used)
+    """
+    
     account_size = config['account_size']
-    risk_per_trade = config['risk_per_trade']
     phase1_target = config['phase1_target']
     phase2_target = config['phase2_target']
     daily_dd_limit = config['daily_dd_limit']
     total_dd_limit = config['total_dd_limit']
     
-    # Procesar datos históricos
-    df_processed = process_trading_data(df_trades)
-    
-    # Factor de escalado basado en riesgo seleccionado
-    historical_avg_risk = 2.0  # Asumimos 2% promedio histórico
-    scaling_factor = risk_per_trade / historical_avg_risk
-    
-    # Escalar profits según el riesgo
-    df_processed['scaled_profit'] = df_processed['profit_loss'] * scaling_factor
-    
-    # Agrupar por día
-    daily_data = create_daily_summary(df_processed)
-    
-    # Ejecutar múltiples simulaciones
-    simulations = []
-    max_simulations = min(50, len(daily_data) - 10)  # Máximo 50 simulaciones
-    
-    for start_idx in range(max_simulations):
-        simulation_data = daily_data.iloc[start_idx:].copy()
-        result = run_single_simulation(simulation_data, config, scaling_factor)
-        simulations.append(result)
-    
-    # Analizar resultados
-    return analyze_simulation_results(simulations, config)
-
-def process_trading_data(df):
-    """Procesa y limpia los datos de trading"""
-    df = df.copy()
-    
-    # Convertir columnas necesarias
-    df['Open time'] = pd.to_datetime(df['Open time'])
-    df['Close time'] = pd.to_datetime(df['Close time'])
-    df['profit_loss'] = pd.to_numeric(df['Profit/Loss'])
-    
-    # Ordenar por tiempo de cierre
-    df = df.sort_values('Close time')
-    
-    return df
-
-def create_daily_summary(df):
-    """Crea resumen diario de operaciones"""
-    df['date'] = df['Close time'].dt.date
-    
-    daily_summary = df.groupby('date').agg({
-        'profit_loss': ['sum', 'min', 'max', 'count'],
-        'scaled_profit': ['sum', 'min', 'max']
-    }).reset_index()
-    
-    # Aplanar columnas
-    daily_summary.columns = [
-        'date', 'daily_profit', 'min_trade', 'max_trade', 'trade_count',
-        'daily_scaled_profit', 'min_scaled_trade', 'max_scaled_trade'
-    ]
-    
-    # Calcular drawdown máximo del día (peor operación individual)
-    daily_summary['max_daily_dd_pct'] = abs(daily_summary['min_scaled_trade']) / 100000 * 100  # Usando $100k como base
-    
-    return daily_summary
-
-def run_single_simulation(daily_data, config, scaling_factor):
-    """Ejecuta una simulación individual del challenge"""
-    
-    account_size = config['account_size']
-    phase1_target = config['phase1_target']
-    phase2_target = config['phase2_target'] 
-    daily_dd_limit = config['daily_dd_limit']
-    total_dd_limit = config['total_dd_limit']
-    
-    # Variables de estado
+    # Estado inicial del challenge
     balance = account_size
     high_water_mark = account_size
     current_phase = 1
+    total_profit_pct = 0
+    
+    # Objetivos de cada fase
+    phase1_goal = phase1_target  # % de ganancia para Fase 1
+    phase2_goal = phase2_target  # % adicional para Fase 2
+    
+    # Contadores
+    trades_used = 0
     days_in_phase1 = 0
     days_in_phase2 = 0
-    total_trades = 0
     
-    # Objetivos absolutos
-    phase1_goal = account_size * (phase1_target / 100)
-    phase2_goal = account_size * (phase2_target / 100)
-    
+    # Estado del challenge
     status = "In Progress"
-    balance_history = [balance]
+    failure_reason = None
     
-    # Simular día por día
-    for i, row in daily_data.iterrows():
+    # Procesar trades secuencialmente
+    current_date = None
+    daily_profit_pct = 0
+    daily_trades = 0
+    
+    for i in range(start_index, len(df_trades)):
+        trade = df_trades.iloc[i]
+        trade_date = trade['date']
+        trade_profit_pct = trade['scaled_profit_pct']
         
-        # Incrementar contadores
-        if current_phase == 1:
-            days_in_phase1 += 1
-        else:
-            days_in_phase2 += 1
+        # Detectar cambio de día
+        if current_date != trade_date:
+            # Si cambió el día, verificar límites del día anterior
+            if current_date is not None and daily_profit_pct < -daily_dd_limit:
+                status = f"Failed Phase {current_phase}"
+                failure_reason = "Daily Drawdown Exceeded"
+                break
+            
+            # Resetear para el nuevo día
+            current_date = trade_date
+            daily_profit_pct = 0
+            daily_trades = 0
+            
+            # Contar días por fase
+            if current_phase == 1:
+                days_in_phase1 += 1
+            else:
+                days_in_phase2 += 1
         
-        total_trades += row['trade_count']
+        # Ejecutar el trade
+        trades_used += 1
+        daily_trades += 1
+        daily_profit_pct += trade_profit_pct
+        total_profit_pct += trade_profit_pct
         
-        # Actualizar balance
-        balance += row['daily_scaled_profit']
-        balance_history.append(balance)
+        # Actualizar balance y high water mark
+        balance += trade['scaled_profit']
         high_water_mark = max(high_water_mark, balance)
         
-        # Verificar límite de drawdown diario
-        if row['max_daily_dd_pct'] >= daily_dd_limit:
-            status = f"Failed Phase {current_phase} - Daily DD"
-            break
-        
-        # Verificar límite de drawdown total
-        current_dd = (high_water_mark - balance) / high_water_mark * 100
-        if current_dd >= total_dd_limit:
-            status = f"Failed Phase {current_phase} - Total DD"
+        # Verificar drawdown total
+        current_dd_pct = (high_water_mark - balance) / high_water_mark * 100
+        if current_dd_pct >= total_dd_limit:
+            status = f"Failed Phase {current_phase}"
+            failure_reason = "Total Drawdown Exceeded"
             break
         
         # Verificar objetivos de fase
-        total_profit = balance - account_size
-        
-        if current_phase == 1 and total_profit >= phase1_goal:
+        if current_phase == 1 and total_profit_pct >= phase1_goal:
+            # Pasó Fase 1, avanza a Fase 2
             current_phase = 2
-        elif current_phase == 2 and total_profit >= phase1_goal + phase2_goal:
+            
+        elif current_phase == 2 and total_profit_pct >= phase1_goal + phase2_goal:
+            # Completó ambas fases
             status = "Passed Both Phases"
             break
     
-    # Si llegó al final sin completar
+    # Verificar el último día si no se completó el challenge
+    if status == "In Progress" and current_date is not None and daily_profit_pct < -daily_dd_limit:
+        status = f"Failed Phase {current_phase}"
+        failure_reason = "Daily Drawdown Exceeded"
+    
+    # Si llegó al final de los datos sin completar
     if status == "In Progress":
         if current_phase == 1:
             status = "Incomplete Phase 1"
         else:
             status = "Incomplete Phase 2"
+        failure_reason = "Insufficient Data"
     
     return {
+        'challenge_number': challenge_num,
+        'start_trade_index': start_index,
         'status': status,
+        'failure_reason': failure_reason,
+        'phase_reached': current_phase,
+        'total_trades_used': trades_used,
         'days_phase1': days_in_phase1,
         'days_phase2': days_in_phase2,
         'total_days': days_in_phase1 + days_in_phase2,
-        'total_trades': total_trades,
+        'final_profit_pct': total_profit_pct,
         'final_balance': balance,
-        'total_profit': balance - account_size,
-        'max_drawdown': max([(high_water_mark - b) / high_water_mark * 100 for b in balance_history])
-    }
+        'max_drawdown_pct': current_dd_pct
+    }, trades_used
 
-def analyze_simulation_results(simulations, config):
-    """Analiza los resultados de múltiples simulaciones"""
+def analyze_sequential_results(challenges, config):
+    """Analiza los resultados de múltiples challenges secuenciales"""
     
-    if not simulations:
+    if not challenges:
         return None
     
-    total_sims = len(simulations)
+    total_challenges = len(challenges)
     
-    # Contar resultados por categoría
-    passed_phase1 = sum(1 for s in simulations if "Passed" in s['status'] or "Phase 2" in s['status'])
-    passed_both = sum(1 for s in simulations if s['status'] == "Passed Both Phases")
-    failed_dd = sum(1 for s in simulations if "DD" in s['status'])
+    # Categorizar resultados
+    passed_both = [c for c in challenges if c['status'] == "Passed Both Phases"]
+    failed_phase1 = [c for c in challenges if "Failed Phase 1" in c['status']]
+    failed_phase2 = [c for c in challenges if "Failed Phase 2" in c['status']]
+    incomplete = [c for c in challenges if "Incomplete" in c['status']]
     
-    # Calcular promedios para los que pasaron/fallaron
-    phase1_passers = [s for s in simulations if s['days_phase1'] > 0 and ("Passed" in s['status'] or "Phase 2" in s['status'])]
-    phase1_failers = [s for s in simulations if "Failed Phase 1" in s['status']]
+    # Separar por tipo de fallo
+    failed_daily_dd = [c for c in challenges if c.get('failure_reason') == "Daily Drawdown Exceeded"]
+    failed_total_dd = [c for c in challenges if c.get('failure_reason') == "Total Drawdown Exceeded"]
     
-    avg_days_pass_p1 = np.mean([s['days_phase1'] for s in phase1_passers]) if phase1_passers else 0
-    avg_trades_pass_p1 = np.mean([s['total_trades'] for s in phase1_passers]) if phase1_passers else 0
+    # Calcular probabilidades
+    prob_pass_both = len(passed_both) / total_challenges * 100
+    prob_reach_phase2 = len([c for c in challenges if c['phase_reached'] >= 2]) / total_challenges * 100
+    prob_fail_daily_dd = len(failed_daily_dd) / total_challenges * 100
+    prob_fail_total_dd = len(failed_total_dd) / total_challenges * 100
     
-    avg_days_fail_p1 = np.mean([s['days_phase1'] for s in phase1_failers]) if phase1_failers else 0
-    avg_trades_fail_p1 = np.mean([s['total_trades'] for s in phase1_failers]) if phase1_failers else 0
+    # Calcular métricas promedio
+    def safe_avg(data_list, field):
+        values = [item[field] for item in data_list if item[field] > 0]
+        return np.mean(values) if values else 0
+    
+    avg_trades_to_pass = safe_avg(passed_both, 'total_trades_used')
+    avg_days_to_pass = safe_avg(passed_both, 'total_days')
+    avg_trades_to_fail_p1 = safe_avg(failed_phase1, 'total_trades_used')
+    avg_days_to_fail_p1 = safe_avg(failed_phase1, 'total_days')
+    
+    # Análisis de tiempo por fase
+    phase1_completers = [c for c in challenges if c['phase_reached'] >= 2]
+    avg_days_phase1 = safe_avg(phase1_completers, 'days_phase1')
+    avg_trades_phase1 = safe_avg(phase1_completers, 'total_trades_used')  # Aproximado
     
     return {
-        'total_simulations': total_sims,
+        'summary': {
+            'total_challenges': total_challenges,
+            'total_trades_analyzed': sum(c['total_trades_used'] for c in challenges),
+            'data_utilization_pct': (sum(c['total_trades_used'] for c in challenges) / 1000) * 100  # Asumiendo 1000 trades
+        },
         'probabilities': {
-            'pass_phase1': (passed_phase1 / total_sims) * 100,
-            'pass_both_phases': (passed_both / total_sims) * 100,
-            'fail_drawdown': (failed_dd / total_sims) * 100
+            'pass_both_phases': prob_pass_both,
+            'reach_phase2': prob_reach_phase2,
+            'fail_daily_drawdown': prob_fail_daily_dd,
+            'fail_total_drawdown': prob_fail_total_dd,
+            'incomplete_challenges': len(incomplete) / total_challenges * 100
         },
         'average_metrics': {
-            'days_to_pass_p1': avg_days_pass_p1,
-            'trades_to_pass_p1': avg_trades_pass_p1,
-            'days_to_fail_p1': avg_days_fail_p1,
-            'trades_to_fail_p1': avg_trades_fail_p1
+            'trades_to_complete': avg_trades_to_pass,
+            'days_to_complete': avg_days_to_pass,
+            'trades_to_fail_phase1': avg_trades_to_fail_p1,
+            'days_to_fail_phase1': avg_days_to_fail_p1,
+            'days_for_phase1': avg_days_phase1
         },
         'risk_analysis': {
             'scaling_factor': config['risk_per_trade'] / 2.0,
-            'daily_dd_violations': sum(1 for s in simulations if "Daily DD" in s['status']),
-            'total_dd_violations': sum(1 for s in simulations if "Total DD" in s['status'])
-        }
+            'daily_dd_violations': len(failed_daily_dd),
+            'total_dd_violations': len(failed_total_dd),
+            'success_rate': prob_pass_both,
+            'risk_level': 'Low' if prob_pass_both >= 70 else 'Medium' if prob_pass_both >= 50 else 'High'
+        },
+        'detailed_results': challenges[:20]  # Primeros 20 challenges para inspección
     }
 
-def create_risk_sensitivity_analysis(df_trades, base_config, risk_levels=[1, 2, 3, 4, 5]):
-    """Crea análisis de sensibilidad para diferentes niveles de riesgo"""
+def create_detailed_visualizations(results):
+    """Crea visualizaciones detalladas de los resultados"""
     
-    sensitivity_results = []
+    # Gráfico de distribución de resultados
+    fig_distribution = go.Figure()
     
-    for risk in risk_levels:
-        config = base_config.copy()
-        config['risk_per_trade'] = risk
-        
-        results = simulate_prop_firm_challenge(df_trades, config)
-        
-        sensitivity_results.append({
-            'risk_percent': risk,
-            'pass_rate_p1': results['probabilities']['pass_phase1'],
-            'pass_rate_both': results['probabilities']['pass_both_phases'],
-            'fail_rate_dd': results['probabilities']['fail_drawdown'],
-            'avg_days_p1': results['average_metrics']['days_to_pass_p1'],
-            'scaling_factor': results['risk_analysis']['scaling_factor']
-        })
-    
-    return pd.DataFrame(sensitivity_results)
-
-def plot_results_dashboard(results, sensitivity_df=None):
-    """Crea gráficos para el dashboard"""
-    
-    # Gráfico de probabilidades principales
-    fig_probs = go.Figure()
-    
-    categories = ['Pasa Fase 1', 'Pasa Ambas Fases', 'Falla por DD']
+    categories = ['Pasa Ambas Fases', 'Llega a Fase 2', 'Falla DD Diario', 'Falla DD Total']
     values = [
-        results['probabilities']['pass_phase1'],
         results['probabilities']['pass_both_phases'],
-        results['probabilities']['fail_drawdown']
+        results['probabilities']['reach_phase2'],
+        results['probabilities']['fail_daily_drawdown'],
+        results['probabilities']['fail_total_drawdown']
     ]
-    colors = ['#10B981', '#059669', '#EF4444']
+    colors = ['#10B981', '#3B82F6', '#EF4444', '#F97316']
     
-    fig_probs.add_trace(go.Bar(
+    fig_distribution.add_trace(go.Bar(
         x=categories,
         y=values,
         marker_color=colors,
@@ -386,66 +416,87 @@ def plot_results_dashboard(results, sensitivity_df=None):
         textposition='auto',
     ))
     
-    fig_probs.update_layout(
-        title="Probabilidades de Éxito/Fallo",
+    fig_distribution.update_layout(
+        title="Distribución de Resultados - Simulación Secuencial",
         yaxis_title="Probabilidad (%)",
-        template="plotly_white"
+        template="plotly_white",
+        height=400
     )
     
-    # Gráfico de sensibilidad al riesgo (si está disponible)
-    fig_sensitivity = None
-    if sensitivity_df is not None:
-        fig_sensitivity = go.Figure()
+    # Gráfico de evolución de challenges (primeros 20)
+    detailed = results['detailed_results']
+    if detailed:
+        fig_evolution = go.Figure()
         
-        fig_sensitivity.add_trace(go.Scatter(
-            x=sensitivity_df['risk_percent'],
-            y=sensitivity_df['pass_rate_p1'],
-            mode='lines+markers',
-            name='Probabilidad Fase 1',
-            line=dict(color='#10B981', width=3),
-            marker=dict(size=8)
+        challenge_nums = [c['challenge_number'] for c in detailed]
+        trades_used = [c['total_trades_used'] for c in detailed]
+        success = [1 if "Passed" in c['status'] else 0 for c in detailed]
+        
+        fig_evolution.add_trace(go.Scatter(
+            x=challenge_nums,
+            y=trades_used,
+            mode='markers+lines',
+            name='Trades Usados',
+            yaxis='y',
+            marker=dict(
+                size=10,
+                color=[colors[1] if s else colors[2] for s in success]
+            )
         ))
         
-        fig_sensitivity.add_trace(go.Scatter(
-            x=sensitivity_df['risk_percent'],
-            y=sensitivity_df['pass_rate_both'],
-            mode='lines+markers',
-            name='Probabilidad Ambas Fases',
-            line=dict(color='#059669', width=3),
-            marker=dict(size=8)
-        ))
-        
-        fig_sensitivity.update_layout(
-            title="Sensibilidad: Riesgo vs Probabilidad de Éxito",
-            xaxis_title="Riesgo por Operación (%)",
-            yaxis_title="Probabilidad de Éxito (%)",
-            template="plotly_white"
+        fig_evolution.update_layout(
+            title="Evolución de Challenges (Primeros 20)",
+            xaxis_title="Número de Challenge",
+            yaxis_title="Trades Utilizados",
+            template="plotly_white",
+            height=400
         )
+    else:
+        fig_evolution = None
     
-    return fig_probs, fig_sensitivity
+    return fig_distribution, fig_evolution
 
-def run_prop_firm_analysis(df_csv, config_dict):
+def run_sequential_prop_firm_analysis(df_csv, config_dict):
     """
-    Función principal para ejecutar en tu aplicación Streamlit
+    Función principal para ejecutar análisis secuencial
     
     Args:
         df_csv: DataFrame con datos del CSV
-        config_dict: Diccionario con configuración
+        config_dict: Configuración del challenge
     
     Returns:
-        results, sensitivity_analysis, figures
+        results, figures
     """
     
-    # Ejecutar simulación principal
-    results = simulate_prop_firm_challenge(df_csv, config_dict)
+    # Ejecutar simulación secuencial
+    results = simulate_sequential_prop_firm_challenges(df_csv, config_dict)
     
-    # Crear análisis de sensibilidad
-    sensitivity_df = create_risk_sensitivity_analysis(df_csv, config_dict)
+    # Crear visualizaciones
+    fig_dist, fig_evol = create_detailed_visualizations(results)
     
-    # Crear gráficos
-    fig_probs, fig_sensitivity = plot_results_dashboard(results, sensitivity_df)
+    return results, (fig_dist, fig_evol)
+
+def compare_risk_levels_sequential(df_csv, base_config, risk_levels=[1, 2, 3, 4, 5]):
+    """Compara diferentes niveles de riesgo usando simulación secuencial"""
     
-    return results, sensitivity_df, (fig_probs, fig_sensitivity)
+    comparison_results = []
+    
+    for risk in risk_levels:
+        config = base_config.copy()
+        config['risk_per_trade'] = risk
+        
+        results = simulate_sequential_prop_firm_challenges(df_csv, config)
+        
+        comparison_results.append({
+            'risk_percent': risk,
+            'success_rate': results['probabilities']['pass_both_phases'],
+            'avg_trades_to_complete': results['average_metrics']['trades_to_complete'],
+            'avg_days_to_complete': results['average_metrics']['days_to_complete'],
+            'daily_dd_failure_rate': results['probabilities']['fail_daily_drawdown'],
+            'total_challenges': results['summary']['total_challenges']
+        })
+    
+    return pd.DataFrame(comparison_results)
 
 # Configurar tema claro para Streamlit
 import streamlit.components.v1 as components
@@ -1975,8 +2026,8 @@ with tab1:
                     )
                 
                 # Calcular análisis de prop firm
-                if st.button("🚀 Analizar Prop Firm", type="primary"):
-                    with st.spinner("Analizando datos..."):
+                if st.button("🚀 Analizar Secuencial", type="primary"):
+                    with st.spinner("Ejecutando simulación secuencial..."):
                         # Configurar parámetros para el análisis
                         config = {
                             'account_size': tamaño_cuenta,
@@ -1987,52 +2038,59 @@ with tab1:
                             'total_dd_limit': drawdown_maximo_total
                         }
                         
-                        # Ejecutar análisis usando las nuevas funciones
-                        results, sensitivity_df, (fig_probs, fig_sensitivity) = run_prop_firm_analysis(df_csv, config)
+                        # Ejecutar análisis secuencial usando las nuevas funciones
+                        results, (fig_distribution, fig_evolution) = run_sequential_prop_firm_analysis(df_csv, config)
                         
-                        # Mostrar métricas principales
+                        # Mostrar resumen
+                        st.success(f"✅ Análisis completado: {results['summary']['total_challenges']} challenges simulados")
+                        
+                        # Métricas principales
                         st.markdown("""
                         <div class="card">
-                            <div class="card-title">📊 Resultados del Análisis</div>
+                            <div class="card-title">📊 Resultados del Análisis Secuencial</div>
                         """, unsafe_allow_html=True)
                         
-                        col1, col2, col3 = st.columns(3)
+                        col1, col2, col3, col4 = st.columns(4)
                         
                         with col1:
                             st.metric(
-                                "Probabilidad Fase 1",
-                                f"{results['probabilities']['pass_phase1']:.1f}%",
-                                f"{results['average_metrics']['days_to_pass_p1']:.0f} días promedio"
+                                "Tasa de Éxito Total",
+                                f"{results['probabilities']['pass_both_phases']:.1f}%"
                             )
                         
                         with col2:
                             st.metric(
-                                "Probabilidad Ambas Fases",
-                                f"{results['probabilities']['pass_both_phases']:.1f}%",
-                                f"{results['average_metrics']['days_to_pass_p1']:.0f} días promedio"
+                                "Llegan a Fase 2", 
+                                f"{results['probabilities']['reach_phase2']:.1f}%"
                             )
                         
                         with col3:
                             st.metric(
-                                "Probabilidad Fallo por DD",
-                                f"{results['probabilities']['fail_drawdown']:.1f}%",
-                                f"{results['risk_analysis']['daily_dd_violations']} violaciones diarias"
+                                "Trades Promedio (Éxito)",
+                                f"{results['average_metrics']['trades_to_complete']:.0f}"
+                            )
+                        
+                        with col4:
+                            st.metric(
+                                "Días Promedio (Éxito)",
+                                f"{results['average_metrics']['days_to_complete']:.0f}"
                             )
                         
                         st.markdown('</div>', unsafe_allow_html=True)
                         
                         # Mostrar gráficos
-                        st.plotly_chart(fig_probs, use_container_width=True)
+                        st.plotly_chart(fig_distribution, use_container_width=True)
                         
-                        if fig_sensitivity:
-                            st.plotly_chart(fig_sensitivity, use_container_width=True)
+                        if fig_evolution:
+                            st.plotly_chart(fig_evolution, use_container_width=True)
                         
-                        # Mostrar análisis de sensibilidad
+                        # Análisis de sensibilidad
                         st.markdown("""
                         <div class="card">
-                            <div class="card-title">📈 Análisis de Sensibilidad al Riesgo</div>
+                            <div class="card-title">📊 Comparación de Niveles de Riesgo</div>
                         """, unsafe_allow_html=True)
                         
+                        sensitivity_df = compare_risk_levels_sequential(df_csv, config)
                         st.dataframe(sensitivity_df, use_container_width=True, hide_index=True)
                         
                         st.markdown('</div>', unsafe_allow_html=True)
@@ -2051,22 +2109,64 @@ with tab1:
                         </div>
                         """, unsafe_allow_html=True)
                         
+                        # Información detallada de la simulación
+                        st.markdown("""
+                        <div class="card">
+                            <div class="card-title">🔍 Información Detallada de la Simulación</div>
+                        """, unsafe_allow_html=True)
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.markdown(f"""
+                            <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem;">
+                                <h4 style="margin: 0 0 0.5rem 0; color: #495057;">📈 Estadísticas Generales</h4>
+                                <p style="margin: 0; color: #6c757d; font-size: 0.9rem;">
+                                    <strong>Total de challenges:</strong> {results['summary']['total_challenges']}<br>
+                                    <strong>Trades analizados:</strong> {results['summary']['total_trades_analyzed']}<br>
+                                    <strong>Utilización de datos:</strong> {results['summary']['data_utilization_pct']:.1f}%<br>
+                                    <strong>Nivel de riesgo:</strong> {results['risk_analysis']['risk_level']}
+                                </p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        
+                        with col2:
+                            st.markdown(f"""
+                            <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem;">
+                                <h4 style="margin: 0 0 0.5rem 0; color: #495057;">⚠️ Análisis de Fallos</h4>
+                                <p style="margin: 0; color: #6c757d; font-size: 0.9rem;">
+                                    <strong>Fallo por DD diario:</strong> {results['probabilities']['fail_daily_drawdown']:.1f}%<br>
+                                    <strong>Fallo por DD total:</strong> {results['probabilities']['fail_total_drawdown']:.1f}%<br>
+                                    <strong>Challenges incompletos:</strong> {results['probabilities']['incomplete_challenges']:.1f}%<br>
+                                    <strong>Violaciones DD diario:</strong> {results['risk_analysis']['daily_dd_violations']}
+                                </p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        
+                        st.markdown('</div>', unsafe_allow_html=True)
+                        
                         # Recomendaciones
                         st.markdown("""
                         <div class="card">
                             <div class="card-title">💡 Recomendaciones</div>
                         """, unsafe_allow_html=True)
                         
-                        prob_p1 = results['probabilities']['pass_phase1']
-                        prob_both = results['probabilities']['pass_both_phases']
-                        prob_dd = results['probabilities']['fail_drawdown']
+                        success_rate = results['probabilities']['pass_both_phases']
+                        risk_level = results['risk_analysis']['risk_level']
                         
-                        if prob_p1 >= 70:
+                        if success_rate >= 70:
                             st.success("✅ **Estrategia Sólida:** Con estos parámetros tienes alta probabilidad de pasar las pruebas. Tu estrategia es adecuada para prop firms.")
-                        elif prob_p1 >= 50:
+                        elif success_rate >= 50:
                             st.warning("⚠️ **Estrategia Moderada:** Probabilidad media de éxito. Considera reducir el riesgo por operación para mejorar tus chances.")
                         else:
                             st.error("❌ **Estrategia de Alto Riesgo:** Baja probabilidad de pasar. Recomendamos reducir significativamente el riesgo por operación.")
+                        
+                        # Recomendación específica basada en el análisis secuencial
+                        if results['average_metrics']['trades_to_complete'] > 0:
+                            avg_trades = results['average_metrics']['trades_to_complete']
+                            avg_days = results['average_metrics']['days_to_complete']
+                            
+                            st.info(f"📊 **Insight Secuencial:** En promedio, necesitas {avg_trades:.0f} trades ({avg_days:.0f} días) para completar ambas fases exitosamente.")
                         
                         st.markdown('</div>', unsafe_allow_html=True)
                         
