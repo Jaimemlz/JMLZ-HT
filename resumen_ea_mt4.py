@@ -498,6 +498,372 @@ def compare_risk_levels_sequential(df_csv, base_config, risk_levels=[1, 2, 3, 4,
     
     return pd.DataFrame(comparison_results)
 
+def run_detailed_challenge_tracking(df_trades, start_index, config, challenge_num, max_trades=50):
+    """
+    Ejecuta un challenge individual con seguimiento detallado trade por trade
+    
+    Returns:
+        detailed_evolution: Lista con la evolución completa del challenge
+    """
+    
+    account_size = config['account_size']
+    phase1_target = config['phase1_target']
+    phase2_target = config['phase2_target']
+    daily_dd_limit = config['daily_dd_limit']
+    total_dd_limit = config['total_dd_limit']
+    
+    # Factor de escalado
+    historical_risk = 2.0
+    scaling_factor = config['risk_per_trade'] / historical_risk
+    
+    # Estado inicial
+    balance = account_size
+    high_water_mark = account_size
+    current_phase = 1
+    total_profit_pct = 0
+    
+    # Objetivos
+    phase1_goal = phase1_target
+    phase2_goal = phase2_target
+    
+    # Seguimiento detallado
+    evolution = []
+    trades_used = 0
+    current_date = None
+    daily_profit_pct = 0
+    daily_trades_count = 0
+    
+    # Estado del challenge
+    status = "En Progreso"
+    
+    # Agregar estado inicial
+    evolution.append({
+        'challenge_num': challenge_num,
+        'trade_index': start_index,
+        'trade_number': 0,
+        'date': None,
+        'symbol': 'INICIAL',
+        'type': '-',
+        'original_profit': 0,
+        'scaled_profit': 0,
+        'scaled_profit_pct': 0,
+        'balance': balance,
+        'total_profit_pct': 0,
+        'daily_profit_pct': 0,
+        'phase': current_phase,
+        'progress_to_target': 0,
+        'drawdown_from_hwm': 0,
+        'status': status,
+        'daily_trades': 0
+    })
+    
+    # Procesar trades
+    for i in range(start_index, min(start_index + max_trades, len(df_trades))):
+        trade = df_trades.iloc[i]
+        trade_date = trade['date']
+        original_profit = trade['profit_loss']
+        scaled_profit = original_profit * scaling_factor
+        scaled_profit_pct = (scaled_profit / account_size) * 100
+        
+        # Detectar cambio de día
+        if current_date != trade_date:
+            # Verificar límite del día anterior
+            if current_date is not None and daily_profit_pct < -daily_dd_limit:
+                status = f"SUSPENDIDO - DD Diario Fase {current_phase}"
+                break
+            
+            # Resetear para nuevo día
+            current_date = trade_date
+            daily_profit_pct = 0
+            daily_trades_count = 0
+        
+        # Ejecutar trade
+        trades_used += 1
+        daily_trades_count += 1
+        daily_profit_pct += scaled_profit_pct
+        total_profit_pct += scaled_profit_pct
+        balance += scaled_profit
+        high_water_mark = max(high_water_mark, balance)
+        
+        # Calcular drawdown actual
+        current_dd = (high_water_mark - balance) / high_water_mark * 100
+        
+        # Calcular progreso hacia el objetivo
+        if current_phase == 1:
+            progress_to_target = (total_profit_pct / phase1_goal) * 100
+        else:
+            progress_to_target = ((total_profit_pct - phase1_goal) / phase2_goal) * 100
+        
+        # Verificar drawdown total
+        if current_dd >= total_dd_limit:
+            status = f"SUSPENDIDO - DD Total Fase {current_phase}"
+        
+        # Verificar objetivos de fase
+        elif current_phase == 1 and total_profit_pct >= phase1_goal:
+            current_phase = 2
+            status = "FASE 2"
+        elif current_phase == 2 and total_profit_pct >= phase1_goal + phase2_goal:
+            status = "APROBADO"
+        
+        # Registrar evolución del trade
+        evolution.append({
+            'challenge_num': challenge_num,
+            'trade_index': i,
+            'trade_number': trades_used,
+            'date': trade_date,
+            'symbol': trade['Symbol'] if 'Symbol' in trade else 'N/A',
+            'type': trade['Type'] if 'Type' in trade else 'N/A',
+            'original_profit': original_profit,
+            'scaled_profit': scaled_profit,
+            'scaled_profit_pct': scaled_profit_pct,
+            'balance': balance,
+            'total_profit_pct': total_profit_pct,
+            'daily_profit_pct': daily_profit_pct,
+            'phase': current_phase,
+            'progress_to_target': progress_to_target,
+            'drawdown_from_hwm': current_dd,
+            'status': status,
+            'daily_trades': daily_trades_count
+        })
+        
+        # Si terminó el challenge, salir
+        if status in ["APROBADO", "SUSPENDIDO - DD Diario Fase 1", "SUSPENDIDO - DD Diario Fase 2", 
+                     "SUSPENDIDO - DD Total Fase 1", "SUSPENDIDO - DD Total Fase 2"]:
+            break
+    
+    # Verificar último día si no terminó
+    if status == "En Progreso" and daily_profit_pct < -daily_dd_limit:
+        evolution[-1]['status'] = f"SUSPENDIDO - DD Diario Fase {current_phase}"
+        status = f"SUSPENDIDO - DD Diario Fase {current_phase}"
+    
+    return evolution, trades_used, status
+
+def create_challenges_evolution_table(df_trades, config, num_challenges=5):
+    """
+    Crea tabla de evolución para múltiples challenges
+    """
+    
+    all_evolutions = []
+    current_index = 0
+    
+    for challenge_num in range(1, num_challenges + 1):
+        if current_index >= len(df_trades) - 10:
+            break
+            
+        evolution, trades_used, final_status = run_detailed_challenge_tracking(
+            df_trades, current_index, config, challenge_num
+        )
+        
+        all_evolutions.extend(evolution)
+        current_index += trades_used
+        
+        if current_index >= len(df_trades) - 10:
+            break
+    
+    return pd.DataFrame(all_evolutions)
+
+def display_evolution_interface(df_csv, config):
+    """
+    Interfaz para mostrar la evolución de challenges
+    """
+    
+    st.markdown("""
+    <div class="card">
+        <div class="card-title">📈 Evolución Detallada de Challenges</div>
+    """, unsafe_allow_html=True)
+    
+    # Preparar datos
+    df_processed = df_csv.copy()
+    df_processed['Open time'] = pd.to_datetime(df_processed['Open time'])
+    df_processed['Close time'] = pd.to_datetime(df_processed['Close time'])
+    df_processed['profit_loss'] = pd.to_numeric(df_processed['Profit/Loss'])
+    df_processed['date'] = df_processed['Close time'].dt.date
+    df_processed = df_processed.sort_values('Close time').reset_index(drop=True)
+    
+    # Selector de número de challenges a mostrar
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        st.info("Esta tabla muestra la evolución trade por trade de cada challenge, permitiendo ver exactamente cómo progresa el balance y en qué momento se aprueba o suspende cada examen.")
+    
+    with col2:
+        num_challenges = st.selectbox(
+            "Challenges a mostrar",
+            options=[3, 5, 8, 10],
+            index=1,
+            help="Número de challenges consecutivos a analizar"
+        )
+    
+    # Generar tabla de evolución
+    with st.spinner(f"Generando evolución de {num_challenges} challenges..."):
+        evolution_df = create_challenges_evolution_table(df_processed, config, num_challenges)
+    
+    if evolution_df.empty:
+        st.warning("No se pudieron generar challenges con los datos disponibles.")
+        return
+    
+    # Selector de challenge específico
+    available_challenges = sorted(evolution_df['challenge_num'].unique())
+    selected_challenge = st.selectbox(
+        "Seleccionar Challenge para ver detalle",
+        options=available_challenges,
+        format_func=lambda x: f"Challenge {x}"
+    )
+    
+    # Filtrar datos del challenge seleccionado
+    challenge_data = evolution_df[evolution_df['challenge_num'] == selected_challenge].copy()
+    
+    # Mostrar información del challenge seleccionado
+    final_status = challenge_data.iloc[-1]['status']
+    total_trades = challenge_data.iloc[-1]['trade_number']
+    final_balance = challenge_data.iloc[-1]['balance']
+    final_profit_pct = challenge_data.iloc[-1]['total_profit_pct']
+    
+    # Header del challenge
+    status_color = "green" if "APROBADO" in final_status else "red" if "SUSPENDIDO" in final_status else "blue"
+    
+    st.markdown(f"""
+    <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin: 1rem 0; border-left: 4px solid {status_color};">
+        <h3 style="margin: 0; color: {status_color};">Challenge {selected_challenge}</h3>
+        <p style="margin: 0.5rem 0 0 0; color: #6c757d;">
+            <strong>Estado Final:</strong> {final_status} | 
+            <strong>Trades Utilizados:</strong> {total_trades} | 
+            <strong>Balance Final:</strong> ${final_balance:,.2f} | 
+            <strong>Ganancia Total:</strong> {final_profit_pct:.2f}%
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Preparar tabla para mostrar
+    display_df = challenge_data[challenge_data['trade_number'] > 0].copy()  # Excluir estado inicial
+    
+    # Formatear columnas para mejor visualización
+    display_df['Balance'] = display_df['balance'].apply(lambda x: f"${x:,.2f}")
+    display_df['Profit Original'] = display_df['original_profit'].apply(lambda x: f"${x:.2f}")
+    display_df['Profit Escalado'] = display_df['scaled_profit'].apply(lambda x: f"${x:.2f}")
+    display_df['Profit %'] = display_df['scaled_profit_pct'].apply(lambda x: f"{x:.2f}%")
+    display_df['Profit Total %'] = display_df['total_profit_pct'].apply(lambda x: f"{x:.2f}%")
+    display_df['Profit Diario %'] = display_df['daily_profit_pct'].apply(lambda x: f"{x:.2f}%")
+    display_df['Progreso Objetivo'] = display_df['progress_to_target'].apply(lambda x: f"{x:.1f}%")
+    display_df['Drawdown'] = display_df['drawdown_from_hwm'].apply(lambda x: f"{x:.2f}%")
+    
+    # Seleccionar columnas para mostrar
+    columns_to_show = [
+        'trade_number', 'date', 'symbol', 'type', 'Profit Escalado', 'Profit %', 
+        'Balance', 'Profit Total %', 'Profit Diario %', 'phase', 'Progreso Objetivo', 
+        'Drawdown', 'status', 'daily_trades'
+    ]
+    
+    final_display_df = display_df[columns_to_show].rename(columns={
+        'trade_number': 'Trade #',
+        'date': 'Fecha',
+        'symbol': 'Symbol',
+        'type': 'Tipo',
+        'phase': 'Fase',
+        'status': 'Estado',
+        'daily_trades': 'Trades Día'
+    })
+    
+    # Mostrar tabla con colores
+    def highlight_rows(row):
+        if 'SUSPENDIDO' in str(row['Estado']):
+            return ['background-color: #ffebee'] * len(row)
+        elif 'APROBADO' in str(row['Estado']):
+            return ['background-color: #e8f5e8'] * len(row)
+        elif 'FASE 2' in str(row['Estado']):
+            return ['background-color: #e3f2fd'] * len(row)
+        else:
+            return [''] * len(row)
+    
+    # Aplicar estilo y mostrar tabla
+    styled_df = final_display_df.style.apply(highlight_rows, axis=1)
+    st.dataframe(styled_df, use_container_width=True, hide_index=True)
+    
+    # Gráfico de evolución del balance
+    st.markdown("#### 📊 Gráfico de Evolución del Balance")
+    
+    fig = go.Figure()
+    
+    # Línea del balance
+    fig.add_trace(go.Scatter(
+        x=challenge_data['trade_number'],
+        y=challenge_data['balance'],
+        mode='lines+markers',
+        name='Balance',
+        line=dict(color='blue', width=2),
+        marker=dict(size=5)
+    ))
+    
+    # Línea objetivo Fase 1
+    phase1_target_balance = config['account_size'] * (1 + config['phase1_target'] / 100)
+    fig.add_hline(
+        y=phase1_target_balance, 
+        line_dash="dash", 
+        line_color="green", 
+        annotation_text=f"Objetivo Fase 1: ${phase1_target_balance:,.0f}"
+    )
+    
+    # Línea objetivo Fase 2
+    phase2_target_balance = config['account_size'] * (1 + (config['phase1_target'] + config['phase2_target']) / 100)
+    fig.add_hline(
+        y=phase2_target_balance, 
+        line_dash="dash", 
+        line_color="darkgreen", 
+        annotation_text=f"Objetivo Final: ${phase2_target_balance:,.0f}"
+    )
+    
+    # Línea de drawdown máximo
+    max_dd_balance = config['account_size'] * (1 - config['total_dd_limit'] / 100)
+    fig.add_hline(
+        y=max_dd_balance, 
+        line_dash="dot", 
+        line_color="red", 
+        annotation_text=f"Límite DD: ${max_dd_balance:,.0f}"
+    )
+    
+    fig.update_layout(
+        title=f"Evolución del Balance - Challenge {selected_challenge}",
+        xaxis_title="Número de Trade",
+        yaxis_title="Balance ($)",
+        template="plotly_white",
+        height=400,
+        hovermode='x unified'
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Resumen de todos los challenges
+    st.markdown("#### 📋 Resumen de Todos los Challenges")
+    
+    summary_data = []
+    for challenge_num in available_challenges:
+        challenge_summary = evolution_df[evolution_df['challenge_num'] == challenge_num].iloc[-1]
+        summary_data.append({
+            'Challenge': challenge_num,
+            'Estado Final': challenge_summary['status'],
+            'Trades Usados': challenge_summary['trade_number'],
+            'Balance Final': f"${challenge_summary['balance']:,.2f}",
+            'Ganancia Total': f"{challenge_summary['total_profit_pct']:.2f}%",
+            'Fase Alcanzada': challenge_summary['phase'],
+            'DD Máximo': f"{challenge_summary['drawdown_from_hwm']:.2f}%"
+        })
+    
+    summary_df = pd.DataFrame(summary_data)
+    
+    # Aplicar colores al resumen
+    def highlight_summary(row):
+        if 'SUSPENDIDO' in str(row['Estado Final']):
+            return ['background-color: #ffebee'] * len(row)
+        elif 'APROBADO' in str(row['Estado Final']):
+            return ['background-color: #e8f5e8'] * len(row)
+        else:
+            return [''] * len(row)
+    
+    styled_summary = summary_df.style.apply(highlight_summary, axis=1)
+    st.dataframe(styled_summary, use_container_width=True, hide_index=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+
 # Configurar tema claro para Streamlit
 import streamlit.components.v1 as components
 
@@ -1950,7 +2316,7 @@ with tab1:
         # Tarjeta de análisis de Prop Firm
         st.markdown("""
         <div class="card">
-            <div class="card-title">🔍 Análisis de Prop Firm</div>
+            <div class="card-title">📈 Evolución Detallada de Challenges</div>
         """, unsafe_allow_html=True)
 
         # Contenedor para subir archivo CSV
@@ -2025,150 +2391,61 @@ with tab1:
                         help="Drawdown máximo total permitido durante toda la evaluación. No se puede superar en ninguna fase"
                     )
                 
-                # Calcular análisis de prop firm
-                if st.button("🚀 Analizar Secuencial", type="primary"):
-                    with st.spinner("Ejecutando simulación secuencial..."):
-                        # Configurar parámetros para el análisis
-                        config = {
-                            'account_size': tamaño_cuenta,
-                            'risk_per_trade': riesgo_por_operacion,
-                            'phase1_target': porcentaje_fase1,
-                            'phase2_target': porcentaje_fase2,
-                            'daily_dd_limit': drawdown_maximo_diario,
-                            'total_dd_limit': drawdown_maximo_total
-                        }
-                        
-                        # Ejecutar análisis secuencial usando las nuevas funciones
-                        results, (fig_distribution, fig_evolution) = run_sequential_prop_firm_analysis(df_csv, config)
-                        
-                        # Mostrar resumen
-                        st.success(f"✅ Análisis completado: {results['summary']['total_challenges']} challenges simulados")
-                        
-                        # Métricas principales
-                        st.markdown("""
-                        <div class="card">
-                            <div class="card-title">📊 Resultados del Análisis Secuencial</div>
-                        """, unsafe_allow_html=True)
-                        
-                        col1, col2, col3, col4 = st.columns(4)
-                        
-                        with col1:
-                            st.metric(
-                                "Tasa de Éxito Total",
-                                f"{results['probabilities']['pass_both_phases']:.1f}%"
-                            )
-                        
-                        with col2:
-                            st.metric(
-                                "Llegan a Fase 2", 
-                                f"{results['probabilities']['reach_phase2']:.1f}%"
-                            )
-                        
-                        with col3:
-                            st.metric(
-                                "Trades Promedio (Éxito)",
-                                f"{results['average_metrics']['trades_to_complete']:.0f}"
-                            )
-                        
-                        with col4:
-                            st.metric(
-                                "Días Promedio (Éxito)",
-                                f"{results['average_metrics']['days_to_complete']:.0f}"
-                            )
-                        
-                        st.markdown('</div>', unsafe_allow_html=True)
-                        
-                        # Mostrar gráficos
-                        st.plotly_chart(fig_distribution, use_container_width=True)
-                        
-                        if fig_evolution:
-                            st.plotly_chart(fig_evolution, use_container_width=True)
-                        
-                        # Análisis de sensibilidad
-                        st.markdown("""
-                        <div class="card">
-                            <div class="card-title">📊 Comparación de Niveles de Riesgo</div>
-                        """, unsafe_allow_html=True)
-                        
-                        sensitivity_df = compare_risk_levels_sequential(df_csv, config)
-                        st.dataframe(sensitivity_df, use_container_width=True, hide_index=True)
-                        
-                        st.markdown('</div>', unsafe_allow_html=True)
-                        
-                        # Mostrar información del escalado
-                        factor_escalado = results['risk_analysis']['scaling_factor']
-                        st.markdown(f"""
-                        <div style="background-color: #fff3cd; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; border-left: 4px solid #ffc107;">
-                            <h4 style="margin: 0 0 0.5rem 0; color: #856404;">⚖️ Escalado de Riesgo</h4>
-                            <p style="margin: 0; color: #856404; font-size: 0.9rem;">
-                                <strong>Riesgo seleccionado:</strong> {riesgo_por_operacion}%<br>
-                                <strong>Riesgo histórico promedio:</strong> 2%<br>
-                                <strong>Factor de escalado:</strong> {factor_escalado:.1f}x<br>
-                                <em>Las pérdidas y ganancias se multiplican por {factor_escalado:.1f} para simular tu riesgo real</em>
-                            </p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        # Información detallada de la simulación
-                        st.markdown("""
-                        <div class="card">
-                            <div class="card-title">🔍 Información Detallada de la Simulación</div>
-                        """, unsafe_allow_html=True)
-                        
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            st.markdown(f"""
-                            <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem;">
-                                <h4 style="margin: 0 0 0.5rem 0; color: #495057;">📈 Estadísticas Generales</h4>
-                                <p style="margin: 0; color: #6c757d; font-size: 0.9rem;">
-                                    <strong>Total de challenges:</strong> {results['summary']['total_challenges']}<br>
-                                    <strong>Trades analizados:</strong> {results['summary']['total_trades_analyzed']}<br>
-                                    <strong>Utilización de datos:</strong> {results['summary']['data_utilization_pct']:.1f}%<br>
-                                    <strong>Nivel de riesgo:</strong> {results['risk_analysis']['risk_level']}
-                                </p>
-                            </div>
-                            """, unsafe_allow_html=True)
-                        
-                        with col2:
-                            st.markdown(f"""
-                            <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem;">
-                                <h4 style="margin: 0 0 0.5rem 0; color: #495057;">⚠️ Análisis de Fallos</h4>
-                                <p style="margin: 0; color: #6c757d; font-size: 0.9rem;">
-                                    <strong>Fallo por DD diario:</strong> {results['probabilities']['fail_daily_drawdown']:.1f}%<br>
-                                    <strong>Fallo por DD total:</strong> {results['probabilities']['fail_total_drawdown']:.1f}%<br>
-                                    <strong>Challenges incompletos:</strong> {results['probabilities']['incomplete_challenges']:.1f}%<br>
-                                    <strong>Violaciones DD diario:</strong> {results['risk_analysis']['daily_dd_violations']}
-                                </p>
-                            </div>
-                            """, unsafe_allow_html=True)
-                        
-                        st.markdown('</div>', unsafe_allow_html=True)
-                        
-                        # Recomendaciones
-                        st.markdown("""
-                        <div class="card">
-                            <div class="card-title">💡 Recomendaciones</div>
-                        """, unsafe_allow_html=True)
-                        
-                        success_rate = results['probabilities']['pass_both_phases']
-                        risk_level = results['risk_analysis']['risk_level']
-                        
-                        if success_rate >= 70:
-                            st.success("✅ **Estrategia Sólida:** Con estos parámetros tienes alta probabilidad de pasar las pruebas. Tu estrategia es adecuada para prop firms.")
-                        elif success_rate >= 50:
-                            st.warning("⚠️ **Estrategia Moderada:** Probabilidad media de éxito. Considera reducir el riesgo por operación para mejorar tus chances.")
-                        else:
-                            st.error("❌ **Estrategia de Alto Riesgo:** Baja probabilidad de pasar. Recomendamos reducir significativamente el riesgo por operación.")
-                        
-                        # Recomendación específica basada en el análisis secuencial
-                        if results['average_metrics']['trades_to_complete'] > 0:
-                            avg_trades = results['average_metrics']['trades_to_complete']
-                            avg_days = results['average_metrics']['days_to_complete']
-                            
-                            st.info(f"📊 **Insight Secuencial:** En promedio, necesitas {avg_trades:.0f} trades ({avg_days:.0f} días) para completar ambas fases exitosamente.")
-                        
-                        st.markdown('</div>', unsafe_allow_html=True)
+                # Información sobre el análisis
+                st.markdown("---")
+                st.markdown("### 📊 Configuración Completada")
+                
+                # Mostrar resumen de la configuración
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown(f"""
+                    <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+                        <h4 style="margin: 0 0 0.5rem 0; color: #495057;">💰 Configuración de Riesgo</h4>
+                        <p style="margin: 0; color: #6c757d; font-size: 0.9rem;">
+                            <strong>Tamaño de cuenta:</strong> ${tamaño_cuenta:,}<br>
+                            <strong>Riesgo por operación:</strong> {riesgo_por_operacion}%<br>
+                            <strong>Factor de escalado:</strong> {riesgo_por_operacion/2:.1f}x
+                        </p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with col2:
+                    st.markdown(f"""
+                    <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+                        <h4 style="margin: 0 0 0.5rem 0; color: #495057;">🎯 Objetivos y Límites</h4>
+                        <p style="margin: 0; color: #6c757d; font-size: 0.9rem;">
+                            <strong>Fase 1:</strong> {porcentaje_fase1}%<br>
+                            <strong>Fase 2:</strong> {porcentaje_fase2}%<br>
+                            <strong>DD diario:</strong> {drawdown_maximo_diario}%<br>
+                            <strong>DD total:</strong> {drawdown_maximo_total}%
+                        </p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                # Información sobre qué hace el análisis
+                st.info("""
+                🔍 **¿Qué hace este análisis?**
+                
+                Este análisis te mostrará la evolución trade por trade de múltiples challenges consecutivos, 
+                permitiendo ver exactamente cómo progresa el balance y en qué momento se aprueba o suspende 
+                cada examen. Podrás seleccionar diferentes challenges para analizar en detalle.
+                """)
+                
+                # Botón para ejecutar el análisis
+                if st.button("🚀 Analizar Evolución Detallada", type="primary"):
+                    # Configurar parámetros para el análisis
+                    config = {
+                        'account_size': tamaño_cuenta,
+                        'risk_per_trade': riesgo_por_operacion,
+                        'phase1_target': porcentaje_fase1,
+                        'phase2_target': porcentaje_fase2,
+                        'daily_dd_limit': drawdown_maximo_diario,
+                        'total_dd_limit': drawdown_maximo_total
+                    }
+                    
+                    # Mostrar la interfaz de evolución detallada
+                    display_evolution_interface(df_csv, config)
                         
             except Exception as e:
                 st.error(f"❌ Error al procesar el archivo CSV: {str(e)}")
@@ -2177,18 +2454,22 @@ with tab1:
         else:
             st.markdown("""
             <div style="text-align: center; padding: 2rem; color: #6c757d;">
-                <div style="font-size: 3rem; margin-bottom: 1rem;">📊</div>
-                <h3 style="margin-bottom: 1rem;">Sube tu archivo CSV</h3>
+                <div style="font-size: 3rem; margin-bottom: 1rem;">📈</div>
+                <h3 style="margin-bottom: 1rem;">Evolución Detallada de Challenges</h3>
                 <p style="margin-bottom: 1rem;">
-                    Selecciona un archivo CSV con el formato de operaciones de trading para analizar 
-                    tu probabilidad de pasar las pruebas de prop firm.
+                    Sube tu archivo CSV para ver la evolución trade por trade de cada challenge, 
+                    permitiendo analizar exactamente cómo progresa el balance y en qué momento 
+                    se aprueba o suspende cada examen.
                 </p>
                 <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin-top: 1rem;">
-                    <h4 style="margin: 0 0 0.5rem 0;">📋 Formato esperado:</h4>
-                    <p style="margin: 0; font-size: 0.9rem;">
-                        Ticket; Symbol; Type; Open time; Open price; Size; Close time; Close price; 
-                        Profit/Loss; Balance; Sample type; Close type; MAE ($); MFE ($); Time in trade; Comment
-                    </p>
+                    <h4 style="margin: 0 0 0.5rem 0;">🔍 Características del análisis:</h4>
+                    <ul style="margin: 0; font-size: 0.9rem; text-align: left;">
+                        <li>Seguimiento trade por trade de cada challenge</li>
+                        <li>Visualización del balance en tiempo real</li>
+                        <li>Detección automática de límites de drawdown</li>
+                        <li>Gráficos interactivos con líneas de referencia</li>
+                        <li>Resumen completo de todos los challenges</li>
+                    </ul>
                 </div>
             </div>
             """, unsafe_allow_html=True)
