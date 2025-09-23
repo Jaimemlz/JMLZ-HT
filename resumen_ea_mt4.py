@@ -498,7 +498,7 @@ def compare_risk_levels_sequential(df_csv, base_config, risk_levels=[1, 2, 3, 4,
     
     return pd.DataFrame(comparison_results)
 
-def run_detailed_challenge_tracking(df_trades, start_index, config, challenge_num, max_trades=50):
+def run_detailed_challenge_tracking(df_trades, start_index, config, challenge_num, max_trades=None):
     """
     Ejecuta un challenge individual con seguimiento detallado trade por trade
     
@@ -558,7 +558,8 @@ def run_detailed_challenge_tracking(df_trades, start_index, config, challenge_nu
     })
     
     # Procesar trades
-    for i in range(start_index, min(start_index + max_trades, len(df_trades))):
+    end_index = start_index + max_trades if max_trades else len(df_trades)
+    for i in range(start_index, min(end_index, len(df_trades))):
         trade = df_trades.iloc[i]
         trade_date = trade['date']
         original_profit = trade['profit_loss']
@@ -651,7 +652,7 @@ def create_challenges_evolution_table(df_trades, config, num_challenges=5):
             break
             
         evolution, trades_used, final_status = run_detailed_challenge_tracking(
-            df_trades, current_index, config, challenge_num
+            df_trades, current_index, config, challenge_num, max_trades=None
         )
         
         all_evolutions.extend(evolution)
@@ -702,135 +703,136 @@ def display_evolution_interface(df_csv, config):
         st.warning("No se pudieron generar challenges con los datos disponibles.")
         return
     
-    # Selector de challenge específico
+    # Mostrar todos los challenges en paneles expandibles
     available_challenges = sorted(evolution_df['challenge_num'].unique())
-    selected_challenge = st.selectbox(
-        "Seleccionar Challenge para ver detalle",
-        options=available_challenges,
-        format_func=lambda x: f"Challenge {x}"
-    )
     
-    # Filtrar datos del challenge seleccionado
-    challenge_data = evolution_df[evolution_df['challenge_num'] == selected_challenge].copy()
-    
-    # Mostrar información del challenge seleccionado
-    final_status = challenge_data.iloc[-1]['status']
-    total_trades = challenge_data.iloc[-1]['trade_number']
-    final_balance = challenge_data.iloc[-1]['balance']
-    final_profit_pct = challenge_data.iloc[-1]['total_profit_pct']
-    
-    # Header del challenge
-    status_color = "green" if "APROBADO" in final_status else "red" if "SUSPENDIDO" in final_status else "blue"
-    
-    st.markdown(f"""
-    <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin: 1rem 0; border-left: 4px solid {status_color};">
-        <h3 style="margin: 0; color: {status_color};">Challenge {selected_challenge}</h3>
-        <p style="margin: 0.5rem 0 0 0; color: #6c757d;">
-            <strong>Estado Final:</strong> {final_status} | 
-            <strong>Trades Utilizados:</strong> {total_trades} | 
-            <strong>Balance Final:</strong> ${final_balance:,.2f} | 
-            <strong>Ganancia Total:</strong> {final_profit_pct:.2f}%
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Preparar tabla para mostrar
-    display_df = challenge_data[challenge_data['trade_number'] > 0].copy()  # Excluir estado inicial
-    
-    # Formatear columnas para mejor visualización
-    display_df['Balance'] = display_df['balance'].apply(lambda x: f"${x:,.2f}")
-    display_df['Profit Original'] = display_df['original_profit'].apply(lambda x: f"${x:.2f}")
-    display_df['Profit Escalado'] = display_df['scaled_profit'].apply(lambda x: f"${x:.2f}")
-    display_df['Profit %'] = display_df['scaled_profit_pct'].apply(lambda x: f"{x:.2f}%")
-    display_df['Profit Total %'] = display_df['total_profit_pct'].apply(lambda x: f"{x:.2f}%")
-    display_df['Profit Diario %'] = display_df['daily_profit_pct'].apply(lambda x: f"{x:.2f}%")
-    display_df['Progreso Objetivo'] = display_df['progress_to_target'].apply(lambda x: f"{x:.1f}%")
-    display_df['Drawdown'] = display_df['drawdown_from_hwm'].apply(lambda x: f"{x:.2f}%")
-    
-    # Seleccionar columnas para mostrar
-    columns_to_show = [
-        'trade_number', 'date', 'symbol', 'type', 'Profit Escalado', 'Profit %', 
-        'Balance', 'Profit Total %', 'Profit Diario %', 'phase', 'Progreso Objetivo', 
-        'Drawdown', 'status', 'daily_trades'
-    ]
-    
-    final_display_df = display_df[columns_to_show].rename(columns={
-        'trade_number': 'Trade #',
-        'date': 'Fecha',
-        'symbol': 'Symbol',
-        'type': 'Tipo',
-        'phase': 'Fase',
-        'status': 'Estado',
-        'daily_trades': 'Trades Día'
-    })
-    
-    # Mostrar tabla con colores
-    def highlight_rows(row):
-        if 'SUSPENDIDO' in str(row['Estado']):
-            return ['background-color: #ffebee'] * len(row)
-        elif 'APROBADO' in str(row['Estado']):
-            return ['background-color: #e8f5e8'] * len(row)
-        elif 'FASE 2' in str(row['Estado']):
-            return ['background-color: #e3f2fd'] * len(row)
-        else:
-            return [''] * len(row)
-    
-    # Aplicar estilo y mostrar tabla
-    styled_df = final_display_df.style.apply(highlight_rows, axis=1)
-    st.dataframe(styled_df, use_container_width=True, hide_index=True)
-    
-    # Gráfico de evolución del balance
-    st.markdown("#### 📊 Gráfico de Evolución del Balance")
-    
-    fig = go.Figure()
-    
-    # Línea del balance
-    fig.add_trace(go.Scatter(
-        x=challenge_data['trade_number'],
-        y=challenge_data['balance'],
-        mode='lines+markers',
-        name='Balance',
-        line=dict(color='blue', width=2),
-        marker=dict(size=5)
-    ))
-    
-    # Línea objetivo Fase 1
-    phase1_target_balance = config['account_size'] * (1 + config['phase1_target'] / 100)
-    fig.add_hline(
-        y=phase1_target_balance, 
-        line_dash="dash", 
-        line_color="green", 
-        annotation_text=f"Objetivo Fase 1: ${phase1_target_balance:,.0f}"
-    )
-    
-    # Línea objetivo Fase 2
-    phase2_target_balance = config['account_size'] * (1 + (config['phase1_target'] + config['phase2_target']) / 100)
-    fig.add_hline(
-        y=phase2_target_balance, 
-        line_dash="dash", 
-        line_color="darkgreen", 
-        annotation_text=f"Objetivo Final: ${phase2_target_balance:,.0f}"
-    )
-    
-    # Línea de drawdown máximo
-    max_dd_balance = config['account_size'] * (1 - config['total_dd_limit'] / 100)
-    fig.add_hline(
-        y=max_dd_balance, 
-        line_dash="dot", 
-        line_color="red", 
-        annotation_text=f"Límite DD: ${max_dd_balance:,.0f}"
-    )
-    
-    fig.update_layout(
-        title=f"Evolución del Balance - Challenge {selected_challenge}",
-        xaxis_title="Número de Trade",
-        yaxis_title="Balance ($)",
-        template="plotly_white",
-        height=400,
-        hovermode='x unified'
-    )
-    
-    st.plotly_chart(fig, use_container_width=True)
+    for challenge_num in available_challenges:
+        # Filtrar datos del challenge actual
+        challenge_data = evolution_df[evolution_df['challenge_num'] == challenge_num].copy()
+        
+        # Mostrar información del challenge
+        final_status = challenge_data.iloc[-1]['status']
+        total_trades = challenge_data.iloc[-1]['trade_number']
+        final_balance = challenge_data.iloc[-1]['balance']
+        final_profit_pct = challenge_data.iloc[-1]['total_profit_pct']
+        
+        # Determinar color del estado
+        status_color = "green" if "APROBADO" in final_status else "red" if "SUSPENDIDO" in final_status else "blue"
+        status_icon = "✅" if "APROBADO" in final_status else "❌" if "SUSPENDIDO" in final_status else "🔄"
+        
+        # Crear panel expandible para cada challenge
+        with st.expander(f"{status_icon} Challenge {challenge_num} - {final_status} | Trades: {total_trades} | Balance: ${final_balance:,.2f} | Ganancia: {final_profit_pct:.2f}%", expanded=False):
+            
+            # Header del challenge dentro del panel
+            st.markdown(f"""
+            <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; border-left: 4px solid {status_color};">
+                <h4 style="margin: 0; color: {status_color};">Challenge {challenge_num}</h4>
+                <p style="margin: 0.5rem 0 0 0; color: #6c757d;">
+                    <strong>Estado Final:</strong> {final_status} | 
+                    <strong>Trades Utilizados:</strong> {total_trades} | 
+                    <strong>Balance Final:</strong> ${final_balance:,.2f} | 
+                    <strong>Ganancia Total:</strong> {final_profit_pct:.2f}%
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Preparar tabla para mostrar
+            display_df = challenge_data[challenge_data['trade_number'] > 0].copy()  # Excluir estado inicial
+            
+            # Formatear columnas para mejor visualización
+            display_df['Balance'] = display_df['balance'].apply(lambda x: f"${x:,.2f}")
+            display_df['Profit Original'] = display_df['original_profit'].apply(lambda x: f"${x:.2f}")
+            display_df['Profit Escalado'] = display_df['scaled_profit'].apply(lambda x: f"${x:.2f}")
+            display_df['Profit %'] = display_df['scaled_profit_pct'].apply(lambda x: f"{x:.2f}%")
+            display_df['Profit Total %'] = display_df['total_profit_pct'].apply(lambda x: f"{x:.2f}%")
+            display_df['Profit Diario %'] = display_df['daily_profit_pct'].apply(lambda x: f"{x:.2f}%")
+            display_df['Progreso Objetivo'] = display_df['progress_to_target'].apply(lambda x: f"{x:.1f}%")
+            display_df['Drawdown'] = display_df['drawdown_from_hwm'].apply(lambda x: f"{x:.2f}%")
+            
+            # Seleccionar columnas para mostrar
+            columns_to_show = [
+                'trade_number', 'date', 'symbol', 'type', 'Profit Escalado', 'Profit %', 
+                'Balance', 'Profit Total %', 'Profit Diario %', 'phase', 'Progreso Objetivo', 
+                'Drawdown', 'status', 'daily_trades'
+            ]
+            
+            final_display_df = display_df[columns_to_show].rename(columns={
+                'trade_number': 'Trade #',
+                'date': 'Fecha',
+                'symbol': 'Symbol',
+                'type': 'Tipo',
+                'phase': 'Fase',
+                'status': 'Estado',
+                'daily_trades': 'Trades Día'
+            })
+            
+            # Mostrar tabla con colores
+            def highlight_rows(row):
+                if 'SUSPENDIDO' in str(row['Estado']):
+                    return ['background-color: #ffebee'] * len(row)
+                elif 'APROBADO' in str(row['Estado']):
+                    return ['background-color: #e8f5e8'] * len(row)
+                elif 'FASE 2' in str(row['Estado']):
+                    return ['background-color: #e3f2fd'] * len(row)
+                else:
+                    return [''] * len(row)
+            
+            # Aplicar estilo y mostrar tabla
+            styled_df = final_display_df.style.apply(highlight_rows, axis=1)
+            st.dataframe(styled_df, use_container_width=True, hide_index=True)
+            
+            # Gráfico de evolución del balance
+            st.markdown("#### 📊 Gráfico de Evolución del Balance")
+            
+            fig = go.Figure()
+            
+            # Línea del balance
+            fig.add_trace(go.Scatter(
+                x=challenge_data['trade_number'],
+                y=challenge_data['balance'],
+                mode='lines+markers',
+                name='Balance',
+                line=dict(color='blue', width=2),
+                marker=dict(size=5)
+            ))
+            
+            # Línea objetivo Fase 1
+            phase1_target_balance = config['account_size'] * (1 + config['phase1_target'] / 100)
+            fig.add_hline(
+                y=phase1_target_balance, 
+                line_dash="dash", 
+                line_color="green", 
+                annotation_text=f"Objetivo Fase 1: ${phase1_target_balance:,.0f}"
+            )
+            
+            # Línea objetivo Fase 2
+            phase2_target_balance = config['account_size'] * (1 + (config['phase1_target'] + config['phase2_target']) / 100)
+            fig.add_hline(
+                y=phase2_target_balance, 
+                line_dash="dash", 
+                line_color="darkgreen", 
+                annotation_text=f"Objetivo Final: ${phase2_target_balance:,.0f}"
+            )
+            
+            # Línea de drawdown máximo
+            max_dd_balance = config['account_size'] * (1 - config['total_dd_limit'] / 100)
+            fig.add_hline(
+                y=max_dd_balance, 
+                line_dash="dot", 
+                line_color="red", 
+                annotation_text=f"Límite DD: ${max_dd_balance:,.0f}"
+            )
+            
+            fig.update_layout(
+                title=f"Evolución del Balance - Challenge {challenge_num}",
+                xaxis_title="Número de Trade",
+                yaxis_title="Balance ($)",
+                template="plotly_white",
+                height=400,
+                hovermode='x unified'
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
     
     # Resumen de todos los challenges
     st.markdown("#### 📋 Resumen de Todos los Challenges")
