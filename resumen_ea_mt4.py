@@ -1,9 +1,11 @@
 import streamlit as st
 import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import plotly.io as pio
 from bs4 import BeautifulSoup
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 import numpy as np
 
 # Configurar tema claro por defecto para Plotly
@@ -135,6 +137,315 @@ def crear_ranking_ea(df):
     ranking_df['Score_Formateado'] = ranking_df['Score_Rentabilidad'].apply(lambda x: f"{x:.2f}")
     
     return ranking_df
+
+# =============================================================================
+# FUNCIONES PARA ANÁLISIS DE PROP FIRM
+# =============================================================================
+
+def simulate_prop_firm_challenge(df_trades, config):
+    """
+    Simula un challenge de prop firm con lógica corregida
+    
+    Args:
+        df_trades: DataFrame con las operaciones históricas
+        config: Dict con configuración del challenge
+    
+    Returns:
+        Dict con resultados de múltiples simulaciones
+    """
+    
+    # Extraer configuración
+    account_size = config['account_size']
+    risk_per_trade = config['risk_per_trade']
+    phase1_target = config['phase1_target']
+    phase2_target = config['phase2_target']
+    daily_dd_limit = config['daily_dd_limit']
+    total_dd_limit = config['total_dd_limit']
+    
+    # Procesar datos históricos
+    df_processed = process_trading_data(df_trades)
+    
+    # Factor de escalado basado en riesgo seleccionado
+    historical_avg_risk = 2.0  # Asumimos 2% promedio histórico
+    scaling_factor = risk_per_trade / historical_avg_risk
+    
+    # Escalar profits según el riesgo
+    df_processed['scaled_profit'] = df_processed['profit_loss'] * scaling_factor
+    
+    # Agrupar por día
+    daily_data = create_daily_summary(df_processed)
+    
+    # Ejecutar múltiples simulaciones
+    simulations = []
+    max_simulations = min(50, len(daily_data) - 10)  # Máximo 50 simulaciones
+    
+    for start_idx in range(max_simulations):
+        simulation_data = daily_data.iloc[start_idx:].copy()
+        result = run_single_simulation(simulation_data, config, scaling_factor)
+        simulations.append(result)
+    
+    # Analizar resultados
+    return analyze_simulation_results(simulations, config)
+
+def process_trading_data(df):
+    """Procesa y limpia los datos de trading"""
+    df = df.copy()
+    
+    # Convertir columnas necesarias
+    df['Open time'] = pd.to_datetime(df['Open time'])
+    df['Close time'] = pd.to_datetime(df['Close time'])
+    df['profit_loss'] = pd.to_numeric(df['Profit/Loss'])
+    
+    # Ordenar por tiempo de cierre
+    df = df.sort_values('Close time')
+    
+    return df
+
+def create_daily_summary(df):
+    """Crea resumen diario de operaciones"""
+    df['date'] = df['Close time'].dt.date
+    
+    daily_summary = df.groupby('date').agg({
+        'profit_loss': ['sum', 'min', 'max', 'count'],
+        'scaled_profit': ['sum', 'min', 'max']
+    }).reset_index()
+    
+    # Aplanar columnas
+    daily_summary.columns = [
+        'date', 'daily_profit', 'min_trade', 'max_trade', 'trade_count',
+        'daily_scaled_profit', 'min_scaled_trade', 'max_scaled_trade'
+    ]
+    
+    # Calcular drawdown máximo del día (peor operación individual)
+    daily_summary['max_daily_dd_pct'] = abs(daily_summary['min_scaled_trade']) / 100000 * 100  # Usando $100k como base
+    
+    return daily_summary
+
+def run_single_simulation(daily_data, config, scaling_factor):
+    """Ejecuta una simulación individual del challenge"""
+    
+    account_size = config['account_size']
+    phase1_target = config['phase1_target']
+    phase2_target = config['phase2_target'] 
+    daily_dd_limit = config['daily_dd_limit']
+    total_dd_limit = config['total_dd_limit']
+    
+    # Variables de estado
+    balance = account_size
+    high_water_mark = account_size
+    current_phase = 1
+    days_in_phase1 = 0
+    days_in_phase2 = 0
+    total_trades = 0
+    
+    # Objetivos absolutos
+    phase1_goal = account_size * (phase1_target / 100)
+    phase2_goal = account_size * (phase2_target / 100)
+    
+    status = "In Progress"
+    balance_history = [balance]
+    
+    # Simular día por día
+    for i, row in daily_data.iterrows():
+        
+        # Incrementar contadores
+        if current_phase == 1:
+            days_in_phase1 += 1
+        else:
+            days_in_phase2 += 1
+        
+        total_trades += row['trade_count']
+        
+        # Actualizar balance
+        balance += row['daily_scaled_profit']
+        balance_history.append(balance)
+        high_water_mark = max(high_water_mark, balance)
+        
+        # Verificar límite de drawdown diario
+        if row['max_daily_dd_pct'] >= daily_dd_limit:
+            status = f"Failed Phase {current_phase} - Daily DD"
+            break
+        
+        # Verificar límite de drawdown total
+        current_dd = (high_water_mark - balance) / high_water_mark * 100
+        if current_dd >= total_dd_limit:
+            status = f"Failed Phase {current_phase} - Total DD"
+            break
+        
+        # Verificar objetivos de fase
+        total_profit = balance - account_size
+        
+        if current_phase == 1 and total_profit >= phase1_goal:
+            current_phase = 2
+        elif current_phase == 2 and total_profit >= phase1_goal + phase2_goal:
+            status = "Passed Both Phases"
+            break
+    
+    # Si llegó al final sin completar
+    if status == "In Progress":
+        if current_phase == 1:
+            status = "Incomplete Phase 1"
+        else:
+            status = "Incomplete Phase 2"
+    
+    return {
+        'status': status,
+        'days_phase1': days_in_phase1,
+        'days_phase2': days_in_phase2,
+        'total_days': days_in_phase1 + days_in_phase2,
+        'total_trades': total_trades,
+        'final_balance': balance,
+        'total_profit': balance - account_size,
+        'max_drawdown': max([(high_water_mark - b) / high_water_mark * 100 for b in balance_history])
+    }
+
+def analyze_simulation_results(simulations, config):
+    """Analiza los resultados de múltiples simulaciones"""
+    
+    if not simulations:
+        return None
+    
+    total_sims = len(simulations)
+    
+    # Contar resultados por categoría
+    passed_phase1 = sum(1 for s in simulations if "Passed" in s['status'] or "Phase 2" in s['status'])
+    passed_both = sum(1 for s in simulations if s['status'] == "Passed Both Phases")
+    failed_dd = sum(1 for s in simulations if "DD" in s['status'])
+    
+    # Calcular promedios para los que pasaron/fallaron
+    phase1_passers = [s for s in simulations if s['days_phase1'] > 0 and ("Passed" in s['status'] or "Phase 2" in s['status'])]
+    phase1_failers = [s for s in simulations if "Failed Phase 1" in s['status']]
+    
+    avg_days_pass_p1 = np.mean([s['days_phase1'] for s in phase1_passers]) if phase1_passers else 0
+    avg_trades_pass_p1 = np.mean([s['total_trades'] for s in phase1_passers]) if phase1_passers else 0
+    
+    avg_days_fail_p1 = np.mean([s['days_phase1'] for s in phase1_failers]) if phase1_failers else 0
+    avg_trades_fail_p1 = np.mean([s['total_trades'] for s in phase1_failers]) if phase1_failers else 0
+    
+    return {
+        'total_simulations': total_sims,
+        'probabilities': {
+            'pass_phase1': (passed_phase1 / total_sims) * 100,
+            'pass_both_phases': (passed_both / total_sims) * 100,
+            'fail_drawdown': (failed_dd / total_sims) * 100
+        },
+        'average_metrics': {
+            'days_to_pass_p1': avg_days_pass_p1,
+            'trades_to_pass_p1': avg_trades_pass_p1,
+            'days_to_fail_p1': avg_days_fail_p1,
+            'trades_to_fail_p1': avg_trades_fail_p1
+        },
+        'risk_analysis': {
+            'scaling_factor': config['risk_per_trade'] / 2.0,
+            'daily_dd_violations': sum(1 for s in simulations if "Daily DD" in s['status']),
+            'total_dd_violations': sum(1 for s in simulations if "Total DD" in s['status'])
+        }
+    }
+
+def create_risk_sensitivity_analysis(df_trades, base_config, risk_levels=[1, 2, 3, 4, 5]):
+    """Crea análisis de sensibilidad para diferentes niveles de riesgo"""
+    
+    sensitivity_results = []
+    
+    for risk in risk_levels:
+        config = base_config.copy()
+        config['risk_per_trade'] = risk
+        
+        results = simulate_prop_firm_challenge(df_trades, config)
+        
+        sensitivity_results.append({
+            'risk_percent': risk,
+            'pass_rate_p1': results['probabilities']['pass_phase1'],
+            'pass_rate_both': results['probabilities']['pass_both_phases'],
+            'fail_rate_dd': results['probabilities']['fail_drawdown'],
+            'avg_days_p1': results['average_metrics']['days_to_pass_p1'],
+            'scaling_factor': results['risk_analysis']['scaling_factor']
+        })
+    
+    return pd.DataFrame(sensitivity_results)
+
+def plot_results_dashboard(results, sensitivity_df=None):
+    """Crea gráficos para el dashboard"""
+    
+    # Gráfico de probabilidades principales
+    fig_probs = go.Figure()
+    
+    categories = ['Pasa Fase 1', 'Pasa Ambas Fases', 'Falla por DD']
+    values = [
+        results['probabilities']['pass_phase1'],
+        results['probabilities']['pass_both_phases'],
+        results['probabilities']['fail_drawdown']
+    ]
+    colors = ['#10B981', '#059669', '#EF4444']
+    
+    fig_probs.add_trace(go.Bar(
+        x=categories,
+        y=values,
+        marker_color=colors,
+        text=[f"{v:.1f}%" for v in values],
+        textposition='auto',
+    ))
+    
+    fig_probs.update_layout(
+        title="Probabilidades de Éxito/Fallo",
+        yaxis_title="Probabilidad (%)",
+        template="plotly_white"
+    )
+    
+    # Gráfico de sensibilidad al riesgo (si está disponible)
+    fig_sensitivity = None
+    if sensitivity_df is not None:
+        fig_sensitivity = go.Figure()
+        
+        fig_sensitivity.add_trace(go.Scatter(
+            x=sensitivity_df['risk_percent'],
+            y=sensitivity_df['pass_rate_p1'],
+            mode='lines+markers',
+            name='Probabilidad Fase 1',
+            line=dict(color='#10B981', width=3),
+            marker=dict(size=8)
+        ))
+        
+        fig_sensitivity.add_trace(go.Scatter(
+            x=sensitivity_df['risk_percent'],
+            y=sensitivity_df['pass_rate_both'],
+            mode='lines+markers',
+            name='Probabilidad Ambas Fases',
+            line=dict(color='#059669', width=3),
+            marker=dict(size=8)
+        ))
+        
+        fig_sensitivity.update_layout(
+            title="Sensibilidad: Riesgo vs Probabilidad de Éxito",
+            xaxis_title="Riesgo por Operación (%)",
+            yaxis_title="Probabilidad de Éxito (%)",
+            template="plotly_white"
+        )
+    
+    return fig_probs, fig_sensitivity
+
+def run_prop_firm_analysis(df_csv, config_dict):
+    """
+    Función principal para ejecutar en tu aplicación Streamlit
+    
+    Args:
+        df_csv: DataFrame con datos del CSV
+        config_dict: Diccionario con configuración
+    
+    Returns:
+        results, sensitivity_analysis, figures
+    """
+    
+    # Ejecutar simulación principal
+    results = simulate_prop_firm_challenge(df_csv, config_dict)
+    
+    # Crear análisis de sensibilidad
+    sensitivity_df = create_risk_sensitivity_analysis(df_csv, config_dict)
+    
+    # Crear gráficos
+    fig_probs, fig_sensitivity = plot_results_dashboard(results, sensitivity_df)
+    
+    return results, sensitivity_df, (fig_probs, fig_sensitivity)
 
 # Configurar tema claro para Streamlit
 import streamlit.components.v1 as components
@@ -1666,347 +1977,68 @@ with tab1:
                 # Calcular análisis de prop firm
                 if st.button("🚀 Analizar Prop Firm", type="primary"):
                     with st.spinner("Analizando datos..."):
-                        # Procesar datos del CSV
-                        df_csv['Profit/Loss'] = df_csv['Profit/Loss'].astype(float)
-                        df_csv['Balance'] = df_csv['Balance'].astype(float)
+                        # Configurar parámetros para el análisis
+                        config = {
+                            'account_size': tamaño_cuenta,
+                            'risk_per_trade': riesgo_por_operacion,
+                            'phase1_target': porcentaje_fase1,
+                            'phase2_target': porcentaje_fase2,
+                            'daily_dd_limit': drawdown_maximo_diario,
+                            'total_dd_limit': drawdown_maximo_total
+                        }
                         
-                        # Calcular métricas básicas
-                        total_operaciones = len(df_csv)
-                        operaciones_ganadoras = len(df_csv[df_csv['Profit/Loss'] > 0])
-                        operaciones_perdedoras = len(df_csv[df_csv['Profit/Loss'] < 0])
-                        win_rate = (operaciones_ganadoras / total_operaciones * 100) if total_operaciones > 0 else 0
+                        # Ejecutar análisis usando las nuevas funciones
+                        results, sensitivity_df, (fig_probs, fig_sensitivity) = run_prop_firm_analysis(df_csv, config)
                         
-                        # Calcular pérdida máxima y ganancia máxima
-                        perdida_maxima = df_csv['Profit/Loss'].min()
-                        ganancia_maxima = df_csv['Profit/Loss'].max()
-                        
-                        # Calcular drawdown máximo
-                        df_csv_sorted = df_csv.sort_values('Close time')
-                        df_csv_sorted['Balance_acumulado'] = df_csv_sorted['Balance'].cummax()
-                        df_csv_sorted['Drawdown'] = (df_csv_sorted['Balance_acumulado'] - df_csv_sorted['Balance']) / df_csv_sorted['Balance_acumulado'] * 100
-                        drawdown_maximo = df_csv_sorted['Drawdown'].max()
-                        
-                        # Los límites de drawdown son globales para toda la evaluación
-                        # No hay límites específicos por fase, solo los drawdowns globales
-                        
-                        # Calcular riesgo por operación en dinero
-                        riesgo_por_op_dinero = tamaño_cuenta * (riesgo_por_operacion / 100)
-                        
-                        # Análisis de probabilidades basado en drawdown
-                        # Calcular drawdown máximo histórico
-                        drawdown_maximo_historico = df_csv_sorted['Drawdown'].max()
-                        
-                        # Calcular probabilidad de exceder drawdown diario
-                        # Simular pérdida diaria máxima basada en el riesgo por operación
-                        perdida_maxima_diaria_simulada = abs(df_csv['Profit/Loss'].min()) * (riesgo_por_operacion / 2.0)  # Escalado por riesgo
-                        drawdown_diario_simulado = (perdida_maxima_diaria_simulada / tamaño_cuenta) * 100
-                        
-                        # Calcular probabilidades aproximadas
-                        prob_exceder_drawdown_diario = 100 if drawdown_diario_simulado > drawdown_maximo_diario else 0
-                        prob_exceder_drawdown_total = 100 if drawdown_maximo_historico > drawdown_maximo_total else 0
-                        
-                        # Probabilidades de pasar (aproximación)
-                        prob_pasar_fase1 = max(0, 100 - prob_exceder_drawdown_diario - prob_exceder_drawdown_total)
-                        prob_pasar_fase2 = max(0, 100 - prob_exceder_drawdown_diario - prob_exceder_drawdown_total)
-                        
-                        # ANÁLISIS DE TIEMPO PARA PROP FIRMS
-                        # Convertir fechas a datetime si no lo están
-                        df_csv['Open time'] = pd.to_datetime(df_csv['Open time'])
-                        df_csv['Close time'] = pd.to_datetime(df_csv['Close time'])
-                        
-                        # Calcular operaciones por día
-                        df_csv['Fecha'] = df_csv['Close time'].dt.date
-                        operaciones_por_dia = df_csv.groupby('Fecha').agg({
-                            'Profit/Loss': ['count', 'sum', 'min', 'max'],
-                            'Balance': 'last'
-                        }).reset_index()
-                        
-                        # Aplanar columnas
-                        operaciones_por_dia.columns = ['Fecha', 'Ops_Dia', 'Profit_Dia', 'Min_Profit_Dia', 'Max_Profit_Dia', 'Balance_Final']
-                        operaciones_por_dia['Fecha'] = pd.to_datetime(operaciones_por_dia['Fecha'])
-                        
-                        # Calcular drawdown diario
-                        operaciones_por_dia['Balance_Max'] = operaciones_por_dia['Balance_Final'].cummax()
-                        operaciones_por_dia['Drawdown_Dia'] = (operaciones_por_dia['Balance_Max'] - operaciones_por_dia['Balance_Final']) / operaciones_por_dia['Balance_Max'] * 100
-                        
-                        # Simular escenarios de prop firm con fases secuenciales REALISTAS (sin límite de días)
-                        def simular_prop_firm(df_diario, riesgo_por_op, drawdown_diario, drawdown_total, dias_simulacion=30):
-                            resultados = []
-                            
-                            # ESCALAR OPERACIONES SEGÚN EL RIESGO SELECCIONADO
-                            riesgo_historico_promedio = 2.0  # 2% promedio histórico
-                            factor_escalado = riesgo_por_op / riesgo_historico_promedio
-                            
-                            # Escalar todo el dataset una vez
-                            df_diario['Profit_Dia_Escalado'] = df_diario['Profit_Dia'] * factor_escalado
-                            df_diario['Min_Profit_Dia_Escalado'] = df_diario['Min_Profit_Dia'] * factor_escalado
-                            df_diario['Max_Profit_Dia_Escalado'] = df_diario['Max_Profit_Dia'] * factor_escalado
-                            
-                            # Usar todo el dataset disponible, no limitar a 30 días
-                            for inicio in range(len(df_diario) - 10):  # Mínimo 10 días para tener datos suficientes
-                                # Tomar desde el inicio hasta el final del dataset
-                                periodo = df_diario.iloc[inicio:].copy()
-                                
-                                # SIMULACIÓN SECUENCIAL DE FASES CON CONTADOR DE TRADES
-                                balance_inicial = tamaño_cuenta
-                                balance_acumulado = balance_inicial
-                                balance_max = balance_inicial
-                                drawdown_max = 0
-                                
-                                # Objetivos de cada fase usando los selectores
-                                objetivo_fase1 = balance_inicial * (porcentaje_fase1 / 100)  # Ganancia objetivo Fase 1
-                                objetivo_fase2 = balance_inicial * (porcentaje_fase2 / 100)  # Ganancia objetivo Fase 2
-                                
-                                # Variables de seguimiento
-                                fase_actual = 1
-                                dias_fase1 = 0
-                                dias_fase2 = 0
-                                dias_totales = 0
-                                trades_totales = 0  # Contador de trades que NO se resetea
-                                trades_fase1 = 0
-                                trades_fase2 = 0
-                                resultado = "En progreso"
-                                profit_total = 0
-                                
-                                for i, (_, row) in enumerate(periodo.iterrows()):
-                                    dias_totales += 1
-                                    trades_del_dia = row['Ops_Dia']
-                                    trades_totales += trades_del_dia
-                                    
-                                    balance_acumulado += row['Profit_Dia_Escalado']
-                                    profit_total = balance_acumulado - balance_inicial
-                                    balance_max = max(balance_max, balance_acumulado)
-                                    
-                                    # Calcular drawdown actual
-                                    drawdown_actual = (balance_max - balance_acumulado) / balance_max * 100
-                                    drawdown_max = max(drawdown_max, drawdown_actual)
-                                    
-                                    # Calcular drawdown diario (pérdida del día vs balance inicial del día)
-                                    balance_inicio_dia = balance_acumulado - row['Profit_Dia_Escalado']
-                                    drawdown_diario_actual = abs(row['Min_Profit_Dia_Escalado']) / balance_inicio_dia * 100 if balance_inicio_dia > 0 else 0
-                                    
-                                    # Verificar límites de drawdown globales (aplican a ambas fases)
-                                    if (drawdown_max >= drawdown_total or 
-                                        drawdown_diario_actual >= drawdown_diario):
-                                        # Se quema por drawdown (aplica a cualquier fase)
-                                        if fase_actual == 1:
-                                            resultado = "Quemado Fase 1"
-                                            dias_fase1 = dias_totales
-                                            trades_fase1 = trades_totales
-                                        else:
-                                            resultado = "Quemado Fase 2"
-                                            dias_fase2 = dias_totales - dias_fase1
-                                            trades_fase2 = trades_totales - trades_fase1
-                                        break
-                                    
-                                    # Verificar objetivos de ganancia por fase
-                                    if fase_actual == 1:
-                                        # FASE 1: Verificar si pasa
-                                        if profit_total >= objetivo_fase1:
-                                            # Pasó Fase 1, ahora empieza Fase 2
-                                            fase_actual = 2
-                                            dias_fase1 = dias_totales
-                                            trades_fase1 = trades_totales
-                                            # Resetear para Fase 2
-                                            balance_inicial_fase2 = balance_acumulado
-                                            objetivo_fase2_absoluto = balance_inicial_fase2 + (balance_inicial * porcentaje_fase2 / 100)
-                                    
-                                    elif fase_actual == 2:
-                                        # FASE 2: Verificar si pasa
-                                        if profit_total >= objetivo_fase2_absoluto:
-                                            resultado = "Pasó Fase 2"
-                                            dias_fase2 = dias_totales - dias_fase1
-                                            trades_fase2 = trades_totales - trades_fase1
-                                            break
-                                
-                                # Si no se completó ninguna fase (llegó al final del dataset)
-                                if resultado == "En progreso":
-                                    if fase_actual == 1:
-                                        resultado = "No completó Fase 1"
-                                        dias_fase1 = dias_totales
-                                        trades_fase1 = trades_totales
-                                    elif fase_actual == 2:
-                                        resultado = "No completó Fase 2"
-                                        dias_fase2 = dias_totales - dias_fase1
-                                        trades_fase2 = trades_totales - trades_fase1
-                                
-                                # Calcular métricas finales
-                                total_ops = periodo['Ops_Dia'].sum()
-                                
-                                resultados.append({
-                                    'Inicio': periodo['Fecha'].iloc[0],
-                                    'Fin': periodo['Fecha'].iloc[-1],
-                                    'Dias_Fase1': dias_fase1,
-                                    'Dias_Fase2': dias_fase2,
-                                    'Dias_Totales': dias_totales,
-                                    'Trades_Totales': trades_totales,
-                                    'Trades_Fase1': trades_fase1,
-                                    'Trades_Fase2': trades_fase2,
-                                    'Total_Ops': total_ops,
-                                    'Profit_Total': profit_total,
-                                    'Drawdown_Max': drawdown_max,
-                                    'Fase_Alcanzada': fase_actual,
-                                    'Resultado': resultado
-                                })
-                                
-                                # Limitar el número de simulaciones para evitar sobrecarga
-                                if len(resultados) >= 100:  # Máximo 100 simulaciones
-                                    break
-                            
-                            return pd.DataFrame(resultados)
-                        
-                        # Ejecutar simulaciones (ahora sin límite de días)
-                        simulaciones = simular_prop_firm(operaciones_por_dia, riesgo_por_operacion, drawdown_maximo_diario, drawdown_maximo_total)
-                        
-                        # Calcular estadísticas de tiempo y trades
-                        def calcular_estadisticas_tiempo(simulaciones):
-                            # Filtrar por resultados específicos
-                            pasaron_fase1 = simulaciones[simulaciones['Resultado'] == 'Pasó Fase 1']
-                            pasaron_fase2 = simulaciones[simulaciones['Resultado'] == 'Pasó Fase 2']
-                            quemaron_fase1 = simulaciones[simulaciones['Resultado'] == 'Quemado Fase 1']
-                            quemaron_fase2 = simulaciones[simulaciones['Resultado'] == 'Quemado Fase 2']
-                            
-                            # También contar los que pasaron Fase 1 pero no Fase 2
-                            pasaron_solo_fase1 = simulaciones[simulaciones['Fase_Alcanzada'] >= 1]
-                            
-                            stats = {
-                                'Total_Simulaciones': len(simulaciones),
-                                'Pasaron_Fase1': len(pasaron_solo_fase1),
-                                'Pasaron_Fase2': len(pasaron_fase2),
-                                'Quemaron_Fase1': len(quemaron_fase1),
-                                'Quemaron_Fase2': len(quemaron_fase2),
-                                'Prob_Pasar_Fase1': len(pasaron_solo_fase1) / len(simulaciones) * 100 if len(simulaciones) > 0 else 0,
-                                'Prob_Pasar_Fase2': len(pasaron_fase2) / len(simulaciones) * 100 if len(simulaciones) > 0 else 0,
-                                'Prob_Quemar_Fase1': len(quemaron_fase1) / len(simulaciones) * 100 if len(simulaciones) > 0 else 0,
-                                'Prob_Quemar_Fase2': len(quemaron_fase2) / len(simulaciones) * 100 if len(simulaciones) > 0 else 0,
-                            }
-                            
-                            # Calcular días promedio para Fase 1 (todos los que llegaron a Fase 1)
-                            if len(pasaron_solo_fase1) > 0:
-                                stats['Dias_Promedio_Pasar_Fase1'] = pasaron_solo_fase1['Dias_Fase1'].mean()
-                                stats['Trades_Promedio_Pasar_Fase1'] = pasaron_solo_fase1['Trades_Fase1'].mean()
-                            else:
-                                stats['Dias_Promedio_Pasar_Fase1'] = None
-                                stats['Trades_Promedio_Pasar_Fase1'] = None
-                                
-                            # Calcular días promedio para Fase 2 (solo los que pasaron Fase 2)
-                            if len(pasaron_fase2) > 0:
-                                stats['Dias_Promedio_Pasar_Fase2'] = pasaron_fase2['Dias_Fase2'].mean()
-                                stats['Trades_Promedio_Pasar_Fase2'] = pasaron_fase2['Trades_Fase2'].mean()
-                            else:
-                                stats['Dias_Promedio_Pasar_Fase2'] = None
-                                stats['Trades_Promedio_Pasar_Fase2'] = None
-                                
-                            # Calcular días promedio para quemar Fase 1
-                            if len(quemaron_fase1) > 0:
-                                stats['Dias_Promedio_Quemar_Fase1'] = quemaron_fase1['Dias_Fase1'].mean()
-                                stats['Trades_Promedio_Quemar_Fase1'] = quemaron_fase1['Trades_Fase1'].mean()
-                            else:
-                                stats['Dias_Promedio_Quemar_Fase1'] = None
-                                stats['Trades_Promedio_Quemar_Fase1'] = None
-                                
-                            # Calcular días promedio para quemar Fase 2
-                            if len(quemaron_fase2) > 0:
-                                stats['Dias_Promedio_Quemar_Fase2'] = quemaron_fase2['Dias_Fase2'].mean()
-                                stats['Trades_Promedio_Quemar_Fase2'] = quemaron_fase2['Trades_Fase2'].mean()
-                            else:
-                                stats['Dias_Promedio_Quemar_Fase2'] = None
-                                stats['Trades_Promedio_Quemar_Fase2'] = None
-                            
-                            return stats
-                        
-                        stats = calcular_estadisticas_tiempo(simulaciones)
-                        
-                        # Debug: Mostrar información de las simulaciones
-                        st.markdown(f"""
-                        <div style="background-color: #e3f2fd; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; border-left: 4px solid #2196f3;">
-                            <h4 style="margin: 0 0 0.5rem 0; color: #1565c0;">🔍 Información de Simulación</h4>
-                            <p style="margin: 0; color: #1565c0; font-size: 0.9rem;">
-                                <strong>Total de simulaciones:</strong> {len(simulaciones)}<br>
-                                <strong>Días de datos disponibles:</strong> {len(operaciones_por_dia)}<br>
-                                <strong>Período de datos:</strong> {operaciones_por_dia['Fecha'].min().strftime('%Y-%m-%d')} a {operaciones_por_dia['Fecha'].max().strftime('%Y-%m-%d')}<br>
-                                <strong>Simulación realista:</strong> Sin límite de días por fase
-                            </p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        # Mostrar resultados
+                        # Mostrar métricas principales
                         st.markdown("""
                         <div class="card">
-                            <div class="card-title">⏱️ Análisis de Tiempo para Prop Firms</div>
+                            <div class="card-title">📊 Resultados del Análisis</div>
                         """, unsafe_allow_html=True)
                         
-                        # Métricas principales de tiempo y trades
-                        col1, col2, col3, col4 = st.columns(4)
+                        col1, col2, col3 = st.columns(3)
                         
                         with col1:
-                            dias_promedio_pasar = stats['Dias_Promedio_Pasar_Fase1']
-                            trades_promedio_pasar = stats['Trades_Promedio_Pasar_Fase1']
-                            if dias_promedio_pasar:
-                                st.metric(
-                                    label="Fase 1 - Pasar",
-                                    value=f"{dias_promedio_pasar:.0f} días",
-                                    delta=f"{trades_promedio_pasar:.0f} trades" if trades_promedio_pasar else "N/A trades"
-                                )
-                            else:
-                                st.metric(
-                                    label="Fase 1 - Pasar",
-                                    value="No disponible",
-                                    delta=f"{stats['Prob_Pasar_Fase1']:.1f}% probabilidad"
-                                )
+                            st.metric(
+                                "Probabilidad Fase 1",
+                                f"{results['probabilities']['pass_phase1']:.1f}%",
+                                f"{results['average_metrics']['days_to_pass_p1']:.0f} días promedio"
+                            )
                         
                         with col2:
-                            dias_promedio_quemar = stats['Dias_Promedio_Quemar_Fase1']
-                            trades_promedio_quemar = stats['Trades_Promedio_Quemar_Fase1']
-                            if dias_promedio_quemar:
-                                st.metric(
-                                    label="Fase 1 - Quemar",
-                                    value=f"{dias_promedio_quemar:.0f} días",
-                                    delta=f"{trades_promedio_quemar:.0f} trades" if trades_promedio_quemar else "N/A trades"
-                                )
-                            else:
-                                st.metric(
-                                    label="Fase 1 - Quemar",
-                                    value="No disponible",
-                                    delta=f"{stats['Prob_Quemar_Fase1']:.1f}% probabilidad"
-                                )
+                            st.metric(
+                                "Probabilidad Ambas Fases",
+                                f"{results['probabilities']['pass_both_phases']:.1f}%",
+                                f"{results['average_metrics']['days_to_pass_p1']:.0f} días promedio"
+                            )
                         
                         with col3:
-                            dias_promedio_pasar2 = stats['Dias_Promedio_Pasar_Fase2']
-                            trades_promedio_pasar2 = stats['Trades_Promedio_Pasar_Fase2']
-                            if dias_promedio_pasar2:
-                                st.metric(
-                                    label="Fase 2 - Pasar",
-                                    value=f"{dias_promedio_pasar2:.0f} días",
-                                    delta=f"{trades_promedio_pasar2:.0f} trades" if trades_promedio_pasar2 else "N/A trades"
-                                )
-                            else:
-                                st.metric(
-                                    label="Fase 2 - Pasar",
-                                    value="No disponible",
-                                    delta=f"{stats['Prob_Pasar_Fase2']:.1f}% probabilidad"
-                                )
+                            st.metric(
+                                "Probabilidad Fallo por DD",
+                                f"{results['probabilities']['fail_drawdown']:.1f}%",
+                                f"{results['risk_analysis']['daily_dd_violations']} violaciones diarias"
+                            )
                         
-                        with col4:
-                            dias_promedio_quemar2 = stats['Dias_Promedio_Quemar_Fase2']
-                            trades_promedio_quemar2 = stats['Trades_Promedio_Quemar_Fase2']
-                            if dias_promedio_quemar2:
-                                st.metric(
-                                    label="Fase 2 - Quemar",
-                                    value=f"{dias_promedio_quemar2:.0f} días",
-                                    delta=f"{trades_promedio_quemar2:.0f} trades" if trades_promedio_quemar2 else "N/A trades"
-                                )
-                            else:
-                                st.metric(
-                                    label="Fase 2 - Quemar",
-                                    value="No disponible",
-                                    delta=f"{stats['Prob_Quemar_Fase2']:.1f}% probabilidad"
-                                )
+                        st.markdown('</div>', unsafe_allow_html=True)
+                        
+                        # Mostrar gráficos
+                        st.plotly_chart(fig_probs, use_container_width=True)
+                        
+                        if fig_sensitivity:
+                            st.plotly_chart(fig_sensitivity, use_container_width=True)
+                        
+                        # Mostrar análisis de sensibilidad
+                        st.markdown("""
+                        <div class="card">
+                            <div class="card-title">📈 Análisis de Sensibilidad al Riesgo</div>
+                        """, unsafe_allow_html=True)
+                        
+                        st.dataframe(sensitivity_df, use_container_width=True, hide_index=True)
                         
                         st.markdown('</div>', unsafe_allow_html=True)
                         
                         # Mostrar información del escalado
-                        factor_escalado = riesgo_por_operacion / 2.0  # 2% es el riesgo histórico promedio
+                        factor_escalado = results['risk_analysis']['scaling_factor']
                         st.markdown(f"""
                         <div style="background-color: #fff3cd; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; border-left: 4px solid #ffc107;">
                             <h4 style="margin: 0 0 0.5rem 0; color: #856404;">⚖️ Escalado de Riesgo</h4>
@@ -2019,282 +2051,22 @@ with tab1:
                         </div>
                         """, unsafe_allow_html=True)
                         
-                        # Resumen de probabilidades
+                        # Recomendaciones
                         st.markdown("""
                         <div class="card">
-                            <div class="card-title">📊 Resumen de Probabilidades</div>
+                            <div class="card-title">💡 Recomendaciones</div>
                         """, unsafe_allow_html=True)
                         
-                        # Crear tabla de resumen
-                        resumen_data = {
-                            'Métrica': ['Pasar Fase 1', 'Quemar Fase 1', 'Pasar Fase 2', 'Quemar Fase 2'],
-                            'Probabilidad': [
-                                f"{stats['Prob_Pasar_Fase1']:.1f}%",
-                                f"{stats['Prob_Quemar_Fase1']:.1f}%",
-                                f"{stats['Prob_Pasar_Fase2']:.1f}%",
-                                f"{stats['Prob_Quemar_Fase2']:.1f}%"
-                            ],
-                            'Días Promedio': [
-                                f"{stats['Dias_Promedio_Pasar_Fase1']:.0f}" if stats['Dias_Promedio_Pasar_Fase1'] else "N/A",
-                                f"{stats['Dias_Promedio_Quemar_Fase1']:.0f}" if stats['Dias_Promedio_Quemar_Fase1'] else "N/A",
-                                f"{stats['Dias_Promedio_Pasar_Fase2']:.0f}" if stats['Dias_Promedio_Pasar_Fase2'] else "N/A",
-                                f"{stats['Dias_Promedio_Quemar_Fase2']:.0f}" if stats['Dias_Promedio_Quemar_Fase2'] else "N/A"
-                            ],
-                            'Trades Promedio': [
-                                f"{stats['Trades_Promedio_Pasar_Fase1']:.0f}" if stats['Trades_Promedio_Pasar_Fase1'] else "N/A",
-                                f"{stats['Trades_Promedio_Quemar_Fase1']:.0f}" if stats['Trades_Promedio_Quemar_Fase1'] else "N/A",
-                                f"{stats['Trades_Promedio_Pasar_Fase2']:.0f}" if stats['Trades_Promedio_Pasar_Fase2'] else "N/A",
-                                f"{stats['Trades_Promedio_Quemar_Fase2']:.0f}" if stats['Trades_Promedio_Quemar_Fase2'] else "N/A"
-                            ]
-                        }
+                        prob_p1 = results['probabilities']['pass_phase1']
+                        prob_both = results['probabilities']['pass_both_phases']
+                        prob_dd = results['probabilities']['fail_drawdown']
                         
-                        df_resumen = pd.DataFrame(resumen_data)
-                        st.dataframe(df_resumen, use_container_width=True, hide_index=True)
-                        
-                        # Análisis de sensibilidad al riesgo
-                        st.markdown("""
-                        <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin-top: 1rem;">
-                            <h4 style="margin: 0 0 0.5rem 0; color: #495057;">🎯 Sensibilidad al Riesgo</h4>
-                            <p style="margin: 0; color: #6c757d; font-size: 0.9rem;">
-                                Comparación de cómo cambian los resultados según el riesgo por operación:
-                            </p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        # Crear análisis de sensibilidad
-                        riesgos_test = [1, 2, 3, 4, 5]
-                        sensibilidad_data = []
-                        
-                        for riesgo_test in riesgos_test:
-                            sim_test_30d = simular_prop_firm(operaciones_por_dia, riesgo_test, drawdown_maximo_diario, drawdown_maximo_total, 30)
-                            stats_test = calcular_estadisticas_tiempo(sim_test_30d)
-                            
-                            sensibilidad_data.append({
-                                'Riesgo %': f"{riesgo_test}%",
-                                'Prob. Pasar F1': f"{stats_test['Prob_Pasar_Fase1']:.1f}%",
-                                'Prob. Quemar F1': f"{stats_test['Prob_Quemar_Fase1']:.1f}%",
-                                'Días Prom. Pasar F1': f"{stats_test['Dias_Promedio_Pasar_Fase1']:.0f}" if stats_test['Dias_Promedio_Pasar_Fase1'] else "N/A",
-                                'Trades Prom. Pasar F1': f"{stats_test['Trades_Promedio_Pasar_Fase1']:.0f}" if stats_test['Trades_Promedio_Pasar_Fase1'] else "N/A",
-                                'Días Prom. Quemar F1': f"{stats_test['Dias_Promedio_Quemar_Fase1']:.0f}" if stats_test['Dias_Promedio_Quemar_Fase1'] else "N/A",
-                                'Trades Prom. Quemar F1': f"{stats_test['Trades_Promedio_Quemar_Fase1']:.0f}" if stats_test['Trades_Promedio_Quemar_Fase1'] else "N/A"
-                            })
-                        
-                        df_sensibilidad = pd.DataFrame(sensibilidad_data)
-                        st.dataframe(df_sensibilidad, use_container_width=True, hide_index=True)
-                        
-                        # Mostrar ejemplos de simulaciones para debug
-                        st.markdown("""
-                        <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin-top: 1rem;">
-                            <h4 style="margin: 0 0 0.5rem 0; color: #495057;">🔍 Ejemplos de Simulaciones (Primeras 10)</h4>
-                            <p style="margin: 0; color: #6c757d; font-size: 0.9rem;">
-                                Muestra las primeras 10 simulaciones para verificar el cálculo de días:
-                            </p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        # Mostrar ejemplos de simulaciones
-                        ejemplos = simulaciones.head(10)[['Inicio', 'Dias_Fase1', 'Dias_Fase2', 'Trades_Fase1', 'Trades_Fase2', 'Trades_Totales', 'Resultado', 'Fase_Alcanzada', 'Profit_Total', 'Drawdown_Max']].copy()
-                        ejemplos['Inicio'] = ejemplos['Inicio'].dt.strftime('%Y-%m-%d')
-                        ejemplos['Profit_Total'] = ejemplos['Profit_Total'].round(2)
-                        ejemplos['Drawdown_Max'] = ejemplos['Drawdown_Max'].round(2)
-                        ejemplos.columns = ['Fecha Inicio', 'Días F1', 'Días F2', 'Trades F1', 'Trades F2', 'Trades Total', 'Resultado', 'Fase Alcanzada', 'Profit Total', 'Drawdown Max']
-                        
-                        st.dataframe(ejemplos, use_container_width=True, hide_index=True)
-                        
-                        # Análisis de operaciones por día
-                        st.markdown("""
-                        <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin-top: 1rem;">
-                            <h4 style="margin: 0 0 0.5rem 0; color: #495057;">📊 Estadísticas de Trading Diario</h4>
-                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
-                        """, unsafe_allow_html=True)
-                        
-                        ops_por_dia_promedio = operaciones_por_dia['Ops_Dia'].mean()
-                        profit_por_dia_promedio = operaciones_por_dia['Profit_Dia'].mean()
-                        dias_con_ops = len(operaciones_por_dia[operaciones_por_dia['Ops_Dia'] > 0])
-                        total_dias = len(operaciones_por_dia)
-                        
-                        st.markdown(f"""
-                        <div style="text-align: center; padding: 0.5rem;">
-                            <div style="font-size: 1.5rem; font-weight: bold; color: #6c757d;">{ops_por_dia_promedio:.1f}</div>
-                            <div style="font-size: 0.9rem; color: #6c757d;">Ops por día promedio</div>
-                        </div>
-                        <div style="text-align: center; padding: 0.5rem;">
-                            <div style="font-size: 1.5rem; font-weight: bold; color: #6c757d;">${profit_por_dia_promedio:.2f}</div>
-                            <div style="font-size: 0.9rem; color: #6c757d;">Profit por día promedio</div>
-                        </div>
-                        <div style="text-align: center; padding: 0.5rem;">
-                            <div style="font-size: 1.5rem; font-weight: bold; color: #6c757d;">{dias_con_ops}/{total_dias}</div>
-                            <div style="font-size: 0.9rem; color: #6c757d;">Días con operaciones</div>
-                        </div>
-                        <div style="text-align: center; padding: 0.5rem;">
-                            <div style="font-size: 1.5rem; font-weight: bold; color: #6c757d;">{(dias_con_ops/total_dias*100):.1f}%</div>
-                            <div style="font-size: 0.9rem; color: #6c757d;">Frecuencia de trading</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        st.markdown('</div>', unsafe_allow_html=True)
-                        st.markdown('</div>', unsafe_allow_html=True)
-                        
-                        # Análisis de Prop Firm
-                        st.markdown("""
-                        <div class="card">
-                            <div class="card-title">🏢 Análisis de Prop Firm</div>
-                        """, unsafe_allow_html=True)
-                        
-                        # Configuración seleccionada
-                        st.markdown(f"""
-                        <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
-                            <h4 style="margin: 0 0 0.5rem 0; color: #495057;">⚙️ Configuración Seleccionada</h4>
-                            <p style="margin: 0; color: #6c757d;">
-                                <strong>Tamaño de cuenta:</strong> ${tamaño_cuenta:,}<br>
-                                <strong>Riesgo por operación:</strong> {riesgo_por_operacion}% (${riesgo_por_op_dinero:.2f})<br>
-                                <strong>Drawdown máximo diario:</strong> {drawdown_maximo_diario}% (si pierdes más en 1 día, suspendes)<br>
-                                <strong>Drawdown máximo total:</strong> {drawdown_maximo_total}% (límite global para toda la evaluación)<br>
-                                <strong>Fase 1:</strong> Ganancia objetivo {porcentaje_fase1}% (${tamaño_cuenta * porcentaje_fase1 / 100:.2f})<br>
-                                <strong>Fase 2:</strong> Ganancia objetivo {porcentaje_fase2}% (${tamaño_cuenta * porcentaje_fase2 / 100:.2f})
-                            </p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        # Probabilidades de pasar
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            # Fase 1
-                            color_fase1 = "green" if prob_pasar_fase1 >= 70 else "orange" if prob_pasar_fase1 >= 50 else "red"
-                            st.markdown(f"""
-                            <div style="background-color: #f8f9fa; padding: 1.5rem; border-radius: 0.5rem; text-align: center; border-left: 4px solid {color_fase1};">
-                                <h3 style="margin: 0 0 0.5rem 0; color: {color_fase1};">Fase 1</h3>
-                                <div style="font-size: 2rem; font-weight: bold; color: {color_fase1}; margin-bottom: 0.5rem;">
-                                    {prob_pasar_fase1:.1f}%
-                                </div>
-                                <p style="margin: 0; color: #6c757d; font-size: 0.9rem;">
-                                    Probabilidad de pasar<br>
-                                    <small>Objetivo: {porcentaje_fase1}%</small>
-                                </p>
-                            </div>
-                            """, unsafe_allow_html=True)
-                        
-                        with col2:
-                            # Fase 2
-                            color_fase2 = "green" if prob_pasar_fase2 >= 70 else "orange" if prob_pasar_fase2 >= 50 else "red"
-                            st.markdown(f"""
-                            <div style="background-color: #f8f9fa; padding: 1.5rem; border-radius: 0.5rem; text-align: center; border-left: 4px solid {color_fase2};">
-                                <h3 style="margin: 0 0 0.5rem 0; color: {color_fase2};">Fase 2</h3>
-                                <div style="font-size: 2rem; font-weight: bold; color: {color_fase2}; margin-bottom: 0.5rem;">
-                                    {prob_pasar_fase2:.1f}%
-                                </div>
-                                <p style="margin: 0; color: #6c757d; font-size: 0.9rem;">
-                                    Probabilidad de pasar<br>
-                                    <small>Objetivo: {porcentaje_fase2}%</small>
-                                </p>
-                            </div>
-                            """, unsafe_allow_html=True)
-                        
-                        # Recomendaciones basadas en tiempo
-                        st.markdown("""
-                        <div style="background-color: #e8f5e8; padding: 1rem; border-radius: 0.5rem; margin-top: 1rem;">
-                            <h4 style="margin: 0 0 0.5rem 0; color: #28a745;">💡 Recomendaciones Prácticas</h4>
-                        """, unsafe_allow_html=True)
-                        
-                        # Calcular recomendaciones basadas en tiempo
-                        mejor_prob_pasar = stats['Prob_Pasar_Fase1']
-                        mejor_prob_quemar = stats['Prob_Quemar_Fase1']
-                        
-                        if mejor_prob_pasar >= 70:
-                            st.markdown("""
-                            <p style="margin: 0; color: #28a745;">
-                                ✅ <strong>Estrategia Sólida:</strong> Con estos parámetros tienes alta probabilidad de pasar las pruebas. 
-                                Tu estrategia es adecuada para prop firms.
-                            </p>
-                            """, unsafe_allow_html=True)
-                        elif mejor_prob_pasar >= 50:
-                            st.markdown("""
-                            <p style="margin: 0; color: #ffc107;">
-                                ⚠️ <strong>Estrategia Moderada:</strong> Probabilidad media de éxito. 
-                                Considera reducir el riesgo por operación para mejorar tus chances.
-                            </p>
-                            """, unsafe_allow_html=True)
+                        if prob_p1 >= 70:
+                            st.success("✅ **Estrategia Sólida:** Con estos parámetros tienes alta probabilidad de pasar las pruebas. Tu estrategia es adecuada para prop firms.")
+                        elif prob_p1 >= 50:
+                            st.warning("⚠️ **Estrategia Moderada:** Probabilidad media de éxito. Considera reducir el riesgo por operación para mejorar tus chances.")
                         else:
-                            st.markdown("""
-                            <p style="margin: 0; color: #dc3545;">
-                                ❌ <strong>Estrategia de Alto Riesgo:</strong> Baja probabilidad de pasar. 
-                                Recomendamos reducir significativamente el riesgo por operación.
-                            </p>
-                            """, unsafe_allow_html=True)
-                        
-                        # Recomendación específica de tiempo
-                        if stats['Dias_Promedio_Pasar_Fase1'] and stats['Dias_Promedio_Pasar_Fase1'] < 15:
-                            st.markdown("""
-                            <p style="margin: 0.5rem 0 0 0; color: #28a745;">
-                                🚀 <strong>Ventaja Temporal:</strong> Puedes pasar la Fase 1 en menos de 15 días en promedio.
-                            </p>
-                            """, unsafe_allow_html=True)
-                        elif stats['Dias_Promedio_Quemar_Fase1'] and stats['Dias_Promedio_Quemar_Fase1'] < 10:
-                            st.markdown("""
-                            <p style="margin: 0.5rem 0 0 0; color: #dc3545;">
-                                ⚡ <strong>Riesgo Rápido:</strong> Podrías quemar la cuenta en menos de 10 días. 
-                                Reduce el riesgo por operación.
-                            </p>
-                            """, unsafe_allow_html=True)
-                        
-                        st.markdown('</div>', unsafe_allow_html=True)
-                        
-                        # Tabla de operaciones problemáticas basada en drawdown
-                        # Calcular operaciones que excederían el drawdown diario
-                        limite_drawdown_diario_dinero = tamaño_cuenta * (drawdown_maximo_diario / 100)
-                        ops_exceden_drawdown_diario = len(df_csv[df_csv['Profit/Loss'] < -limite_drawdown_diario_dinero])
-                        
-                        if ops_exceden_drawdown_diario > 0:
-                            st.markdown("""
-                            <div class="card">
-                                <div class="card-title">⚠️ Operaciones Problemáticas</div>
-                            """, unsafe_allow_html=True)
-                            
-                            ops_problematicas = df_csv[df_csv['Profit/Loss'] < -limite_drawdown_diario_dinero].copy()
-                            if not ops_problematicas.empty:
-                                ops_problematicas['%_de_cuenta'] = (ops_problematicas['Profit/Loss'] / tamaño_cuenta * 100).round(2)
-                                ops_problematicas['Excede_Drawdown_Diario'] = ops_problematicas['Profit/Loss'] < -limite_drawdown_diario_dinero
-                                
-                                st.dataframe(
-                                    ops_problematicas[['Ticket', 'Symbol', 'Type', 'Open time', 'Close time', 'Profit/Loss', '%_de_cuenta', 'Excede_Drawdown_Diario']],
-                                    use_container_width=True,
-                                    hide_index=True
-                                )
-                            
-                            st.markdown('</div>', unsafe_allow_html=True)
-                        
-                        st.markdown('</div>', unsafe_allow_html=True)
-                        
-                        # Gráfico de drawdown
-                        st.markdown("""
-                        <div class="card">
-                            <div class="card-title">📈 Análisis de Drawdown</div>
-                        """, unsafe_allow_html=True)
-                        
-                        fig_drawdown = px.line(
-                            df_csv_sorted,
-                            x='Close time',
-                            y='Drawdown',
-                            title='Evolución del Drawdown',
-                            labels={'Drawdown': 'Drawdown (%)', 'Close time': 'Fecha'}
-                        )
-                        
-                        # Añadir líneas de referencia para las fases
-                        fig_drawdown.add_hline(y=10, line_dash="dash", line_color="red", 
-                                             annotation_text="Límite Fase 1 (10%)")
-                        fig_drawdown.add_hline(y=5, line_dash="dash", line_color="orange", 
-                                             annotation_text="Límite Fase 2 (5%)")
-                        
-                        fig_drawdown.update_layout(
-                            height=400,
-                            template="plotly_white",
-                            plot_bgcolor='white',
-                            paper_bgcolor='white',
-                            font=dict(color='#495057')
-                        )
-                        
-                        st.plotly_chart(fig_drawdown, use_container_width=True)
+                            st.error("❌ **Estrategia de Alto Riesgo:** Baja probabilidad de pasar. Recomendamos reducir significativamente el riesgo por operación.")
                         
                         st.markdown('</div>', unsafe_allow_html=True)
                         
