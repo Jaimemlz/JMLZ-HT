@@ -512,9 +512,12 @@ def run_detailed_challenge_tracking(df_trades, start_index, config, challenge_nu
     daily_dd_limit = config['daily_dd_limit']
     total_dd_limit = config['total_dd_limit']
     
-    # Factor de escalado
-    historical_risk = 2.0
-    scaling_factor = config['risk_per_trade'] / historical_risk
+    # Calcular el riesgo por operación en dólares
+    risk_per_trade_dollars = (config['risk_per_trade'] / 100) * account_size
+    
+    # Calcular el factor de escalado basado en la pérdida máxima del CSV
+    max_loss_csv = abs(df_trades['profit_loss'].min())  # Pérdida máxima en el CSV
+    scaling_factor = risk_per_trade_dollars / max_loss_csv if max_loss_csv > 0 else 1
     
     # Estado inicial
     balance = account_size
@@ -563,8 +566,12 @@ def run_detailed_challenge_tracking(df_trades, start_index, config, challenge_nu
         trade = df_trades.iloc[i]
         trade_date = trade['date']
         original_profit = trade['profit_loss']
+        
+        # Escalar el profit proporcionalmente basado en el riesgo por operación
         scaled_profit = original_profit * scaling_factor
-        scaled_profit_pct = (scaled_profit / account_size) * 100
+        position_size = scaling_factor
+        
+        scaled_profit_pct = (scaled_profit / balance) * 100
         
         # Detectar cambio de día
         if current_date != trade_date:
@@ -617,6 +624,10 @@ def run_detailed_challenge_tracking(df_trades, start_index, config, challenge_nu
             'original_profit': original_profit,
             'scaled_profit': scaled_profit,
             'scaled_profit_pct': scaled_profit_pct,
+            'position_size': position_size,
+            'risk_amount': risk_per_trade_dollars,
+            'scaling_factor': scaling_factor,
+            'max_loss_csv': max_loss_csv,
             'balance': balance,
             'total_profit_pct': total_profit_pct,
             'daily_profit_pct': daily_profit_pct,
@@ -665,8 +676,14 @@ def create_challenges_evolution_table(df_trades, config, num_challenges=5):
 
 def display_evolution_interface(df_csv, config):
     """
-    Interfaz para mostrar la evolución de challenges
+    Interfaz para mostrar la evolución de todos los challenges disponibles
     """
+    
+    # Inicializar estado de sesión al principio
+    if 'evolution_df' not in st.session_state:
+        st.session_state.evolution_df = None
+    if 'evolution_config_hash' not in st.session_state:
+        st.session_state.evolution_config_hash = None
     
     st.markdown("""
     <div class="card">
@@ -681,32 +698,40 @@ def display_evolution_interface(df_csv, config):
     df_processed['date'] = df_processed['Close time'].dt.date
     df_processed = df_processed.sort_values('Close time').reset_index(drop=True)
     
-    # Selector de número de challenges a mostrar
-    col1, col2 = st.columns([3, 1])
+    # Información sobre la funcionalidad
+    st.info("Esta tabla muestra la evolución trade por trade de cada challenge, permitiendo ver exactamente cómo progresa el balance y en qué momento se aprueba o suspende cada examen.")
     
-    with col1:
-        st.info("Esta tabla muestra la evolución trade por trade de cada challenge, permitiendo ver exactamente cómo progresa el balance y en qué momento se aprueba o suspende cada examen.")
+    # Crear hash de la configuración para detectar cambios
+    import hashlib
+    config_str = str(sorted(config.items()))
+    config_hash = hashlib.md5(config_str.encode()).hexdigest()
     
-    with col2:
-        num_challenges = st.selectbox(
-            "Challenges a mostrar",
-            options=[3, 5, 8, 10],
-            index=1,
-            help="Número de challenges consecutivos a analizar"
-        )
-    
-    # Generar tabla de evolución
-    with st.spinner(f"Generando evolución de {num_challenges} challenges..."):
-        evolution_df = create_challenges_evolution_table(df_processed, config, num_challenges)
+    # Solo recalcular si la configuración cambió o no hay datos en caché
+    if (st.session_state.evolution_df is None or 
+        st.session_state.evolution_config_hash != config_hash):
+        
+        with st.spinner("Generando evolución de challenges..."):
+            evolution_df = create_challenges_evolution_table(df_processed, config, num_challenges=20)
+            st.session_state.evolution_df = evolution_df
+            st.session_state.evolution_config_hash = config_hash
+    else:
+        evolution_df = st.session_state.evolution_df
     
     if evolution_df.empty:
         st.warning("No se pudieron generar challenges con los datos disponibles.")
         return
     
-    # Mostrar todos los challenges en paneles expandibles
+    # Mostrar todos los challenges sin paginación
     available_challenges = sorted(evolution_df['challenge_num'].unique())
+    total_challenges = len(available_challenges)
     
-    for challenge_num in available_challenges:
+    # Mostrar información de todos los challenges
+    st.markdown(f"**Mostrando todos los {total_challenges} challenges disponibles**")
+    
+    # Mostrar todos los challenges
+    challenges_to_show = available_challenges
+    
+    for challenge_num in challenges_to_show:
         # Filtrar datos del challenge actual
         challenge_data = evolution_df[evolution_df['challenge_num'] == challenge_num].copy()
         
@@ -716,12 +741,26 @@ def display_evolution_interface(df_csv, config):
         final_balance = challenge_data.iloc[-1]['balance']
         final_profit_pct = challenge_data.iloc[-1]['total_profit_pct']
         
+        # Calcular días usados y fechas
+        start_date = challenge_data.iloc[1]['date']  # Primer trade (excluyendo estado inicial)
+        end_date = challenge_data.iloc[-1]['date']   # Último trade
+        days_used = (end_date - start_date).days + 1  # +1 para incluir ambos días
+        
         # Determinar color del estado
         status_color = "green" if "APROBADO" in final_status else "red" if "SUSPENDIDO" in final_status else "blue"
         status_icon = "✅" if "APROBADO" in final_status else "❌" if "SUSPENDIDO" in final_status else "🔄"
         
         # Crear panel expandible para cada challenge
-        with st.expander(f"{status_icon} Challenge {challenge_num} - {final_status} | Trades: {total_trades} | Balance: ${final_balance:,.2f} | Ganancia: {final_profit_pct:.2f}%", expanded=False):
+        with st.expander(f"{status_icon} Challenge {challenge_num} - {final_status} | Trades: {total_trades} | Días: {days_used} | {start_date.strftime('%d/%m')} - {end_date.strftime('%d/%m')} | Ganancia: {final_profit_pct:.2f}%", expanded=False):
+            
+            # Obtener información del escalado del primer trade
+            first_trade = challenge_data[challenge_data['trade_number'] > 0].iloc[0] if len(challenge_data[challenge_data['trade_number'] > 0]) > 0 else None
+            scaling_info = ""
+            if first_trade is not None:
+                scaling_factor = first_trade['scaling_factor']
+                max_loss_csv = first_trade['max_loss_csv']
+                risk_amount = first_trade['risk_amount']
+                scaling_info = f" | <strong>Factor Escalado:</strong> {scaling_factor:.2f}x | <strong>Pérdida Máx CSV:</strong> ${max_loss_csv:.2f}"
             
             # Header del challenge dentro del panel
             st.markdown(f"""
@@ -730,12 +769,13 @@ def display_evolution_interface(df_csv, config):
                 <p style="margin: 0.5rem 0 0 0; color: #6c757d;">
                     <strong>Estado Final:</strong> {final_status} | 
                     <strong>Trades Utilizados:</strong> {total_trades} | 
-                    <strong>Balance Final:</strong> ${final_balance:,.2f} | 
-                    <strong>Ganancia Total:</strong> {final_profit_pct:.2f}%
+                    <strong>Días Usados:</strong> {days_used} | 
+                    <strong>Período:</strong> {start_date.strftime('%d/%m/%Y')} - {end_date.strftime('%d/%m/%Y')} | 
+                    <strong>Ganancia Total:</strong> {final_profit_pct:.2f}%{scaling_info}
                 </p>
             </div>
             """, unsafe_allow_html=True)
-            
+        
             # Preparar tabla para mostrar
             display_df = challenge_data[challenge_data['trade_number'] > 0].copy()  # Excluir estado inicial
             
@@ -748,12 +788,14 @@ def display_evolution_interface(df_csv, config):
             display_df['Profit Diario %'] = display_df['daily_profit_pct'].apply(lambda x: f"{x:.2f}%")
             display_df['Progreso Objetivo'] = display_df['progress_to_target'].apply(lambda x: f"{x:.1f}%")
             display_df['Drawdown'] = display_df['drawdown_from_hwm'].apply(lambda x: f"{x:.2f}%")
+            display_df['Factor Escalado'] = display_df['scaling_factor'].apply(lambda x: f"{x:.2f}x")
+            display_df['Riesgo $'] = display_df['risk_amount'].apply(lambda x: f"${x:,.2f}")
             
             # Seleccionar columnas para mostrar
             columns_to_show = [
                 'trade_number', 'date', 'symbol', 'type', 'Profit Escalado', 'Profit %', 
-                'Balance', 'Profit Total %', 'Profit Diario %', 'phase', 'Progreso Objetivo', 
-                'Drawdown', 'status', 'daily_trades'
+                'Balance', 'Profit Total %', 'Profit Diario %', 'Factor Escalado', 'Riesgo $',
+                'phase', 'Progreso Objetivo', 'Drawdown', 'status', 'daily_trades'
             ]
             
             final_display_df = display_df[columns_to_show].rename(columns={
@@ -840,11 +882,19 @@ def display_evolution_interface(df_csv, config):
     summary_data = []
     for challenge_num in available_challenges:
         challenge_summary = evolution_df[evolution_df['challenge_num'] == challenge_num].iloc[-1]
+        
+        # Calcular días y fechas para el resumen
+        challenge_data = evolution_df[evolution_df['challenge_num'] == challenge_num].copy()
+        start_date = challenge_data.iloc[1]['date']  # Primer trade
+        end_date = challenge_data.iloc[-1]['date']    # Último trade
+        days_used = (end_date - start_date).days + 1
+        
         summary_data.append({
             'Challenge': challenge_num,
             'Estado Final': challenge_summary['status'],
             'Trades Usados': challenge_summary['trade_number'],
-            'Balance Final': f"${challenge_summary['balance']:,.2f}",
+            'Días Usados': days_used,
+            'Período': f"{start_date.strftime('%d/%m')} - {end_date.strftime('%d/%m')}",
             'Ganancia Total': f"{challenge_summary['total_profit_pct']:.2f}%",
             'Fase Alcanzada': challenge_summary['phase'],
             'DD Máximo': f"{challenge_summary['drawdown_from_hwm']:.2f}%"
@@ -863,6 +913,10 @@ def display_evolution_interface(df_csv, config):
     
     styled_summary = summary_df.style.apply(highlight_summary, axis=1)
     st.dataframe(styled_summary, use_container_width=True, hide_index=True)
+    
+    # Información sobre todos los challenges mostrados
+    st.markdown("---")
+    st.info(f"💡 **Información**: Se muestran todos los {total_challenges} challenges disponibles. Puedes expandir cada uno para ver los detalles completos.")
     
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -2424,7 +2478,7 @@ with tab1:
                         </p>
                     </div>
                     """, unsafe_allow_html=True)
-                
+                        
                 # Información sobre qué hace el análisis
                 st.info("""
                 🔍 **¿Qué hace este análisis?**
