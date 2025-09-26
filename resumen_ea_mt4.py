@@ -254,7 +254,7 @@ def run_sequential_challenge(df_trades, start_index, config, challenge_num):
         if current_date != trade_date:
             # Si cambió el día, verificar límites del día anterior
             if current_date is not None and daily_profit_pct < -daily_dd_limit:
-                status = f"Failed Phase {current_phase}"
+                status = f"SUSPENDIDO - DD Diario Fase {current_phase}"
                 failure_reason = "Daily Drawdown Exceeded"
                 break
             
@@ -282,8 +282,14 @@ def run_sequential_challenge(df_trades, start_index, config, challenge_num):
         # Verificar drawdown total
         current_dd_pct = (high_water_mark - balance) / high_water_mark * 100
         if current_dd_pct >= total_dd_limit:
-            status = f"Failed Phase {current_phase}"
+            status = f"SUSPENDIDO - DD Total Fase {current_phase}"
             failure_reason = "Total Drawdown Exceeded"
+            break
+        
+        # Verificar drawdown diario DESPUÉS de cada trade
+        if daily_profit_pct < -daily_dd_limit:
+            status = f"SUSPENDIDO - DD Diario Fase {current_phase}"
+            failure_reason = "Daily Drawdown Exceeded"
             break
         
         # Verificar objetivos de fase
@@ -298,7 +304,7 @@ def run_sequential_challenge(df_trades, start_index, config, challenge_num):
     
     # Verificar el último día si no se completó el challenge
     if status == "In Progress" and current_date is not None and daily_profit_pct < -daily_dd_limit:
-        status = f"Failed Phase {current_phase}"
+        status = f"SUSPENDIDO - DD Diario Fase {current_phase}"
         failure_reason = "Daily Drawdown Exceeded"
     
     # Si llegó al final de los datos sin completar
@@ -334,8 +340,8 @@ def analyze_sequential_results(challenges, config):
     
     # Categorizar resultados
     passed_both = [c for c in challenges if c['status'] == "Passed Both Phases"]
-    failed_phase1 = [c for c in challenges if "Failed Phase 1" in c['status']]
-    failed_phase2 = [c for c in challenges if "Failed Phase 2" in c['status']]
+    failed_phase1 = [c for c in challenges if "SUSPENDIDO" in c['status'] and "Fase 1" in c['status']]
+    failed_phase2 = [c for c in challenges if "SUSPENDIDO" in c['status'] and "Fase 2" in c['status']]
     incomplete = [c for c in challenges if "Incomplete" in c['status']]
     
     # Separar por tipo de fallo
@@ -537,7 +543,7 @@ def run_detailed_challenge_tracking(df_trades, start_index, config, challenge_nu
     daily_trades_count = 0
     
     # Estado del challenge
-    status = "En Progreso"
+    status = "FASE 1"
     
     # Agregar estado inicial
     evolution.append({
@@ -606,12 +612,18 @@ def run_detailed_challenge_tracking(df_trades, start_index, config, challenge_nu
         if current_dd >= total_dd_limit:
             status = f"SUSPENDIDO - DD Total Fase {current_phase}"
         
+        # Verificar drawdown diario DESPUÉS de cada trade
+        elif daily_profit_pct < -daily_dd_limit:
+            status = f"SUSPENDIDO - DD Diario Fase {current_phase}"
+        
         # Verificar objetivos de fase
         elif current_phase == 1 and total_profit_pct >= phase1_goal:
             current_phase = 2
             status = "FASE 2"
         elif current_phase == 2 and total_profit_pct >= phase1_goal + phase2_goal:
             status = "APROBADO"
+        elif current_phase == 1:
+            status = "FASE 1"
         
         # Registrar evolución del trade
         evolution.append({
@@ -644,9 +656,14 @@ def run_detailed_challenge_tracking(df_trades, start_index, config, challenge_nu
             break
     
     # Verificar último día si no terminó
-    if status == "En Progreso" and daily_profit_pct < -daily_dd_limit:
+    if status in ["FASE 1", "FASE 2"] and daily_profit_pct < -daily_dd_limit:
         evolution[-1]['status'] = f"SUSPENDIDO - DD Diario Fase {current_phase}"
         status = f"SUSPENDIDO - DD Diario Fase {current_phase}"
+    
+    # Si el challenge no terminó pero se quedó sin datos, marcarlo como incompleto
+    if status in ["FASE 1", "FASE 2"]:
+        evolution[-1]['status'] = f"INCOMPLETO - {status}"
+        status = f"INCOMPLETO - {status}"
     
     return evolution, trades_used, status
 
@@ -667,7 +684,15 @@ def create_challenges_evolution_table(df_trades, config, num_challenges=5):
         )
         
         all_evolutions.extend(evolution)
-        current_index += trades_used
+        
+        # Solo avanzar al siguiente challenge si el actual terminó completamente
+        if final_status in ["APROBADO", "SUSPENDIDO - DD Diario Fase 1", "SUSPENDIDO - DD Diario Fase 2", 
+                          "SUSPENDIDO - DD Total Fase 1", "SUSPENDIDO - DD Total Fase 2",
+                          "INCOMPLETO - FASE 1", "INCOMPLETO - FASE 2"]:
+            current_index += trades_used
+        else:
+            # Si el challenge no terminó (está en FASE 1 o FASE 2), no generar más challenges
+            break
         
         if current_index >= len(df_trades) - 10:
             break
@@ -747,8 +772,8 @@ def display_evolution_interface(df_csv, config):
         days_used = (end_date - start_date).days + 1  # +1 para incluir ambos días
         
         # Determinar color del estado
-        status_color = "green" if "APROBADO" in final_status else "red" if "SUSPENDIDO" in final_status else "blue"
-        status_icon = "✅" if "APROBADO" in final_status else "❌" if "SUSPENDIDO" in final_status else "🔄"
+        status_color = "green" if "APROBADO" in final_status else "red" if "SUSPENDIDO" in final_status else "orange" if "INCOMPLETO" in final_status else "blue"
+        status_icon = "✅" if "APROBADO" in final_status else "❌" if "SUSPENDIDO" in final_status else "⚠️" if "INCOMPLETO" in final_status else "🔄"
         
         # Crear panel expandible para cada challenge
         with st.expander(f"{status_icon} Challenge {challenge_num} - {final_status} | Trades: {total_trades} | Días: {days_used} | {start_date.strftime('%d/%m')} - {end_date.strftime('%d/%m')} | Ganancia: {final_profit_pct:.2f}%", expanded=False):
@@ -760,7 +785,6 @@ def display_evolution_interface(df_csv, config):
                 scaling_factor = first_trade['scaling_factor']
                 max_loss_csv = first_trade['max_loss_csv']
                 risk_amount = first_trade['risk_amount']
-                scaling_info = f" | <strong>Factor Escalado:</strong> {scaling_factor:.2f}x | <strong>Pérdida Máx CSV:</strong> ${max_loss_csv:.2f}"
             
             # Header del challenge dentro del panel
             st.markdown(f"""
@@ -793,9 +817,8 @@ def display_evolution_interface(df_csv, config):
             
             # Seleccionar columnas para mostrar
             columns_to_show = [
-                'trade_number', 'date', 'symbol', 'type', 'Profit Escalado', 'Profit %', 
-                'Balance', 'Profit Total %', 'Profit Diario %', 'Factor Escalado', 'Riesgo $',
-                'phase', 'Progreso Objetivo', 'Drawdown', 'status', 'daily_trades'
+                'trade_number', 'date', 'symbol', 'type', 'Profit %', 
+                'Balance', 'Profit Total %', 'Profit Diario %', 'Drawdown', 'status', 'daily_trades'
             ]
             
             final_display_df = display_df[columns_to_show].rename(columns={
@@ -2393,6 +2416,7 @@ with tab1:
                     riesgo_por_operacion = st.selectbox(
                         "💰 Riesgo por operación",
                         options=[1, 2, 3, 4, 5],
+                        index=1,
                         format_func=lambda x: f"{x}%",
                         help="Porcentaje de la cuenta que se arriesga por operación"
                     )
@@ -2401,6 +2425,7 @@ with tab1:
                     tamaño_cuenta = st.selectbox(
                         "💵 Tamaño de cuenta de fondeo",
                         options=[10000, 25000, 50000, 100000, 200000],
+                        index=3,
                         format_func=lambda x: f"${x:,}",
                         help="Tamaño de la cuenta de fondeo"
                     )
@@ -2433,7 +2458,7 @@ with tab1:
                     drawdown_maximo_diario = st.selectbox(
                         "📉 Drawdown máximo diario",
                         options=[3, 4, 5, 6, 7, 8, 9, 10],
-                        index=1,
+                        index=2,
                         format_func=lambda x: f"{x}%",
                         help="Drawdown máximo permitido en un solo día. Si pierdes más, suspendes el examen"
                     )
@@ -2442,7 +2467,7 @@ with tab1:
                     drawdown_maximo_total = st.selectbox(
                         "📊 Drawdown máximo total",
                         options=[5, 6, 7, 8, 9, 10, 12, 15],
-                        index=1,
+                        index=5,
                         format_func=lambda x: f"{x}%",
                         help="Drawdown máximo total permitido durante toda la evaluación. No se puede superar en ninguna fase"
                     )
@@ -2488,6 +2513,66 @@ with tab1:
                 cada examen. Podrás seleccionar diferentes challenges para analizar en detalle.
                 """)
                 
+                # Estilo personalizado para el botón de análisis
+                st.markdown("""
+                <style>
+                .analyze-button {
+                    background: linear-gradient(45deg, #28a745, #20c997) !important;
+                    color: white !important;
+                    border: none !important;
+                    border-radius: 8px !important;
+                    padding: 12px 24px !important;
+                    font-size: 16px !important;
+                    font-weight: 600 !important;
+                    text-align: center !important;
+                    cursor: pointer !important;
+                    transition: all 0.3s ease !important;
+                    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3) !important;
+                    margin: 20px 0 !important;
+                    width: 100% !important;
+                }
+                
+                .analyze-button:hover {
+                    background: linear-gradient(45deg, #20c997, #17a2b8) !important;
+                    transform: translateY(-2px) !important;
+                    box-shadow: 0 6px 20px rgba(40, 167, 69, 0.4) !important;
+                }
+                
+                .analyze-button:active {
+                    transform: translateY(0) !important;
+                    box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3) !important;
+                }
+                
+                /* Estilo para el botón de Streamlit */
+                div[data-testid="stButton"] > button[kind="primary"] {
+                    background: linear-gradient(45deg, #28a745, #20c997) !important;
+                    color: white !important;
+                    border: none !important;
+                    border-radius: 8px !important;
+                    padding: 12px 24px !important;
+                    font-size: 16px !important;
+                    font-weight: 600 !important;
+                    text-align: center !important;
+                    cursor: pointer !important;
+                    transition: all 0.3s ease !important;
+                    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3) !important;
+                    margin: 20px 0 !important;
+                    width: 100% !important;
+                }
+                
+                div[data-testid="stButton"] > button[kind="primary"]:hover {
+                    background: linear-gradient(45deg, #20c997, #17a2b8) !important;
+                    transform: translateY(-2px) !important;
+                    box-shadow: 0 6px 20px rgba(40, 167, 69, 0.4) !important;
+                }
+                
+                div[data-testid="stButton"] > button[kind="primary"]:active {
+                    transform: translateY(0) !important;
+                    box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3) !important;
+                }
+                </style>
+                        """, unsafe_allow_html=True)
+                        
                 # Botón para ejecutar el análisis
                 if st.button("🚀 Analizar Evolución Detallada", type="primary"):
                     # Configurar parámetros para el análisis
