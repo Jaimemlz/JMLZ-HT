@@ -12,6 +12,34 @@ import numpy as np
 pio.templates.default = "plotly_white"
 
 # Funciones para calcular ranking de riesgo-beneficio
+def limpiar_nombre_ea(nombre_ea):
+    """
+    Limpia el nombre de la EA eliminando números adicionales y caracteres especiales.
+    Ejemplo: 'NQ.H4 20397968 [sl]' -> 'NQ.H4'
+    """
+    if not nombre_ea or nombre_ea.strip() == "":
+        return ""
+    
+    # Eliminar contenido entre corchetes primero
+    nombre_limpio = nombre_ea.split('[')[0].strip()
+    
+    # Dividir por espacios y mantener solo las partes que contienen letras
+    partes = nombre_limpio.split()
+    partes_validas = []
+    
+    for parte in partes:
+        # Si la parte contiene al menos una letra, la mantenemos
+        if any(c.isalpha() for c in parte):
+            partes_validas.append(parte)
+        # Si es solo números, la ignoramos (como "20397968")
+        elif parte.isdigit():
+            continue
+        # Si contiene puntos y letras (como "NQ.H4"), la mantenemos
+        elif '.' in parte and any(c.isalpha() for c in parte):
+            partes_validas.append(parte)
+    
+    return ' '.join(partes_validas)
+
 def es_ea_valida(nombre_ea):
     """
     Verifica si un nombre de EA es válido (contiene letras).
@@ -2011,29 +2039,53 @@ with tab1:
                 eas_filtradas = 0
                 total_operaciones = 0
 
-                for i in range(0, len(rows), 2):
+                for i in range(len(rows)):
                     try:
                         fila_op = rows[i].find_all('td')
-                        fila_ea = rows[i+1].find_all('td')
-
-                        tipo = fila_op[2].text.strip().lower()
-                        size = float(fila_op[3].text)
-                        symbol = fila_op[4].text.strip().lower()
-                        open_time = datetime.strptime(fila_op[1].text.strip(), "%Y.%m.%d %H:%M:%S")
-                        close_time = datetime.strptime(fila_op[8].text.strip(), "%Y.%m.%d %H:%M:%S")
-                        profit = float(fila_op[13].text)
-                        ea_raw = fila_ea[-1].text.strip()
+                        
+                        # Verificar que la fila tenga suficientes columnas para ser una operación
+                        if len(fila_op) < 14:
+                            continue  # Saltar filas con estructura incompleta
+                        
+                        # Verificar que la primera celda contenga un número (ticket)
+                        try:
+                            ticket = int(fila_op[0].text.strip())
+                        except:
+                            continue  # No es una fila de operación válida
+                        
+                        # Verificar que la segunda celda contenga una fecha
+                        try:
+                            open_time = datetime.strptime(fila_op[1].text.strip(), "%Y.%m.%d %H:%M:%S")
+                        except:
+                            continue  # No es una fila de operación válida
+                        
+                        # Buscar la fila EA correspondiente (siguiente fila)
+                        ea_raw = ""
+                        if i + 1 < len(rows):
+                            fila_ea = rows[i+1].find_all('td')
+                            if len(fila_ea) > 0:
+                                ea_raw = fila_ea[-1].text.strip()
 
                         if "cancelled" in ea_raw.lower():
                             continue
 
-                        ea_name = ea_raw.split('[')[0]
+                        tipo = fila_op[2].text.strip().lower()
+                        size = float(fila_op[3].text.replace(' ', ''))
+                        symbol = fila_op[4].text.strip().lower()
+                        close_time = datetime.strptime(fila_op[8].text.strip(), "%Y.%m.%d %H:%M:%S")
+                        profit = float(fila_op[13].text.replace(' ', ''))
+
+                        # Limpiar el nombre de la EA eliminando números adicionales
+                        ea_name = limpiar_nombre_ea(ea_raw)
                         total_operaciones += 1
 
-                        # Filtrar EAs válidas (que contengan letras)
+                        # Si no hay nombre de EA válido, asignar un nombre genérico
                         if not es_ea_valida(ea_name):
-                            eas_filtradas += 1
-                            continue
+                            if ea_name.strip() == "":
+                                ea_name = "Sin EA"  # Operaciones sin nombre de EA
+                            else:
+                                eas_filtradas += 1
+                                continue
 
                         datos.append({
                             "EA": ea_name,
@@ -2044,7 +2096,9 @@ with tab1:
                             "Close": close_time,
                             "Duración": (close_time - open_time).total_seconds() / 60  # en minutos
                         })
-                    except Exception:
+                    except Exception as e:
+                        # Log del error para debugging (opcional)
+                        # print(f"Error procesando fila {i}: {e}")
                         continue
 
                 if datos:
@@ -2054,57 +2108,10 @@ with tab1:
                     if eas_filtradas > 0:
                         st.info(f"ℹ️ Se eliminaron {eas_filtradas} operaciones que no pertenecen a ninguna EA de un total de {total_operaciones} operaciones. Se procesaron {len(datos)} operaciones válidas.")
 
-                    resumen = df.groupby(["EA", "Símbolo"]).agg(
-                        Ops=('Beneficio', 'count'),
-                        Win_pct=('Beneficio', lambda x: 100 * (x > 0).sum() / len(x)),
-                        Profit_medio=('Beneficio', 'mean'),
-                        Max_Loss=('Beneficio', 'min'),
-                        Duracion_media_min=('Duración', 'mean'),
-                        Beneficio_total=('Beneficio', 'sum')
-                    ).reset_index()
-
-                    # Redondear numéricos primero
-                    resumen = resumen.round({
-                        "Win_pct": 2,
-                        "Profit_medio": 2,
-                        "Max_Loss": 2,
-                        "Duracion_media_min": 1,
-                        "Beneficio_total": 2
-                    })
-
-                    resumen["Beneficio_total_raw"] = resumen["Beneficio_total"]
-
-                    # 💡 Formatear columnas para presentación legible
-                    def formatear_duracion(minutos):
-                        horas = int(minutos) // 60
-                        mins = int(minutos) % 60
-                        return f"{horas}h {mins}m"
-
-                    resumen["Win_pct"] = resumen["Win_pct"].astype(str) + " %"
-                    resumen["Profit_medio"] = resumen["Profit_medio"].apply(lambda x: f"${x:.2f}")
-                    resumen["Max_Loss"] = resumen["Max_Loss"].apply(lambda x: f"${x:.2f}")
-                    resumen["Beneficio_total"] = resumen["Beneficio_total"].apply(lambda x: f"${x:.2f}")
-                    resumen["Duracion_media"] = resumen["Duracion_media_min"].apply(formatear_duracion)
-                    resumen = resumen.drop(columns=["Duracion_media_min"])  # Quitamos la versión cruda
-
-                    # Ordenar y preparar resumen
-                    resumen = resumen.sort_values(by="Beneficio_total_raw", ascending=False)
-
-                    # Selector de EA para filtrar
-                    ea_opciones = ["Todas"] + sorted(resumen["EA"].unique())
-                    ea_seleccionada = st.selectbox("🧠 Selecciona una EA para filtrar", ea_opciones)
-
-                    # Filtrar datos según selección
-                    if ea_seleccionada != "Todas":
-                        resumen_filtrado = resumen[resumen["EA"] == ea_seleccionada]
-                        df_filtrado = df[df["EA"] == ea_seleccionada]
-                    else:
-                        resumen_filtrado = resumen
-                        df_filtrado = df
-
-                    # Crear gráfico de beneficio acumulado
-                    df_filtrado['Fecha'] = df_filtrado['Close'].dt.date
-                    beneficios_diarios = df_filtrado.groupby(['EA', 'Fecha'])['Beneficio'].sum().reset_index()
+                    # Crear gráfico de beneficio acumulado (incluyendo "Sin EA")
+                    df_filtrado_grafico = df.copy()
+                    df_filtrado_grafico['Fecha'] = df_filtrado_grafico['Close'].dt.date
+                    beneficios_diarios = df_filtrado_grafico.groupby(['EA', 'Fecha'])['Beneficio'].sum().reset_index()
                     beneficios_diarios['Beneficio_acumulado'] = beneficios_diarios.groupby('EA')['Beneficio'].cumsum()
 
                     if len(beneficios_diarios) > 0:
@@ -2149,8 +2156,63 @@ with tab1:
                     else:
                         st.info("No hay datos suficientes para mostrar el gráfico")
                 
-                    # Cerrar tarjeta de análisis
-                    st.markdown('</div>', unsafe_allow_html=True)
+                    # Filtrar "Sin EA" para el resto del análisis
+                    df = df[df['EA'] != 'Sin EA']
+                    
+                    if df.empty:
+                        st.warning("No hay operaciones válidas para mostrar en las tablas.")
+                        st.markdown('</div>', unsafe_allow_html=True)
+                    else:
+                        resumen = df.groupby(["EA", "Símbolo"]).agg(
+                            Ops=('Beneficio', 'count'),
+                            Win_pct=('Beneficio', lambda x: 100 * (x > 0).sum() / len(x)),
+                            Profit_medio=('Beneficio', 'mean'),
+                            Max_Loss=('Beneficio', 'min'),
+                            Duracion_media_min=('Duración', 'mean'),
+                            Beneficio_total=('Beneficio', 'sum')
+                        ).reset_index()
+
+                        # Redondear numéricos primero
+                        resumen = resumen.round({
+                            "Win_pct": 2,
+                            "Profit_medio": 2,
+                            "Max_Loss": 2,
+                            "Duracion_media_min": 1,
+                            "Beneficio_total": 2
+                        })
+
+                        resumen["Beneficio_total_raw"] = resumen["Beneficio_total"]
+
+                        # 💡 Formatear columnas para presentación legible
+                        def formatear_duracion(minutos):
+                            horas = int(minutos) // 60
+                            mins = int(minutos) % 60
+                            return f"{horas}h {mins}m"
+
+                        resumen["Win_pct"] = resumen["Win_pct"].astype(str) + " %"
+                        resumen["Profit_medio"] = resumen["Profit_medio"].apply(lambda x: f"${x:.2f}")
+                        resumen["Max_Loss"] = resumen["Max_Loss"].apply(lambda x: f"${x:.2f}")
+                        resumen["Beneficio_total"] = resumen["Beneficio_total"].apply(lambda x: f"${x:.2f}")
+                        resumen["Duracion_media"] = resumen["Duracion_media_min"].apply(formatear_duracion)
+                        resumen = resumen.drop(columns=["Duracion_media_min"])  # Quitamos la versión cruda
+
+                        # Ordenar y preparar resumen
+                        resumen = resumen.sort_values(by="Beneficio_total_raw", ascending=False)
+
+                        # Selector de EA para filtrar
+                        ea_opciones = ["Todas"] + sorted(resumen["EA"].unique())
+                        ea_seleccionada = st.selectbox("🧠 Selecciona una EA para filtrar", ea_opciones)
+
+                        # Filtrar datos según selección
+                        if ea_seleccionada != "Todas":
+                            resumen_filtrado = resumen[resumen["EA"] == ea_seleccionada]
+                            df_filtrado = df[df["EA"] == ea_seleccionada]
+                        else:
+                            resumen_filtrado = resumen
+                            df_filtrado = df
+
+                        # Cerrar tarjeta de análisis
+                        st.markdown('</div>', unsafe_allow_html=True)
                     
                     # Panel de Ranking por Score de Rentabilidad
                     st.markdown("""
