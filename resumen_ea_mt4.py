@@ -633,6 +633,7 @@ def run_detailed_challenge_tracking(df_trades, start_index, config, challenge_nu
             'date': trade_date,
             'symbol': trade['Symbol'] if 'Symbol' in trade else 'N/A',
             'type': trade['Type'] if 'Type' in trade else 'N/A',
+            'close_type': trade['close_type'] if 'close_type' in trade else 'Unknown',
             'original_profit': original_profit,
             'scaled_profit': scaled_profit,
             'scaled_profit_pct': scaled_profit_pct,
@@ -722,6 +723,9 @@ def display_evolution_interface(df_csv, config):
     df_processed['profit_loss'] = pd.to_numeric(df_processed['Profit/Loss'])
     df_processed['date'] = df_processed['Close time'].dt.date
     df_processed = df_processed.sort_values('Close time').reset_index(drop=True)
+    
+    # Procesar tipo de cierre
+    df_processed['close_type'] = df_processed['Close type'].fillna('Unknown')
     
     # Información sobre la funcionalidad
     st.info("Esta tabla muestra la evolución trade por trade de cada challenge, permitiendo ver exactamente cómo progresa el balance y en qué momento se aprueba o suspende cada examen.")
@@ -815,9 +819,26 @@ def display_evolution_interface(df_csv, config):
             display_df['Factor Escalado'] = display_df['scaling_factor'].apply(lambda x: f"{x:.2f}x")
             display_df['Riesgo $'] = display_df['risk_amount'].apply(lambda x: f"${x:,.2f}")
             
+            # Formatear tipo de cierre con siglas
+            def format_close_type(close_type):
+                if pd.isna(close_type) or close_type == 'Unknown':
+                    return 'N/A'
+                elif close_type == 'SL':
+                    return 'SL'
+                elif close_type == 'TrailingStop':
+                    return 'TS'
+                elif 'End Of Friday' in str(close_type):
+                    return 'EOF'
+                elif 'TP' in str(close_type):
+                    return 'TP'
+                else:
+                    return str(close_type)[:3].upper()
+            
+            display_df['Tipo Cierre'] = display_df['close_type'].apply(format_close_type)
+            
             # Seleccionar columnas para mostrar
             columns_to_show = [
-                'trade_number', 'date', 'symbol', 'type', 'Profit %', 
+                'trade_number', 'date', 'symbol', 'type', 'Tipo Cierre', 'Profit %', 
                 'Balance', 'Profit Total %', 'Profit Diario %', 'Drawdown', 'status', 'daily_trades'
             ]
             
@@ -826,6 +847,7 @@ def display_evolution_interface(df_csv, config):
                 'date': 'Fecha',
                 'symbol': 'Symbol',
                 'type': 'Tipo',
+                'Tipo Cierre': 'Cierre',
                 'phase': 'Fase',
                 'status': 'Estado',
                 'daily_trades': 'Trades Día'
@@ -2482,25 +2504,25 @@ with tab1:
                 with col1:
                     st.markdown(f"""
                     <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
-                        <h4 style="margin: 0 0 0.5rem 0; color: #495057;">💰 Configuración de Riesgo</h4>
-                        <p style="margin: 0; color: #6c757d; font-size: 0.9rem;">
-                            <strong>Tamaño de cuenta:</strong> ${tamaño_cuenta:,}<br>
-                            <strong>Riesgo por operación:</strong> {riesgo_por_operacion}%<br>
-                            <strong>Factor de escalado:</strong> {riesgo_por_operacion/2:.1f}x
-                        </p>
+                    <h4 style="margin: 0 0 0.5rem 0; color: #495057;">💰 Configuración de Riesgo</h4>
+                    <p style="margin: 0; color: #6c757d; font-size: 0.9rem;">
+                    <strong>Tamaño de cuenta:</strong> ${tamaño_cuenta:,}<br>
+                    <strong>Riesgo por operación:</strong> {riesgo_por_operacion}%<br>
+                    <strong>Factor de escalado:</strong> {riesgo_por_operacion/2:.1f}x
+                    </p>
                     </div>
                     """, unsafe_allow_html=True)
                 
                 with col2:
                     st.markdown(f"""
                     <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
-                        <h4 style="margin: 0 0 0.5rem 0; color: #495057;">🎯 Objetivos y Límites</h4>
-                        <p style="margin: 0; color: #6c757d; font-size: 0.9rem;">
-                            <strong>Fase 1:</strong> {porcentaje_fase1}%<br>
-                            <strong>Fase 2:</strong> {porcentaje_fase2}%<br>
-                            <strong>DD diario:</strong> {drawdown_maximo_diario}%<br>
-                            <strong>DD total:</strong> {drawdown_maximo_total}%
-                        </p>
+                    <h4 style="margin: 0 0 0.5rem 0; color: #495057;">🎯 Objetivos y Límites</h4>
+                    <p style="margin: 0; color: #6c757d; font-size: 0.9rem;">
+                    <strong>Fase 1:</strong> {porcentaje_fase1}%<br>
+                    <strong>Fase 2:</strong> {porcentaje_fase2}%<br>
+                    <strong>DD diario:</strong> {drawdown_maximo_diario}%<br>
+                    <strong>DD total:</strong> {drawdown_maximo_total}%
+                    </p>
                     </div>
                     """, unsafe_allow_html=True)
                         
