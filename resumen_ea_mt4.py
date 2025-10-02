@@ -998,9 +998,10 @@ import streamlit.components.v1 as components
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Análisis de EA", 
+    page_title="IMOXHUB", 
     layout="wide", 
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="collapsed",
+    page_icon="logo.png"
 )
 
 # Estilos para las tarjetas y componentes
@@ -1397,7 +1398,6 @@ st.markdown("""
         margin-bottom: 1rem;
         display: flex;
         gap: 0.5rem;
-        padding: 0.5rem;
         overflow: visible;
         align-items: center;
     }
@@ -1544,6 +1544,13 @@ st.markdown("""
     /* Títulos y texto */
     h1, h2, h3, h4, h5, h6 {
         color: #495057 !important;
+    }
+
+    h1{
+        font-size: 2rem !important;
+        padding-left: 0.5rem !important;
+        color: black !important;
+        padding: 0 !important;
     }
     
     p, div, span {
@@ -2009,6 +2016,23 @@ function copyCode(elementId) {
 if 'active_tab' not in st.session_state:
     st.session_state.active_tab = 'analisis'
 
+# Añadir logo a la izquierda de los tabs
+import base64
+
+def get_base64_encoded_image(image_path):
+    with open(image_path, "rb") as img_file:
+        return base64.b64encode(img_file.read()).decode('utf-8')
+
+logo_base64 = get_base64_encoded_image("logo.png")
+
+st.markdown(f"""
+<div style="display: flex; align-items: center; margin-bottom: 0.5rem;">
+    <img src="data:image/png;base64,{logo_base64}" alt="Logo" style="height: 30px; margin-right: 10px;">
+    <h1>IMOXHUB</h1>
+    <div style="flex-grow: 1;"></div>
+</div>
+""", unsafe_allow_html=True)
+
 # Usar tabs de Streamlit para el contenido
 tab1, tab2, tab3 = st.tabs(["📊 Análisis", "% Descuentos", "⚙️ Configuración"])
 
@@ -2127,6 +2151,7 @@ with tab1:
                         # Añadir tooltip personalizado
                         fig.update_traces(
                             hovertemplate=
+                            "<b>Estrategia:</b> %{fullData.name}<br>" +
                             "<b>Fecha:</b> %{x|%d-%m-%Y}<br>" +
                             "<b>Beneficio acumulado:</b> $%{y:.2f}<extra></extra>"
                         )
