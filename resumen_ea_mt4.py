@@ -1786,6 +1786,26 @@ st.markdown("""
         border-radius: 0.75rem !important;
     }
     
+    /* Responsive design para paneles de ranking */
+    @media (max-width: 900px) {
+        .ranking-panel {
+            width: 100% !important;
+            margin-bottom: 1rem !important;
+        }
+    }
+    
+    /* Forzar alineación del botón izquierdo a la derecha */
+    .st-emotion-cache-wfksaw:first-child {
+        align-items: flex-end !important;
+        justify-content: center !important;
+    }
+    
+    /* Forzar alineación del botón derecho al centro */
+    .st-emotion-cache-wfksaw:last-child {
+        align-items: center !important;
+        justify-content: center !important;
+    }
+    
     /* Estilos para tarjetas de promociones completas */
     .promo-card-full {
         background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
@@ -2034,7 +2054,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # Usar tabs de Streamlit para el contenido
-tab1, tab2, tab3 = st.tabs(["📊 Análisis", "% Descuentos", "⚙️ Configuración"])
+tab1, tab2, tab3, tab4 = st.tabs(["📊 Análisis", "% Descuentos", "🏆 Ranking", "⚙️ Configuración"])
 
 # Contenedor principal
 st.markdown('<div class="main-container">', unsafe_allow_html=True)
@@ -2775,8 +2795,140 @@ with tab2:
     for promo in promociones:
         st.markdown(generar_promo_html(promo), unsafe_allow_html=True)
 
-# Tab de Configuración
+# Tab de Ranking
 with tab3:
+    # Crear tabs anidados dentro del tab 3
+    ranking_sub_tab1, ranking_sub_tab2 = st.tabs(["🏆 Ranking", "💰 Añadir Cobro"])
+    
+    with ranking_sub_tab1:
+        # Selector de mes con navegación usando Streamlit
+        if 'selected_month' not in st.session_state:
+            st.session_state.selected_month = 0  # 0 = mes actual
+        
+        # Obtener fecha actual
+        from datetime import datetime, timedelta
+        current_date = datetime.now()
+        target_date = current_date + timedelta(days=30 * st.session_state.selected_month)
+        
+        month_names = [
+            "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+            "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+        ]
+        
+        # Crear layout para el selector de mes
+        col_prev, col_month, col_next = st.columns([1, 3, 1])
+        
+        with col_prev:
+            st.markdown("""
+            <div style="display: flex; align-items: center; justify-content: flex-end; height: 100%; width: 100%;">
+            """, unsafe_allow_html=True)
+            if st.button("←", key="prev_month", help="Mes anterior"):
+                st.session_state.selected_month -= 1
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+        
+        with col_month:
+            month_name = month_names[target_date.month - 1]
+            year = target_date.year
+            st.markdown(f"""
+            <div style="
+                background: #f8f9fa; 
+                padding: 0.5rem 1.5rem; 
+                border-radius: 25px; 
+                border: 2px solid #dee2e6;
+                font-size: 1.2rem;
+                font-weight: 600;
+                color: #495057;
+                text-align: center;
+                margin: 0.5rem 0;
+            ">{month_name} {year}</div>
+            """, unsafe_allow_html=True)
+        
+        with col_next:
+            st.markdown("""
+            <div style="display: flex; align-items: center; justify-content: center; height: 100%;">
+            """, unsafe_allow_html=True)
+            if st.button("→", key="next_month", help="Mes siguiente"):
+                st.session_state.selected_month += 1
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+        
+        # Crear tres columnas para los paneles de ranking (responsive)
+        col1, col2, col3 = st.columns([1, 1, 1])
+        
+        with col1:
+            st.markdown("""
+            <div class="card ranking-panel">
+                <div class="card-title">🌍 Ranking Global</div>
+                <div style="text-align: center; padding: 2rem;">
+                    <div style="font-size: 3rem; margin-bottom: 1rem;" class="construction-icon">🌍</div>
+                    <h3 style="color: #6c757d; margin-bottom: 1rem;">Global</h3>
+                    <p style="color: #6c757d; font-size: 0.9rem; margin-bottom: 1rem;">
+                        Ranking general de todos los EAs
+                    </p>
+                    <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin-top: 1rem;">
+                        <p style="color: #6c757d; font-size: 0.8rem; margin: 0;">
+                            Próximamente disponible
+                        </p>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown("""
+            <div class="card ranking-panel">
+                <div class="card-title">🥇 Ranking Gold</div>
+                <div style="text-align: center; padding: 2rem;">
+                    <div style="font-size: 3rem; margin-bottom: 1rem;" class="construction-icon">🥇</div>
+                    <h3 style="color: #6c757d; margin-bottom: 1rem;">Gold</h3>
+                    <p style="color: #6c757d; font-size: 0.9rem; margin-bottom: 1rem;">
+                        Ranking de EAs premium
+                    </p>
+                    <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin-top: 1rem;">
+                        <p style="color: #6c757d; font-size: 0.8rem; margin: 0;">
+                            Próximamente disponible
+                        </p>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col3:
+            st.markdown("""
+            <div class="card ranking-panel">
+                <div class="card-title">🥈 Ranking Silver</div>
+                <div style="text-align: center; padding: 2rem;">
+                    <div style="font-size: 3rem; margin-bottom: 1rem;" class="construction-icon">🥈</div>
+                    <h3 style="color: #6c757d; margin-bottom: 1rem;">Silver</h3>
+                    <p style="color: #6c757d; font-size: 0.9rem; margin-bottom: 1rem;">
+                        Ranking de EAs estándar
+                    </p>
+                    <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin-top: 1rem;">
+                        <p style="color: #6c757d; font-size: 0.8rem; margin: 0;">
+                            Próximamente disponible
+                        </p>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    with ranking_sub_tab2:
+        st.markdown("""
+        <div class="card">
+            <div class="card-title">💰 Añadir Cobro</div>
+            <div style="text-align: center; padding: 2rem;">
+                <div style="font-size: 4rem; margin-bottom: 1rem;" class="construction-icon">💰</div>
+                <h2 style="color: #6c757d; margin-bottom: 1rem;">¡En Desarrollo!</h2>
+                <p style="color: #6c757d; font-size: 1.1rem; margin-bottom: 2rem;">
+                    Próximamente disponible.
+                </p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+# Tab de Configuración
+with tab4:
     st.markdown("""
     <div class="card">
         <div class="card-title">⚙️ Configuración</div>
