@@ -2860,17 +2860,10 @@ with tab3:
             st.markdown("""
             <div class="card ranking-panel">
                 <div class="card-title">🌍 Ranking Global</div>
-                <div style="text-align: center; padding: 2rem;">
-                    <div style="font-size: 3rem; margin-bottom: 1rem;" class="construction-icon">🌍</div>
-                    <h3 style="color: #6c757d; margin-bottom: 1rem;">Global</h3>
-                    <p style="color: #6c757d; font-size: 0.9rem; margin-bottom: 1rem;">
-                        Ranking general de todos los EAs
+                <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin: 1rem; flex-grow: 1; display: flex; align-items: center; justify-content: center;">
+                    <p style="color: #6c757d; font-size: 0.9rem; margin: 0; text-align: center;">
+                        Próximamente disponible
                     </p>
-                    <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin-top: 1rem;">
-                        <p style="color: #6c757d; font-size: 0.8rem; margin: 0;">
-                            Próximamente disponible
-                        </p>
-                    </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -2879,17 +2872,10 @@ with tab3:
             st.markdown("""
             <div class="card ranking-panel">
                 <div class="card-title">🥇 Ranking Gold</div>
-                <div style="text-align: center; padding: 2rem;">
-                    <div style="font-size: 3rem; margin-bottom: 1rem;" class="construction-icon">🥇</div>
-                    <h3 style="color: #6c757d; margin-bottom: 1rem;">Gold</h3>
-                    <p style="color: #6c757d; font-size: 0.9rem; margin-bottom: 1rem;">
-                        Ranking de EAs premium
+                <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin: 1rem; flex-grow: 1; display: flex; align-items: center; justify-content: center;">
+                    <p style="color: #6c757d; font-size: 0.9rem; margin: 0; text-align: center;">
+                        Próximamente disponible
                     </p>
-                    <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin-top: 1rem;">
-                        <p style="color: #6c757d; font-size: 0.8rem; margin: 0;">
-                            Próximamente disponible
-                        </p>
-                    </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -2898,17 +2884,10 @@ with tab3:
             st.markdown("""
             <div class="card ranking-panel">
                 <div class="card-title">🥈 Ranking Silver</div>
-                <div style="text-align: center; padding: 2rem;">
-                    <div style="font-size: 3rem; margin-bottom: 1rem;" class="construction-icon">🥈</div>
-                    <h3 style="color: #6c757d; margin-bottom: 1rem;">Silver</h3>
-                    <p style="color: #6c757d; font-size: 0.9rem; margin-bottom: 1rem;">
-                        Ranking de EAs estándar
+                <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin: 1rem; flex-grow: 1; display: flex; align-items: center; justify-content: center;">
+                    <p style="color: #6c757d; font-size: 0.9rem; margin: 0; text-align: center;">
+                        Próximamente disponible
                     </p>
-                    <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin-top: 1rem;">
-                        <p style="color: #6c757d; font-size: 0.8rem; margin: 0;">
-                            Próximamente disponible
-                        </p>
-                    </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
