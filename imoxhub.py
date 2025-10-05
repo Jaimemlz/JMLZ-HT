@@ -1049,10 +1049,15 @@ def show_login_page():
         box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
         padding: 2rem;
         width: 100%;
+        min-width: 350px;
         max-width: 400px;
         border: 1px solid #e9ecef;
         text-align: center;
         margin: 0 auto;
+    }
+    
+    [data-testid="InputInstructions"] {
+        display: none !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -2133,7 +2138,7 @@ logo_base64 = get_base64_encoded_image("logo.png")
 col1, col2, col3 = st.columns([3, 1, 1])
 with col1:
     st.markdown(f"""
-    <div style="display: flex; align-items: center; margin-bottom: 0.5rem;">
+    <div style="display: flex; align-items: center; margin-bottom: 0.5rem; margin-left: 0.5rem;">
         <img src="data:image/png;base64,{logo_base64}" alt="Logo" style="height: 30px; margin-right: 10px;">
         <h1>IMOXHUB</h1>
         <div style="flex-grow: 1;"></div>
