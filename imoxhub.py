@@ -1023,21 +1023,7 @@ def show_login_page():
         display: flex;
         justify-content: center;
         align-items: center;
-        min-height: 100vh;
-        background-color: #f8f9fa;
-    }
-    .login-card {
-        background-color: white;
-        border-radius: 0.75rem;
-        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
         padding: 2rem;
-        width: 100%;
-        max-width: 400px;
-        border: 1px solid #e9ecef;
-        text-align: center;
-    }
-    .login-logo {
-        margin-bottom: 2rem;
     }
     .login-form {
         display: flex;
@@ -1046,7 +1032,27 @@ def show_login_page():
     }
     .login-title {
         color: #495057;
-        margin-bottom: 0.5rem;
+    }
+    /* Ocultar el contenido principal de Streamlit cuando se muestra el login */
+    .main .block-container {
+        padding-top: 0 !important;
+    }
+
+    .stMainBlockContainer{
+        width: auto !important;
+        min-width: 400px !important;
+    }
+
+    .stForm{
+        background-color: white;
+        border-radius: 0.75rem;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        padding: 2rem;
+        width: 100%;
+        max-width: 400px;
+        border: 1px solid #e9ecef;
+        text-align: center;
+        margin: 0 auto;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -1055,10 +1061,9 @@ def show_login_page():
     
     st.markdown(f"""
     <div class="login-container">
-        <div class="login-card">
+        <div class="">
             <div class="login-logo">
-                <img src="data:image/png;base64,{logo_base64}" alt="Logo" style="height: 60px; margin-bottom: 1rem;">
-                <h2 class="login-title">IMOXHUB</h2>
+                <img src="data:image/png;base64,{logo_base64}" alt="Logo" style="height: 100px;">
             </div>
         </div>
     </div>
