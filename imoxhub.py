@@ -8,6 +8,8 @@ import pandas as pd
 from datetime import datetime, timedelta
 import numpy as np
 import base64
+import requests
+import json
 
 # Configurar tema claro por defecto para Plotly
 pio.templates.default = "plotly_white"
@@ -171,6 +173,122 @@ def crear_ranking_ea(df):
     ranking_df['Score_Formateado'] = ranking_df['Score_Rentabilidad'].apply(lambda x: f"{x:.2f}")
     
     return ranking_df
+
+# =============================================================================
+# FUNCIONES PARA CONECTAR CON LA API DEL BACKEND
+# =============================================================================
+
+def get_payouts_from_api():
+    """
+    Obtiene todos los payouts desde la API del backend
+    """
+    try:
+        response = requests.get("http://localhost:8000/payouts/")
+        if response.status_code == 200:
+            return response.json()
+        else:
+            st.error(f"Error al obtener payouts: {response.status_code}")
+            return []
+    except requests.exceptions.ConnectionError:
+        st.error("No se puede conectar con el backend. Asegúrate de que esté ejecutándose en http://localhost:8000")
+        return []
+    except Exception as e:
+        st.error(f"Error inesperado: {str(e)}")
+        return []
+
+def get_users_from_api():
+    """
+    Obtiene todos los usuarios desde la API del backend
+    """
+    try:
+        response = requests.get("http://localhost:8000/users/")
+        if response.status_code == 200:
+            return response.json()
+        else:
+            st.error(f"Error al obtener usuarios: {response.status_code}")
+            return []
+    except requests.exceptions.ConnectionError:
+        st.error("No se puede conectar con el backend. Asegúrate de que esté ejecutándose en http://localhost:8000")
+        return []
+    except Exception as e:
+        st.error(f"Error inesperado: {str(e)}")
+        return []
+
+def create_monthly_payout_ranking(payouts_data, users_data, selected_month_offset=0):
+    """
+    Crea un ranking mensual de payouts agrupado por usuario
+    
+    Args:
+        payouts_data: Lista de payouts desde la API
+        users_data: Lista de usuarios desde la API
+        selected_month_offset: Offset del mes (0 = actual, -1 = anterior, etc.)
+    
+    Returns:
+        DataFrame con el ranking mensual
+    """
+    if not payouts_data:
+        return pd.DataFrame()
+    
+    # Convertir a DataFrame
+    df_payouts = pd.DataFrame(payouts_data)
+    
+    # Convertir fechas
+    df_payouts['fecha_payout'] = pd.to_datetime(df_payouts['fecha_payout'], errors='coerce')
+    df_payouts['fecha_creacion'] = pd.to_datetime(df_payouts['fecha_creacion'], errors='coerce')
+    
+    # Calcular el mes objetivo
+    target_date = datetime.now() + timedelta(days=30 * selected_month_offset)
+    target_year = target_date.year
+    target_month = target_date.month
+    
+    # Filtrar payouts del mes objetivo (solo los que tienen fecha_payout)
+    df_payouts_filtered = df_payouts[
+        (df_payouts['fecha_payout'].dt.year == target_year) &
+        (df_payouts['fecha_payout'].dt.month == target_month)
+    ].copy()
+    
+    if df_payouts_filtered.empty:
+        return pd.DataFrame()
+    
+    # Convertir payout a float
+    df_payouts_filtered['payout_amount'] = df_payouts_filtered['payout'].astype(float)
+    
+    # Agrupar por nick y sumar payouts
+    monthly_totals = df_payouts_filtered.groupby('nick').agg({
+        'payout_amount': 'sum',
+        'payout': 'count'
+    }).reset_index()
+    
+    monthly_totals.columns = ['nick', 'total_payout', 'num_payouts']
+    
+    # Crear diccionario de usuarios para obtener nombres
+    users_dict = {user['nick']: user['name'] for user in users_data}
+    
+    # Agregar nombres de usuarios
+    monthly_totals['name'] = monthly_totals['nick'].map(users_dict)
+    monthly_totals['name'] = monthly_totals['name'].fillna(monthly_totals['nick'])
+    
+    # Ordenar por total de payout (descendente)
+    monthly_totals = monthly_totals.sort_values('total_payout', ascending=False)
+    
+    # Agregar posición en el ranking
+    monthly_totals['position'] = range(1, len(monthly_totals) + 1)
+    
+    # Formatear montos
+    monthly_totals['total_payout_formatted'] = monthly_totals['total_payout'].apply(lambda x: f"${x:,.2f}")
+    
+    return monthly_totals
+
+def get_month_name(month_offset):
+    """
+    Obtiene el nombre del mes basado en el offset
+    """
+    target_date = datetime.now() + timedelta(days=30 * month_offset)
+    month_names = [
+        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+    ]
+    return month_names[target_date.month - 1]
 
 # =============================================================================
 # FUNCIONES PARA ANÁLISIS SECUENCIAL DE PROP FIRM
@@ -2950,6 +3068,13 @@ with tab3:
                 st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
         
+        # Obtener datos del backend
+        payouts_data = get_payouts_from_api()
+        users_data = get_users_from_api()
+        
+        # Crear ranking mensual
+        monthly_ranking = create_monthly_payout_ranking(payouts_data, users_data, st.session_state.selected_month)
+        
         # Crear tres columnas para los paneles de ranking (responsive)
         col1, col2, col3 = st.columns([1, 1, 1])
         
@@ -2957,37 +3082,186 @@ with tab3:
             st.markdown("""
             <div class="card ranking-panel">
                 <div class="card-title">🌍 Ranking Global</div>
-                <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin: 1rem; flex-grow: 1; display: flex; align-items: center; justify-content: center;">
-                    <p style="color: #6c757d; font-size: 0.9rem; margin: 0; text-align: center;">
-                        Próximamente disponible
+            """, unsafe_allow_html=True)
+            
+            if not monthly_ranking.empty:
+                # Mostrar ranking global
+                st.markdown(f"""
+                <div style="padding: 1rem;">
+                    <h4 style="color: #495057; margin-bottom: 1rem; text-align: center;">
+                        💰 Ranking de Payouts - {get_month_name(st.session_state.selected_month)}
+                    </h4>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Crear tabla de ranking
+                ranking_display = monthly_ranking[['position', 'name', 'total_payout_formatted', 'num_payouts']].copy()
+                ranking_display.columns = ['Posición', 'Usuario', 'Total Payout', 'N° Payouts']
+                
+                # Configuración de columnas
+                column_config = {
+                    "Posición": st.column_config.NumberColumn(
+                        "Posición",
+                        help="Posición en el ranking",
+                        format="%d"
+                    ),
+                    "Usuario": st.column_config.TextColumn(
+                        "Usuario",
+                        help="Nombre del usuario"
+                    ),
+                    "Total Payout": st.column_config.TextColumn(
+                        "Total Payout",
+                        help="Total de payouts del mes"
+                    ),
+                    "N° Payouts": st.column_config.NumberColumn(
+                        "N° Payouts",
+                        help="Número de payouts realizados",
+                        format="%d"
+                    )
+                }
+                
+                st.dataframe(
+                    ranking_display,
+                    use_container_width=True,
+                    column_config=column_config,
+                    hide_index=True
+                )
+                
+                # Mostrar estadísticas adicionales
+                total_payouts = monthly_ranking['total_payout'].sum()
+                total_users = len(monthly_ranking)
+                avg_payout = total_payouts / total_users if total_users > 0 else 0
+                
+                st.markdown(f"""
+                <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin-top: 1rem;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                        <span style="color: #6c757d;">Total Payouts:</span>
+                        <span style="font-weight: bold; color: #28a745;">${total_payouts:,.2f}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                        <span style="color: #6c757d;">Usuarios Activos:</span>
+                        <span style="font-weight: bold; color: #007bff;">{total_users}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="color: #6c757d;">Promedio por Usuario:</span>
+                        <span style="font-weight: bold; color: #ffc107;">${avg_payout:,.2f}</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin: 1rem; text-align: center;">
+                    <p style="color: #6c757d; font-size: 0.9rem; margin: 0;">
+                        No hay payouts para este mes
                     </p>
                 </div>
-            </div>
-            """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
+            
+            st.markdown('</div>', unsafe_allow_html=True)
         
         with col2:
             st.markdown("""
             <div class="card ranking-panel">
                 <div class="card-title">🥇 Ranking Gold</div>
-                <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin: 1rem; flex-grow: 1; display: flex; align-items: center; justify-content: center;">
-                    <p style="color: #6c757d; font-size: 0.9rem; margin: 0; text-align: center;">
-                        Próximamente disponible
+            """, unsafe_allow_html=True)
+            
+            if not monthly_ranking.empty:
+                # Filtrar usuarios Gold
+                gold_users = [user for user in users_data if user['rank'] == 'gold']
+                gold_nicks = [user['nick'] for user in gold_users]
+                gold_ranking = monthly_ranking[monthly_ranking['nick'].isin(gold_nicks)]
+                
+                if not gold_ranking.empty:
+                    st.markdown(f"""
+                    <div style="padding: 1rem;">
+                        <h4 style="color: #ffc107; margin-bottom: 1rem; text-align: center;">
+                            🥇 Ranking Gold - {get_month_name(st.session_state.selected_month)}
+                        </h4>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Mostrar top 3 Gold
+                    top_gold = gold_ranking.head(3)
+                    for idx, (_, row) in enumerate(top_gold.iterrows()):
+                        medal = "🥇" if idx == 0 else "🥈" if idx == 1 else "🥉"
+                        st.markdown(f"""
+                        <div style="background: #fff3cd; padding: 0.75rem; margin: 0.5rem 0; border-radius: 8px; border-left: 4px solid #ffc107;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-size: 1.2rem;">{medal} {row['name']}</span>
+                                <span style="font-weight: bold; color: #856404;">{row['total_payout_formatted']}</span>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    st.markdown("""
+                    <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin: 1rem; text-align: center;">
+                        <p style="color: #6c757d; font-size: 0.9rem; margin: 0;">
+                            No hay usuarios Gold con payouts este mes
+                        </p>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin: 1rem; text-align: center;">
+                    <p style="color: #6c757d; font-size: 0.9rem; margin: 0;">
+                        No hay datos disponibles
                     </p>
                 </div>
-            </div>
-            """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
+            
+            st.markdown('</div>', unsafe_allow_html=True)
         
         with col3:
             st.markdown("""
             <div class="card ranking-panel">
                 <div class="card-title">🥈 Ranking Silver</div>
-                <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin: 1rem; flex-grow: 1; display: flex; align-items: center; justify-content: center;">
-                    <p style="color: #6c757d; font-size: 0.9rem; margin: 0; text-align: center;">
-                        Próximamente disponible
+            """, unsafe_allow_html=True)
+            
+            if not monthly_ranking.empty:
+                # Filtrar usuarios Silver
+                silver_users = [user for user in users_data if user['rank'] == 'silver']
+                silver_nicks = [user['nick'] for user in silver_users]
+                silver_ranking = monthly_ranking[monthly_ranking['nick'].isin(silver_nicks)]
+                
+                if not silver_ranking.empty:
+                    st.markdown(f"""
+                    <div style="padding: 1rem;">
+                        <h4 style="color: #6c757d; margin-bottom: 1rem; text-align: center;">
+                            🥈 Ranking Silver - {get_month_name(st.session_state.selected_month)}
+                        </h4>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Mostrar top 3 Silver
+                    top_silver = silver_ranking.head(3)
+                    for idx, (_, row) in enumerate(top_silver.iterrows()):
+                        medal = "🥇" if idx == 0 else "🥈" if idx == 1 else "🥉"
+                        st.markdown(f"""
+                        <div style="background: #f8f9fa; padding: 0.75rem; margin: 0.5rem 0; border-radius: 8px; border-left: 4px solid #6c757d;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-size: 1.2rem;">{medal} {row['name']}</span>
+                                <span style="font-weight: bold; color: #495057;">{row['total_payout_formatted']}</span>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    st.markdown("""
+                    <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin: 1rem; text-align: center;">
+                        <p style="color: #6c757d; font-size: 0.9rem; margin: 0;">
+                            No hay usuarios Silver con payouts este mes
+                        </p>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin: 1rem; text-align: center;">
+                    <p style="color: #6c757d; font-size: 0.9rem; margin: 0;">
+                        No hay datos disponibles
                     </p>
                 </div>
-            </div>
-            """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
+            
+            st.markdown('</div>', unsafe_allow_html=True)
     
     with ranking_sub_tab2:
         st.markdown("""
