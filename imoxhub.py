@@ -955,7 +955,7 @@ def display_evolution_interface(df_csv, config):
             
             # Header del challenge dentro del panel
             st.markdown(f"""
-            <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; border-left: 4px solid {status_color};">
+            <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; border-left: 7px solid {status_color};">
                 <h4 style="margin: 0; color: {status_color};">Challenge {challenge_num}</h4>
                 <p style="margin: 0.5rem 0 0 0; color: #6c757d;">
                     <strong>Estado Final:</strong> {final_status} | 
@@ -1188,6 +1188,49 @@ def show_login_page():
     [data-testid="InputInstructions"] {
         display: none !important;
     }
+    
+    /* Eliminar líneas separadoras entre filas de las tablas */
+    [data-testid="stDataFrame"] table tbody tr {
+        border-bottom: none !important;
+    }
+    
+    [data-testid="stDataFrame"] table tbody tr td {
+        border-bottom: none !important;
+    }
+    
+    /* Mantener solo las líneas del header */
+    [data-testid="stDataFrame"] table thead tr {
+        border-bottom: 1px solid #e0e0e0 !important;
+    }
+    
+    [data-testid="stDataFrame"] table thead tr th {
+        border-bottom: 1px solid #e0e0e0 !important;
+    }
+    
+    /* Alinear las tarjetas de ranking horizontalmente */
+    .ranking-panel {
+        display: flex !important;
+        flex-direction: column !important;
+        height: 100% !important;
+    }
+    
+    .ranking-panel .card-title {
+        flex-shrink: 0 !important;
+        margin-bottom: 0 !important;
+        height: 60px !important;
+        display: flex !important;
+        align-items: center !important;
+    }
+    
+    /* Alinear los headers de las columnas */
+    div[data-testid="column"] {
+        align-items: flex-start !important;
+    }
+    
+    div[data-testid="column"] > div {
+        align-items: flex-start !important;
+    }
+    
     </style>
     """, unsafe_allow_html=True)
     
@@ -2029,6 +2072,15 @@ st.markdown("""
         align-items: center !important;
         justify-content: center !important;
     }
+
+    .st-emotion-cache-wfksaw:last-child {
+        align-items: center !important;
+        justify-content: normal !important;
+    }
+
+    .stElementContainer:has(.ranking-total) {
+        margin-top: auto !important;
+    }
     
     /* Estilos para tarjetas de promociones completas */
     .promo-card-full {
@@ -2564,7 +2616,7 @@ with tab1:
                         
                         # Explicación del ranking
                         st.markdown("""
-                        <div style="margin-top: -1rem; padding: 1rem; background-color: #f8f9fa; border-left: 4px solid #6c757d;">
+                        <div style="margin-top: -1rem; padding: 1rem; background-color: #f8f9fa; border-left: 7px solid #6c757d;">
                             <h4 style="margin: 0 0 0.5rem 0; color: #495057;">📊 Cómo se calcula el Score de Rentabilidad:</h4>
                             <p style="margin: 0; color: #6c757d; font-size: 0.9rem;">
                                 <strong>Score de Rentabilidad = Win Rate × Ratio Riesgo-Beneficio</strong><br>
@@ -3095,69 +3147,60 @@ with tab3:
             st.markdown("""
             <div class="card ranking-panel">
                 <div class="card-title">🌍 Ranking Global</div>
+                <div class="ranking-content">
             """, unsafe_allow_html=True)
             
             if not global_ranking.empty:
-                # Mostrar ranking global
-                st.markdown(f"""
-                <div style="padding: 1rem;">
-                    <h4 style="color: #495057; margin-bottom: 1rem; text-align: center;">
-                        💰 Ranking de Payouts - {get_month_name(st.session_state.selected_month)}
-                    </h4>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Crear tabla de ranking
-                ranking_display = global_ranking[['position', 'name', 'total_payout_formatted', 'num_payouts']].copy()
-                ranking_display.columns = ['Posición', 'Usuario', 'Total Payout', 'N° Payouts']
-                
-                # Configuración de columnas
-                column_config = {
-                    "Posición": st.column_config.NumberColumn(
-                        "Posición",
-                        help="Posición en el ranking",
-                        format="%d"
-                    ),
-                    "Usuario": st.column_config.TextColumn(
-                        "Usuario",
-                        help="Nombre del usuario"
-                    ),
-                    "Total Payout": st.column_config.TextColumn(
-                        "Total Payout",
-                        help="Total de payouts del mes"
-                    ),
-                    "N° Payouts": st.column_config.NumberColumn(
-                        "N° Payouts",
-                        help="Número de payouts realizados",
-                        format="%d"
-                    )
-                }
-                
-                st.dataframe(
-                    ranking_display,
-                    use_container_width=True,
-                    column_config=column_config,
-                    hide_index=True
-                )
+                # Crear expanders para cada usuario en el ranking
+                for _, row in global_ranking.iterrows():
+                    position = row['position']
+                    name = row['name']
+                    total_payout = row['total_payout_formatted']
+                    num_payouts = row['num_payouts']
+                    
+                    # Medalla según posición
+                    medal = '🥇' if position == 1 else '🥈' if position == 2 else '🥉' if position == 3 else f"{position}."
+                    
+                    # Obtener payouts detallados del usuario
+                    user_payouts = [p for p in payouts_data if p['nick'] == row['nick'] and p['fecha_payout']]
+                    
+                    # Filtrar por mes seleccionado
+                    target_date = datetime.now() + timedelta(days=30 * st.session_state.selected_month)
+                    target_year = target_date.year
+                    target_month = target_date.month
+                    
+                    monthly_payouts = []
+                    for payout in user_payouts:
+                        payout_date = datetime.fromisoformat(payout['fecha_payout'].replace('Z', '+00:00'))
+                        if payout_date.year == target_year and payout_date.month == target_month:
+                            monthly_payouts.append(payout)
+                    
+                    # Crear expander para el usuario
+                    with st.expander(f"{medal} {name} - {total_payout} ({num_payouts} payouts)", expanded=False):
+                        if monthly_payouts:
+                            # Crear DataFrame con los payouts detallados
+                            payouts_df = pd.DataFrame(monthly_payouts)
+                            payouts_df['fecha_payout'] = pd.to_datetime(payouts_df['fecha_payout'])
+                            payouts_df = payouts_df.sort_values('fecha_payout')
+                            
+                            # Seleccionar y renombrar columnas
+                            display_df = payouts_df[['fecha_payout', 'payout', 'herramienta']].copy()
+                            display_df.columns = ['Fecha', 'Monto', 'Herramienta']
+                            display_df['Fecha'] = display_df['Fecha'].dt.strftime('%d/%m/%Y')
+                            display_df['Monto'] = display_df['Monto'].apply(lambda x: f"${float(x):,.2f}")
+                            
+                            st.dataframe(display_df, use_container_width=True, hide_index=True)
+                        else:
+                            st.info("No hay payouts detallados para este mes")
                 
                 # Mostrar estadísticas adicionales
                 total_payouts = global_ranking['total_payout'].sum()
-                total_users = len(global_ranking)
-                avg_payout = total_payouts / total_users if total_users > 0 else 0
                 
                 st.markdown(f"""
-                <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin-top: 1rem;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                        <span style="color: #6c757d;">Total Payouts:</span>
-                        <span style="font-weight: bold; color: #28a745;">${total_payouts:,.2f}</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                        <span style="color: #6c757d;">Usuarios Activos:</span>
-                        <span style="font-weight: bold; color: #007bff;">{total_users}</span>
-                    </div>
+                <div class="ranking-total" style="background: white; padding: 1rem; border-radius: 8px; margin-top: 1rem;">
                     <div style="display: flex; justify-content: space-between;">
-                        <span style="color: #6c757d;">Promedio por Usuario:</span>
-                        <span style="font-weight: bold; color: #ffc107;">${avg_payout:,.2f}</span>
+                        <span style="color: #6c757d;">Total:</span>
+                        <span style="font-weight: bold; color: #28a745;">${total_payouts:,.2f}</span>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -3170,54 +3213,69 @@ with tab3:
                 </div>
                 """, unsafe_allow_html=True)
             
-            st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown('</div></div>', unsafe_allow_html=True)
         
         with col2:
             st.markdown("""
             <div class="card ranking-panel">
                 <div class="card-title">🥇 Ranking Gold</div>
+                <div class="ranking-content">
             """, unsafe_allow_html=True)
             
             if not gold_ranking.empty:
-                st.markdown(f"""
-                <div style="padding: 1rem;">
-                    <h4 style="color: #ffc107; margin-bottom: 1rem; text-align: center;">
-                        🥇 Ranking Gold - {get_month_name(st.session_state.selected_month)}
-                    </h4>
-                </div>
-                """, unsafe_allow_html=True)
+                # Crear expanders para cada usuario Gold
+                for _, row in gold_ranking.iterrows():
+                    position = row['position']
+                    name = row['name']
+                    total_payout = row['total_payout_formatted']
+                    num_payouts = row['num_payouts']
+                    
+                    # Medalla según posición
+                    medal = '🥇' if position == 1 else '🥈' if position == 2 else '🥉' if position == 3 else f"{position}."
+                    
+                    # Obtener payouts detallados del usuario
+                    user_payouts = [p for p in payouts_data if p['nick'] == row['nick'] and p['fecha_payout']]
+                    
+                    # Filtrar por mes seleccionado
+                    target_date = datetime.now() + timedelta(days=30 * st.session_state.selected_month)
+                    target_year = target_date.year
+                    target_month = target_date.month
+                    
+                    monthly_payouts = []
+                    for payout in user_payouts:
+                        payout_date = datetime.fromisoformat(payout['fecha_payout'].replace('Z', '+00:00'))
+                        if payout_date.year == target_year and payout_date.month == target_month:
+                            monthly_payouts.append(payout)
+                    
+                    # Crear expander para el usuario
+                    with st.expander(f"{medal} {name} - {total_payout} ({num_payouts} payouts)", expanded=False):
+                        if monthly_payouts:
+                            # Crear DataFrame con los payouts detallados
+                            payouts_df = pd.DataFrame(monthly_payouts)
+                            payouts_df['fecha_payout'] = pd.to_datetime(payouts_df['fecha_payout'])
+                            payouts_df = payouts_df.sort_values('fecha_payout')
+                            
+                            # Seleccionar y renombrar columnas
+                            display_df = payouts_df[['fecha_payout', 'payout', 'herramienta']].copy()
+                            display_df.columns = ['Fecha', 'Monto', 'Herramienta']
+                            display_df['Fecha'] = display_df['Fecha'].dt.strftime('%d/%m/%Y')
+                            display_df['Monto'] = display_df['Monto'].apply(lambda x: f"${float(x):,.2f}")
+                            
+                            st.dataframe(display_df, use_container_width=True, hide_index=True)
+                        else:
+                            st.info("No hay payouts detallados para este mes")
                 
-                # Mostrar todos los usuarios Gold
-                for idx, (_, row) in enumerate(gold_ranking.iterrows()):
-                    medal = "🥇" if idx == 0 else "🥈" if idx == 1 else "🥉" if idx == 2 else "🏅"
-                    st.markdown(f"""
-                    <div style="background: #fff3cd; padding: 0.75rem; margin: 0.5rem 0; border-radius: 8px; border-left: 4px solid #ffc107;">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-size: 1.2rem;">{medal} {row['name']}</span>
-                            <span style="font-weight: bold; color: #856404;">{row['total_payout_formatted']}</span>
-                        </div>
-                        <div style="font-size: 0.8rem; color: #856404; margin-top: 0.25rem;">
-                            {row['num_payouts']} payout{'s' if row['num_payouts'] > 1 else ''}
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                # Estadísticas Gold
+                # Mostrar estadísticas Gold
                 total_gold = gold_ranking['total_payout'].sum()
-                avg_gold = total_gold / len(gold_ranking) if len(gold_ranking) > 0 else 0
                 
-                st.markdown(f"""
-                <div style="background: #fff3cd; padding: 0.75rem; border-radius: 8px; margin-top: 1rem; border-left: 4px solid #ffc107;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
-                        <span style="color: #856404; font-size: 0.9rem;">Total Gold:</span>
-                        <span style="font-weight: bold; color: #856404; font-size: 0.9rem;">${total_gold:,.2f}</span>
-                    </div>
+                st.html(f"""
+                <div class="ranking-total" style="background: #fff3cd; padding: 1rem; border-radius: 8px; margin-top: 1rem; border-left: 7px solid #ffc107;">
                     <div style="display: flex; justify-content: space-between;">
-                        <span style="color: #856404; font-size: 0.9rem;">Promedio:</span>
-                        <span style="font-weight: bold; color: #856404; font-size: 0.9rem;">${avg_gold:,.2f}</span>
+                        <span style="color: #856404;">Total Gold:</span>
+                        <span style="font-weight: bold; color: #856404;">${total_gold:,.2f}</span>
                     </div>
                 </div>
-                """, unsafe_allow_html=True)
+                """)
             else:
                 st.markdown("""
                 <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin: 1rem; text-align: center;">
@@ -3227,51 +3285,66 @@ with tab3:
                 </div>
                 """, unsafe_allow_html=True)
             
-            st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown('</div></div>', unsafe_allow_html=True)
         
         with col3:
             st.markdown("""
             <div class="card ranking-panel">
                 <div class="card-title">🥈 Ranking Silver</div>
+                <div class="ranking-content">
             """, unsafe_allow_html=True)
             
             if not silver_ranking.empty:
-                st.markdown(f"""
-                <div style="padding: 1rem;">
-                    <h4 style="color: #6c757d; margin-bottom: 1rem; text-align: center;">
-                        🥈 Ranking Silver - {get_month_name(st.session_state.selected_month)}
-                    </h4>
-                </div>
-                """, unsafe_allow_html=True)
+                # Crear expanders para cada usuario Silver
+                for _, row in silver_ranking.iterrows():
+                    position = row['position']
+                    name = row['name']
+                    total_payout = row['total_payout_formatted']
+                    num_payouts = row['num_payouts']
+                    
+                    # Medalla según posición
+                    medal = '🥇' if position == 1 else '🥈' if position == 2 else '🥉' if position == 3 else f"{position}."
+                    
+                    # Obtener payouts detallados del usuario
+                    user_payouts = [p for p in payouts_data if p['nick'] == row['nick'] and p['fecha_payout']]
+                    
+                    # Filtrar por mes seleccionado
+                    target_date = datetime.now() + timedelta(days=30 * st.session_state.selected_month)
+                    target_year = target_date.year
+                    target_month = target_date.month
+                    
+                    monthly_payouts = []
+                    for payout in user_payouts:
+                        payout_date = datetime.fromisoformat(payout['fecha_payout'].replace('Z', '+00:00'))
+                        if payout_date.year == target_year and payout_date.month == target_month:
+                            monthly_payouts.append(payout)
+                    
+                    # Crear expander para el usuario
+                    with st.expander(f"{medal} {name} - {total_payout} ({num_payouts} payouts)", expanded=False):
+                        if monthly_payouts:
+                            # Crear DataFrame con los payouts detallados
+                            payouts_df = pd.DataFrame(monthly_payouts)
+                            payouts_df['fecha_payout'] = pd.to_datetime(payouts_df['fecha_payout'])
+                            payouts_df = payouts_df.sort_values('fecha_payout')
+                            
+                            # Seleccionar y renombrar columnas
+                            display_df = payouts_df[['fecha_payout', 'payout', 'herramienta']].copy()
+                            display_df.columns = ['Fecha', 'Monto', 'Herramienta']
+                            display_df['Fecha'] = display_df['Fecha'].dt.strftime('%d/%m/%Y')
+                            display_df['Monto'] = display_df['Monto'].apply(lambda x: f"${float(x):,.2f}")
+                            
+                            st.dataframe(display_df, use_container_width=True, hide_index=True)
+                        else:
+                            st.info("No hay payouts detallados para este mes")
                 
-                # Mostrar todos los usuarios Silver
-                for idx, (_, row) in enumerate(silver_ranking.iterrows()):
-                    medal = "🥇" if idx == 0 else "🥈" if idx == 1 else "🥉" if idx == 2 else "🏅"
-                    st.markdown(f"""
-                    <div style="background: #f8f9fa; padding: 0.75rem; margin: 0.5rem 0; border-radius: 8px; border-left: 4px solid #6c757d;">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-size: 1.2rem;">{medal} {row['name']}</span>
-                            <span style="font-weight: bold; color: #495057;">{row['total_payout_formatted']}</span>
-                        </div>
-                        <div style="font-size: 0.8rem; color: #6c757d; margin-top: 0.25rem;">
-                            {row['num_payouts']} payout{'s' if row['num_payouts'] > 1 else ''}
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                # Estadísticas Silver
+                # Mostrar estadísticas Silver
                 total_silver = silver_ranking['total_payout'].sum()
-                avg_silver = total_silver / len(silver_ranking) if len(silver_ranking) > 0 else 0
                 
                 st.markdown(f"""
-                <div style="background: #f8f9fa; padding: 0.75rem; border-radius: 8px; margin-top: 1rem; border-left: 4px solid #6c757d;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
-                        <span style="color: #6c757d; font-size: 0.9rem;">Total Silver:</span>
-                        <span style="font-weight: bold; color: #6c757d; font-size: 0.9rem;">${total_silver:,.2f}</span>
-                    </div>
+                <div class="ranking-total" style="background: white; padding: 1rem; border-radius: 8px; margin-top: 1rem; border-left: 7px solid #6c757d;">
                     <div style="display: flex; justify-content: space-between;">
-                        <span style="color: #6c757d; font-size: 0.9rem;">Promedio:</span>
-                        <span style="font-weight: bold; color: #6c757d; font-size: 0.9rem;">${avg_silver:,.2f}</span>
+                        <span style="color: #6c757d;">Total Silver:</span>
+                        <span style="font-weight: bold; color: #6c757d;">${total_silver:,.2f}</span>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -3284,7 +3357,7 @@ with tab3:
                 </div>
                 """, unsafe_allow_html=True)
             
-            st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown('</div></div>', unsafe_allow_html=True)
     
     with ranking_sub_tab2:
         st.markdown("""
