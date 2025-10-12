@@ -2,3 +2,4 @@ streamlit
 plotly
 beautifulsoup4
 pandas
+Pillow>=9.0.0
