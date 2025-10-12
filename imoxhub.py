@@ -3159,7 +3159,17 @@ with tab3:
                     num_payouts = row['num_payouts']
                     
                     # Medalla según posición
-                    medal = '🥇' if position == 1 else '🥈' if position == 2 else '🥉' if position == 3 else f"{position}."
+                    medal = ('🥇' if position == 1 else 
+                             '🥈' if position == 2 else 
+                             '🥉' if position == 3 else 
+                             '➃' if position == 4 else
+                             '➄' if position == 5 else
+                             '➅' if position == 6 else
+                             '➆' if position == 7 else
+                             '➇' if position == 8 else
+                             '➈' if position == 9 else
+                             '➉' if position == 10 else
+                             f"{position}.")
                     
                     # Obtener payouts detallados del usuario
                     user_payouts = [p for p in payouts_data if p['nick'] == row['nick'] and p['fecha_payout']]
@@ -3231,7 +3241,17 @@ with tab3:
                     num_payouts = row['num_payouts']
                     
                     # Medalla según posición
-                    medal = '🥇' if position == 1 else '🥈' if position == 2 else '🥉' if position == 3 else f"{position}."
+                    medal = ('🥇' if position == 1 else 
+                             '🥈' if position == 2 else 
+                             '🥉' if position == 3 else 
+                             '❶' if position == 4 else
+                             '❷' if position == 5 else
+                             '❸' if position == 6 else
+                             '❹' if position == 7 else
+                             '❺' if position == 8 else
+                             '❻' if position == 9 else
+                             '❼' if position == 10 else
+                             f"{position}.")
                     
                     # Obtener payouts detallados del usuario
                     user_payouts = [p for p in payouts_data if p['nick'] == row['nick'] and p['fecha_payout']]
@@ -3303,7 +3323,17 @@ with tab3:
                     num_payouts = row['num_payouts']
                     
                     # Medalla según posición
-                    medal = '🥇' if position == 1 else '🥈' if position == 2 else '🥉' if position == 3 else f"{position}."
+                    medal = ('🥇' if position == 1 else 
+                             '🥈' if position == 2 else 
+                             '🥉' if position == 3 else 
+                             '❶' if position == 4 else
+                             '❷' if position == 5 else
+                             '❸' if position == 6 else
+                             '❹' if position == 7 else
+                             '❺' if position == 8 else
+                             '❻' if position == 9 else
+                             '❼' if position == 10 else
+                             f"{position}.")
                     
                     # Obtener payouts detallados del usuario
                     user_payouts = [p for p in payouts_data if p['nick'] == row['nick'] and p['fecha_payout']]
