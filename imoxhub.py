@@ -10,9 +10,97 @@ import numpy as np
 import base64
 import requests
 import json
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
+import io
 
 # Configurar tema claro por defecto para Plotly
 pio.templates.default = "plotly_white"
+
+# AÑADIR ESTAS FUNCIONES AQUÍ (después de la línea 17)
+def get_medal_emoji(position):
+    """Obtener emoji de medalla según posición"""
+    medals = {
+        1: '🥇', 2: '🥈', 3: '🥉',
+        4: '➃', 5: '➄', 6: '➅', 7: '➆', 8: '➇', 9: '➈', 10: '➉'
+    }
+    return medals.get(position, f"{position}.")
+
+def create_custom_instagram_story(ranking_data, config=None):
+    """Crea una imagen personalizable para Instagram Stories"""
+    
+    if config is None:
+        config = {}
+    
+    width = 1080
+    height = 1920
+    background_color = '#1a1a1a'
+    title_color = '#ffffff'
+    name_color = '#ffffff'
+    score_color = '#00ff88'
+    medal_color = '#ffd700'
+    accent_color = '#ff6b6b'
+    title = config.get('title', '🏆 RANKING GLOBAL')
+    subtitle = config.get('subtitle', 'Top 10 Mejores Jugadores')
+    watermark = config.get('watermark', '@tu_marca')
+    date_text = datetime.now().strftime('%d/%m/%Y')
+    
+    # Crear imagen base
+    img = Image.new('RGB', (width, height), color=background_color)
+    draw = ImageDraw.Draw(img)
+    
+    # Cargar fuentes
+    try:
+        title_font = ImageFont.truetype("Arial Bold", 80)
+        subtitle_font = ImageFont.truetype("Arial", 40)
+        name_font = ImageFont.truetype("Arial", 50)
+        score_font = ImageFont.truetype("Arial Bold", 45)
+        watermark_font = ImageFont.truetype("Arial", 30)
+        date_font = ImageFont.truetype("Arial", 25)
+    except:
+        title_font = ImageFont.load_default()
+        subtitle_font = ImageFont.load_default()
+        name_font = ImageFont.load_default()
+        score_font = ImageFont.load_default()
+        watermark_font = ImageFont.load_default()
+        date_font = ImageFont.load_default()
+    
+    # Título principal
+    draw.text((width//2, 200), title, fill=title_color, font=title_font, anchor='mm')
+    
+    # Subtítulo
+    draw.text((width//2, 280), subtitle, fill=accent_color, font=subtitle_font, anchor='mm')
+    
+    # Fecha
+    draw.text((width//2, 1850), date_text, fill='#888888', font=date_font, anchor='mm')
+    
+    # Ranking
+    for i, (position, name, score) in enumerate(ranking_data[:10]):
+        y_pos = 400 + i * 140
+        
+        # Medalla según posición
+        medal = get_medal_emoji(position)
+        
+        # Fondo para cada fila
+        row_rect = [50, y_pos-50, width-50, y_pos+50]
+        draw.rectangle(row_rect, fill='#2a2a2a', outline='#333333', width=2)
+        
+        # Medalla
+        draw.text((100, y_pos), medal, fill=medal_color, font=name_font, anchor='mm')
+        
+        # Nombre
+        draw.text((200, y_pos), name, fill=name_color, font=name_font, anchor='lm')
+        
+        # Score
+        draw.text((width - 100, y_pos), score, fill=score_color, font=score_font, anchor='rm')
+        
+        # Línea decorativa
+        line_y = y_pos + 30
+        draw.line([(200, line_y), (width-150, line_y)], fill='#333333', width=1)
+    
+    # Marca de agua
+    draw.text((width//2, 1800), watermark, fill='#666666', font=watermark_font, anchor='mm')
+    
+    return img
 
 # Función para codificar imágenes en base64
 def get_base64_encoded_image(image_path):
@@ -3144,11 +3232,80 @@ with tab3:
         col1, col2, col3 = st.columns([1, 1, 1])
         
         with col1:
-            st.markdown("""
-            <div class="card ranking-panel">
-                <div class="card-title">🌍 Ranking Global</div>
-                <div class="ranking-content">
-            """, unsafe_allow_html=True)
+            # Crear columnas para título y botón
+            title_col, share_col = st.columns([4, 1])
+            
+            with title_col:
+                st.markdown("""
+                <div class="card ranking-panel">
+                    <div class="card-title">🌍 Ranking Global</div>
+                    <div class="ranking-content">
+                """, unsafe_allow_html=True)
+            
+            with share_col:
+                st.markdown("<br>", unsafe_allow_html=True)  # Espaciado
+                
+                # Preparar datos del ranking
+                ranking_data = []
+                for _, row in global_ranking.head(10).iterrows():
+                    ranking_data.append((
+                        row['position'],
+                        row['name'],
+                        row['total_payout_formatted']
+                    ))
+                
+                # Función para generar imagen
+                def generate_ranking_image(ranking_data):
+                    from PIL import Image, ImageDraw, ImageFont
+                    import io
+                    
+                    width, height = 1080, 1920
+                    img = Image.new('RGB', (width, height), color='#1a1a1a')
+                    draw = ImageDraw.Draw(img)
+                    
+                    try:
+                        title_font = ImageFont.truetype("Arial Bold", 80)
+                        name_font = ImageFont.truetype("Arial", 50)
+                        score_font = ImageFont.truetype("Arial Bold", 45)
+                    except:
+                        title_font = ImageFont.load_default()
+                        name_font = ImageFont.load_default()
+                        score_font = ImageFont.load_default()
+                    
+                    draw.text((width//2, 200), "🏆 RANKING GLOBAL", fill='#ffffff', font=title_font, anchor='mm')
+                    draw.text((width//2, 280), "Top 10 Mejores Jugadores", fill='#ff6b6b', font=ImageFont.load_default(), anchor='mm')
+                    draw.text((width//2, 1850), datetime.now().strftime('%d/%m/%Y'), fill='#888888', font=ImageFont.load_default(), anchor='mm')
+                    
+                    medals = {1: '🥇', 2: '🥈', 3: '🥉', 4: '➃', 5: '➄', 6: '➅', 7: '➆', 8: '➇', 9: '➈', 10: '➉'}
+                    
+                    for i, (position, name, score) in enumerate(ranking_data[:10]):
+                        y_pos = 400 + i * 140
+                        draw.rectangle([50, y_pos-50, width-50, y_pos+50], fill='#2a2a2a', outline='#333333', width=2)
+                        medal = medals.get(position, f"{position}.")
+                        draw.text((100, y_pos), medal, fill='#ffd700', font=name_font, anchor='mm')
+                        draw.text((200, y_pos), name, fill='#ffffff', font=name_font, anchor='lm')
+                        draw.text((width-100, y_pos), score, fill='#00ff88', font=score_font, anchor='rm')
+                        draw.line([(200, y_pos+30), (width-150, y_pos+30)], fill='#333333', width=1)
+                    
+                    draw.text((width//2, 1800), "@tu_marca", fill='#666666', font=ImageFont.load_default(), anchor='mm')
+                    return img
+                
+                # Generar imagen
+                img = generate_ranking_image(ranking_data)
+                buffer = io.BytesIO()
+                img.save(buffer, format='PNG')
+                buffer.seek(0)
+                
+                # UN SOLO BOTÓN que descarga directamente
+                st.download_button(
+                    "📱",
+                    data=buffer.getvalue(),
+                    file_name=f"ranking_global_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                    mime="image/png",
+                    key="share_global",
+                    help="Compartir ranking en Instagram",
+                    use_container_width=True
+                )
             
             if not global_ranking.empty:
                 # Crear expanders para cada usuario en el ranking
