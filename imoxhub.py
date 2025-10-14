@@ -3345,29 +3345,28 @@ with tab3:
                     for i, (position, name, score) in enumerate(ranking_data[:10]):
                         y_pos = 400 + i * 140
                         
-                        # Fondo para cada fila
-                        draw.rectangle([50, y_pos-50, width-50, y_pos+50], fill='#f8f9fa', outline='#dee2e6', width=2)
+                        # Fondo redondeado para cada fila
+                        draw.rounded_rectangle([50, y_pos-50, width-50, y_pos+50], radius=15, fill='#f8f9fa', outline='#dee2e6', width=2)
                         
-                        # Medalla con símbolos simples
+                        # Medalla con símbolos simples en negro
                         medal = medals.get(position, f"{position}°")
-                        draw.text((100, y_pos), medal, fill='#ff6b35', font=medal_font, anchor='mm')
+                        draw.text((100, y_pos), medal, fill='#000000', font=medal_font, anchor='mm')
                         
                         # Nombre
                         draw.text((200, y_pos), name, fill='#1a1a1a', font=name_font, anchor='lm')
                         
-                        # Score
-                        draw.text((width-100, y_pos), score, fill='#28a745', font=score_font, anchor='rm')
-                        
-                        # Línea separadora
-                        draw.line([(200, y_pos+30), (width-150, y_pos+30)], fill='#dee2e6', width=1)
+                        # Score formateado con $ al final y sin centavos, usando punto como separador de miles
+                        score_value = float(score.replace('$', '').replace(',', ''))
+                        score_formatted = f"{score_value:,.0f}$".replace(',', '.')
+                        draw.text((width-100, y_pos), score_formatted, fill='#28a745', font=score_font, anchor='rm')
                     
-                    # Total generado al final
+                    # Total generado al final con $ al final y sin centavos, usando punto como separador de miles
                     total_amount = sum([float(row['total_payout']) for _, row in global_ranking.head(10).iterrows()])
-                    total_text = f"Total: ${total_amount:,.2f}"
+                    total_text = f"Total: {total_amount:,.0f}$".replace(',', '.')
                     draw.text((width//2, height-200), total_text, fill='#1a1a1a', font=total_font, anchor='mm')
                     
                     # Marca de agua
-                    draw.text((width//2, height-100), "@imoxhub", fill='#999999', font=subtitle_font, anchor='mm')
+                    draw.text((width//2, height-100), "@imoxtrading", fill='#999999', font=subtitle_font, anchor='mm')
                     
                     return img
                 
