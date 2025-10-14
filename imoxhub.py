@@ -1296,10 +1296,14 @@ def show_login_page():
     }
     
     /* Alinear las tarjetas de ranking horizontalmente */
-    .ranking-panel {
-        display: flex !important;
-        flex-direction: column !important;
-        height: 100% !important;
+     .ranking-panel.card {
+        background-color: white;
+        border-radius: 0.75rem;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        padding: 1.25rem;
+        width: calc(100% - 1rem);
+        border: 1px solid #e9ecef;
+        box-sizing: border-box;
     }
     
     .ranking-panel .card-title {
@@ -1568,8 +1572,6 @@ st.markdown("""
         border-radius: 0.75rem;
         box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
         padding: 1.25rem;
-        margin-top: 1rem;
-        margin-bottom: 0.5rem;
         border: 1px solid #e9ecef;
         box-sizing: border-box;
     }
@@ -1579,7 +1581,26 @@ st.markdown("""
         font-weight: 600;
         color: #495057;
     }
+
+    .card.ranking-panel {
+        display: flex;
+        align-items: center;
+        width: calc(100% + 1rem);
+        height: 50px;
+        text-transform: uppercase;
+    }
     
+    .stHorizontalBlock:has(.ranking-panel) > div:nth-child(2) button {
+        height: 50px;
+        width: 50px;
+        border-radius: 0.75rem;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    }
+
+    .stHorizontalBlock:has(.ranking-panel) > div:nth-child(2) button img{
+        font-size: 25px;
+    }
+
     /* Botones personalizados */
     .btn-primary {
         background-color: #6c757d;
@@ -3239,12 +3260,10 @@ with tab3:
                 st.markdown("""
                 <div class="card ranking-panel">
                     <div class="card-title">🌍 Ranking Global</div>
-                    <div class="ranking-content">
+                </div>
                 """, unsafe_allow_html=True)
             
             with share_col:
-                st.markdown("<br>", unsafe_allow_html=True)  # Espaciado
-                
                 # Preparar datos del ranking
                 ranking_data = []
                 for _, row in global_ranking.head(10).iterrows():
@@ -3260,34 +3279,96 @@ with tab3:
                     import io
                     
                     width, height = 1080, 1920
-                    img = Image.new('RGB', (width, height), color='#1a1a1a')
+                    img = Image.new('RGB', (width, height), color='#ffffff')
                     draw = ImageDraw.Draw(img)
                     
                     try:
                         title_font = ImageFont.truetype("Arial Bold", 80)
-                        name_font = ImageFont.truetype("Arial", 50)
-                        score_font = ImageFont.truetype("Arial Bold", 45)
+                        subtitle_font = ImageFont.truetype("Arial", 50)
+                        name_font = ImageFont.truetype("Arial", 45)
+                        score_font = ImageFont.truetype("Arial Bold", 40)
+                        total_font = ImageFont.truetype("Arial Bold", 60)
+                        medal_font = ImageFont.truetype("Arial Bold", 50)
                     except:
                         title_font = ImageFont.load_default()
+                        subtitle_font = ImageFont.load_default()
                         name_font = ImageFont.load_default()
                         score_font = ImageFont.load_default()
+                        total_font = ImageFont.load_default()
+                        medal_font = ImageFont.load_default()
                     
-                    draw.text((width//2, 200), "🏆 RANKING GLOBAL", fill='#ffffff', font=title_font, anchor='mm')
-                    draw.text((width//2, 280), "Top 10 Mejores Jugadores", fill='#ff6b6b', font=ImageFont.load_default(), anchor='mm')
-                    draw.text((width//2, 1850), datetime.now().strftime('%d/%m/%Y'), fill='#888888', font=ImageFont.load_default(), anchor='mm')
+                    # Logo y título
+                    try:
+                        logo = Image.open('logo.png')
+                        logo = logo.resize((100, 100), Image.Resampling.LANCZOS)  # Logo más grande
+                        
+                        # Posicionar logo arriba del título, centrado
+                        logo_x = width//2 - 50  # Centrar el logo (100px de ancho / 2)
+                        logo_y = 60  # Posición más arriba
+                        
+                        # Pegar logo
+                        if logo.mode == 'RGBA':
+                            img.paste(logo, (logo_x, logo_y), logo)
+                        else:
+                            img.paste(logo, (logo_x, logo_y))
+                        
+                        # Título centrado debajo del logo
+                        draw.text((width//2, 200), "IMOX CLUB", fill='#1a1a1a', font=title_font, anchor='mm')
+                        
+                    except FileNotFoundError:
+                        # Si no encuentra el logo, usar solo texto
+                        draw.text((width//2, 150), "IMOX CLUB", fill='#1a1a1a', font=title_font, anchor='mm')
                     
-                    medals = {1: '🥇', 2: '🥈', 3: '🥉', 4: '➃', 5: '➄', 6: '➅', 7: '➆', 8: '➇', 9: '➈', 10: '➉'}
+                    # Mes del ranking
+                    target_date = datetime.now() + timedelta(days=30 * st.session_state.selected_month)
+                    month_name = target_date.strftime('%B %Y')
+                    
+                    # Traducir meses al español
+                    month_translations = {
+                        'January': 'Enero', 'February': 'Febrero', 'March': 'Marzo',
+                        'April': 'Abril', 'May': 'Mayo', 'June': 'Junio',
+                        'July': 'Julio', 'August': 'Agosto', 'September': 'Septiembre',
+                        'October': 'Octubre', 'November': 'Noviembre', 'December': 'Diciembre'
+                    }
+                    
+                    month_spanish = month_translations.get(target_date.strftime('%B'), target_date.strftime('%B'))
+                    month_text = f"{month_spanish} {target_date.year}"
+                    
+                    draw.text((width//2, 270), month_text, fill='black', font=subtitle_font, anchor='mm')
+                    
+                    # Ranking con símbolos que PIL puede renderizar
+                    medals = {
+                        1: '1°', 2: '2°', 3: '3°', 4: '4°', 5: '5°', 
+                        6: '6°', 7: '7°', 8: '8°', 9: '9°', 10: '10°'
+                    }
                     
                     for i, (position, name, score) in enumerate(ranking_data[:10]):
                         y_pos = 400 + i * 140
-                        draw.rectangle([50, y_pos-50, width-50, y_pos+50], fill='#2a2a2a', outline='#333333', width=2)
-                        medal = medals.get(position, f"{position}.")
-                        draw.text((100, y_pos), medal, fill='#ffd700', font=name_font, anchor='mm')
-                        draw.text((200, y_pos), name, fill='#ffffff', font=name_font, anchor='lm')
-                        draw.text((width-100, y_pos), score, fill='#00ff88', font=score_font, anchor='rm')
-                        draw.line([(200, y_pos+30), (width-150, y_pos+30)], fill='#333333', width=1)
+                        
+                        # Fondo para cada fila
+                        draw.rectangle([50, y_pos-50, width-50, y_pos+50], fill='#f8f9fa', outline='#dee2e6', width=2)
+                        
+                        # Medalla con símbolos simples
+                        medal = medals.get(position, f"{position}°")
+                        draw.text((100, y_pos), medal, fill='#ff6b35', font=medal_font, anchor='mm')
+                        
+                        # Nombre
+                        draw.text((200, y_pos), name, fill='#1a1a1a', font=name_font, anchor='lm')
+                        
+                        # Score
+                        draw.text((width-100, y_pos), score, fill='#28a745', font=score_font, anchor='rm')
+                        
+                        # Línea separadora
+                        draw.line([(200, y_pos+30), (width-150, y_pos+30)], fill='#dee2e6', width=1)
                     
-                    draw.text((width//2, 1800), "@tu_marca", fill='#666666', font=ImageFont.load_default(), anchor='mm')
+                    # Total generado al final
+                    total_amount = sum([float(row['total_payout']) for _, row in global_ranking.head(10).iterrows()])
+                    total_text = f"Total: ${total_amount:,.2f}"
+                    draw.text((width//2, height-200), total_text, fill='#1a1a1a', font=total_font, anchor='mm')
+                    
+                    # Marca de agua
+                    draw.text((width//2, height-100), "@imoxhub", fill='#999999', font=subtitle_font, anchor='mm')
+                    
                     return img
                 
                 # Generar imagen
@@ -3297,15 +3378,40 @@ with tab3:
                 buffer.seek(0)
                 
                 # UN SOLO BOTÓN que descarga directamente
-                st.download_button(
-                    "📱",
-                    data=buffer.getvalue(),
-                    file_name=f"ranking_global_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
-                    mime="image/png",
-                    key="share_global",
-                    help="Compartir ranking en Instagram",
-                    use_container_width=True
-                )
+                try:
+                    # Cargar el icono personalizado
+                    icon = Image.open('downloadIcon.png')
+                    icon = icon.resize((32, 32), Image.Resampling.LANCZOS)
+                    
+                    # Convertir a base64 para usar en el botón
+                    import base64
+                    buffer_icon = io.BytesIO()
+                    icon.save(buffer_icon, format='PNG')
+                    buffer_icon.seek(0)
+                    icon_base64 = base64.b64encode(buffer_icon.getvalue()).decode()
+                    
+                    # Usar st.download_button con el icono como texto
+                    st.download_button(
+                        f"![Icon](data:image/png;base64,{icon_base64})",
+                        data=buffer.getvalue(),
+                        file_name=f"ranking_global_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                        mime="image/png",
+                        key="share_global",
+                        help="Compartir ranking en Instagram",
+                        use_container_width=True
+                    )
+                    
+                except FileNotFoundError:
+                    # Si no encuentra el icono, usar el botón normal
+                    st.download_button(
+                        "📥",
+                        data=buffer.getvalue(),
+                        file_name=f"ranking_global_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                        mime="image/png",
+                        key="share_global",
+                        help="Compartir ranking en Instagram",
+                        use_container_width=True
+                    )
             
             if not global_ranking.empty:
                 # Crear expanders para cada usuario en el ranking
@@ -3386,7 +3492,7 @@ with tab3:
             st.markdown("""
             <div class="card ranking-panel">
                 <div class="card-title">🥇 Ranking Gold</div>
-                <div class="ranking-content">
+            </div>
             """, unsafe_allow_html=True)
             
             if not gold_ranking.empty:
@@ -3468,7 +3574,7 @@ with tab3:
             st.markdown("""
             <div class="card ranking-panel">
                 <div class="card-title">🥈 Ranking Silver</div>
-                <div class="ranking-content">
+            </div>
             """, unsafe_allow_html=True)
             
             if not silver_ranking.empty:
