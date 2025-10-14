@@ -3489,11 +3489,143 @@ with tab3:
             st.markdown('</div></div>', unsafe_allow_html=True)
         
         with col2:
-            st.markdown("""
-            <div class="card ranking-panel">
-                <div class="card-title">🥇 Ranking Gold</div>
-            </div>
-            """, unsafe_allow_html=True)
+            # Crear columnas para título y botón
+            title_col, share_col = st.columns([4, 1])
+            
+            with title_col:
+                st.markdown("""
+                <div class="card ranking-panel">
+                    <div class="card-title">🥇 Ranking Gold</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with share_col:
+                # Preparar datos del ranking Gold
+                gold_ranking_data = []
+                for _, row in gold_ranking.head(10).iterrows():
+                    gold_ranking_data.append((
+                        row['position'],
+                        row['name'],
+                        row['total_payout_formatted']
+                    ))
+                
+                # Función para generar imagen Gold
+                def generate_gold_ranking_image(ranking_data):
+                    from PIL import Image, ImageDraw, ImageFont
+                    import io
+                    
+                    width, height = 1080, 1920
+                    img = Image.new('RGB', (width, height), color='#ffffff')
+                    draw = ImageDraw.Draw(img)
+                    
+                    try:
+                        title_font = ImageFont.truetype("Arial Bold", 80)
+                        subtitle_font = ImageFont.truetype("Arial", 50)
+                        name_font = ImageFont.truetype("Arial", 45)
+                        score_font = ImageFont.truetype("Arial Bold", 40)
+                        total_font = ImageFont.truetype("Arial Bold", 60)
+                        medal_font = ImageFont.truetype("Arial Bold", 50)
+                    except:
+                        title_font = ImageFont.load_default()
+                        subtitle_font = ImageFont.load_default()
+                        name_font = ImageFont.load_default()
+                        score_font = ImageFont.load_default()
+                        total_font = ImageFont.load_default()
+                        medal_font = ImageFont.load_default()
+                    
+                    # Logo y título
+                    try:
+                        logo = Image.open('logo.png')
+                        logo = logo.resize((100, 100), Image.Resampling.LANCZOS)
+                        
+                        logo_x = width//2 - 50
+                        logo_y = 60
+                        
+                        if logo.mode == 'RGBA':
+                            img.paste(logo, (logo_x, logo_y), logo)
+                        else:
+                            img.paste(logo, (logo_x, logo_y))
+                        
+                        draw.text((width//2, 200), "IMOX CLUB", fill='#1a1a1a', font=title_font, anchor='mm')
+                        
+                    except FileNotFoundError:
+                        draw.text((width//2, 150), "IMOX CLUB", fill='#1a1a1a', font=title_font, anchor='mm')
+                    
+                    # Mes del ranking
+                    target_date = datetime.now() + timedelta(days=30 * st.session_state.selected_month)
+                    month_translations = {
+                        'January': 'Enero', 'February': 'Febrero', 'March': 'Marzo',
+                        'April': 'Abril', 'May': 'Mayo', 'June': 'Junio',
+                        'July': 'Julio', 'August': 'Agosto', 'September': 'Septiembre',
+                        'October': 'Octubre', 'November': 'Noviembre', 'December': 'Diciembre'
+                    }
+                    
+                    month_spanish = month_translations.get(target_date.strftime('%B'), target_date.strftime('%B'))
+                    month_text = f"{month_spanish} {target_date.year} - GOLD"
+                    
+                    draw.text((width//2, 270), month_text, fill='#ffc107', font=subtitle_font, anchor='mm')
+                    
+                    # Ranking Gold
+                    medals = {1: '1°', 2: '2°', 3: '3°', 4: '4°', 5: '5°', 6: '6°', 7: '7°', 8: '8°', 9: '9°', 10: '10°'}
+                    
+                    for i, (position, name, score) in enumerate(ranking_data[:10]):
+                        y_pos = 400 + i * 140
+                        
+                        draw.rectangle([50, y_pos-50, width-50, y_pos+50], fill='#fff3cd', outline='#ffc107', width=2)
+                        
+                        medal = medals.get(position, f"{position}°")
+                        draw.text((100, y_pos), medal, fill='#ffc107', font=medal_font, anchor='mm')
+                        
+                        draw.text((200, y_pos), name, fill='#1a1a1a', font=name_font, anchor='lm')
+                        draw.text((width-100, y_pos), score, fill='#28a745', font=score_font, anchor='rm')
+                        draw.line([(200, y_pos+30), (width-150, y_pos+30)], fill='#ffc107', width=1)
+                    
+                    # Total Gold
+                    total_amount = sum([float(row['total_payout']) for _, row in gold_ranking.head(10).iterrows()])
+                    total_text = f"Total Gold: ${total_amount:,.2f}"
+                    draw.text((width//2, height-200), total_text, fill='#1a1a1a', font=total_font, anchor='mm')
+                    
+                    draw.text((width//2, height-100), "@imoxhub", fill='#999999', font=subtitle_font, anchor='mm')
+                    
+                    return img
+                
+                # Generar imagen Gold
+                gold_img = generate_gold_ranking_image(gold_ranking_data)
+                gold_buffer = io.BytesIO()
+                gold_img.save(gold_buffer, format='PNG')
+                gold_buffer.seek(0)
+                
+                # Botón de descarga Gold
+                try:
+                    icon = Image.open('downloadIcon.png')
+                    icon = icon.resize((32, 32), Image.Resampling.LANCZOS)
+                    
+                    import base64
+                    buffer_icon = io.BytesIO()
+                    icon.save(buffer_icon, format='PNG')
+                    buffer_icon.seek(0)
+                    icon_base64 = base64.b64encode(buffer_icon.getvalue()).decode()
+                    
+                    st.download_button(
+                        f"![Icon](data:image/png;base64,{icon_base64})",
+                        data=gold_buffer.getvalue(),
+                        file_name=f"ranking_gold_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                        mime="image/png",
+                        key="share_gold",
+                        help="Compartir ranking Gold en Instagram",
+                        use_container_width=True
+                    )
+                    
+                except FileNotFoundError:
+                    st.download_button(
+                        "📥",
+                        data=gold_buffer.getvalue(),
+                        file_name=f"ranking_gold_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                        mime="image/png",
+                        key="share_gold",
+                        help="Compartir ranking Gold en Instagram",
+                        use_container_width=True
+                    )
             
             if not gold_ranking.empty:
                 # Crear expanders para cada usuario Gold
@@ -3571,11 +3703,143 @@ with tab3:
             st.markdown('</div></div>', unsafe_allow_html=True)
         
         with col3:
-            st.markdown("""
-            <div class="card ranking-panel">
-                <div class="card-title">🥈 Ranking Silver</div>
-            </div>
-            """, unsafe_allow_html=True)
+            # Crear columnas para título y botón
+            title_col, share_col = st.columns([4, 1])
+            
+            with title_col:
+                st.markdown("""
+                <div class="card ranking-panel">
+                    <div class="card-title">🥈 Ranking Silver</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with share_col:
+                # Preparar datos del ranking Silver
+                silver_ranking_data = []
+                for _, row in silver_ranking.head(10).iterrows():
+                    silver_ranking_data.append((
+                        row['position'],
+                        row['name'],
+                        row['total_payout_formatted']
+                    ))
+                
+                # Función para generar imagen Silver
+                def generate_silver_ranking_image(ranking_data):
+                    from PIL import Image, ImageDraw, ImageFont
+                    import io
+                    
+                    width, height = 1080, 1920
+                    img = Image.new('RGB', (width, height), color='#ffffff')
+                    draw = ImageDraw.Draw(img)
+                    
+                    try:
+                        title_font = ImageFont.truetype("Arial Bold", 80)
+                        subtitle_font = ImageFont.truetype("Arial", 50)
+                        name_font = ImageFont.truetype("Arial", 45)
+                        score_font = ImageFont.truetype("Arial Bold", 40)
+                        total_font = ImageFont.truetype("Arial Bold", 60)
+                        medal_font = ImageFont.truetype("Arial Bold", 50)
+                    except:
+                        title_font = ImageFont.load_default()
+                        subtitle_font = ImageFont.load_default()
+                        name_font = ImageFont.load_default()
+                        score_font = ImageFont.load_default()
+                        total_font = ImageFont.load_default()
+                        medal_font = ImageFont.load_default()
+                    
+                    # Logo y título
+                    try:
+                        logo = Image.open('logo.png')
+                        logo = logo.resize((100, 100), Image.Resampling.LANCZOS)
+                        
+                        logo_x = width//2 - 50
+                        logo_y = 60
+                        
+                        if logo.mode == 'RGBA':
+                            img.paste(logo, (logo_x, logo_y), logo)
+                        else:
+                            img.paste(logo, (logo_x, logo_y))
+                        
+                        draw.text((width//2, 200), "IMOX CLUB", fill='#1a1a1a', font=title_font, anchor='mm')
+                        
+                    except FileNotFoundError:
+                        draw.text((width//2, 150), "IMOX CLUB", fill='#1a1a1a', font=title_font, anchor='mm')
+                    
+                    # Mes del ranking
+                    target_date = datetime.now() + timedelta(days=30 * st.session_state.selected_month)
+                    month_translations = {
+                        'January': 'Enero', 'February': 'Febrero', 'March': 'Marzo',
+                        'April': 'Abril', 'May': 'Mayo', 'June': 'Junio',
+                        'July': 'Julio', 'August': 'Agosto', 'September': 'Septiembre',
+                        'October': 'Octubre', 'November': 'Noviembre', 'December': 'Diciembre'
+                    }
+                    
+                    month_spanish = month_translations.get(target_date.strftime('%B'), target_date.strftime('%B'))
+                    month_text = f"{month_spanish} {target_date.year} - SILVER"
+                    
+                    draw.text((width//2, 270), month_text, fill='#6c757d', font=subtitle_font, anchor='mm')
+                    
+                    # Ranking Silver
+                    medals = {1: '1°', 2: '2°', 3: '3°', 4: '4°', 5: '5°', 6: '6°', 7: '7°', 8: '8°', 9: '9°', 10: '10°'}
+                    
+                    for i, (position, name, score) in enumerate(ranking_data[:10]):
+                        y_pos = 400 + i * 140
+                        
+                        draw.rectangle([50, y_pos-50, width-50, y_pos+50], fill='#f8f9fa', outline='#6c757d', width=2)
+                        
+                        medal = medals.get(position, f"{position}°")
+                        draw.text((100, y_pos), medal, fill='#6c757d', font=medal_font, anchor='mm')
+                        
+                        draw.text((200, y_pos), name, fill='#1a1a1a', font=name_font, anchor='lm')
+                        draw.text((width-100, y_pos), score, fill='#28a745', font=score_font, anchor='rm')
+                        draw.line([(200, y_pos+30), (width-150, y_pos+30)], fill='#6c757d', width=1)
+                    
+                    # Total Silver
+                    total_amount = sum([float(row['total_payout']) for _, row in silver_ranking.head(10).iterrows()])
+                    total_text = f"Total Silver: ${total_amount:,.2f}"
+                    draw.text((width//2, height-200), total_text, fill='#1a1a1a', font=total_font, anchor='mm')
+                    
+                    draw.text((width//2, height-100), "@imoxhub", fill='#999999', font=subtitle_font, anchor='mm')
+                    
+                    return img
+                
+                # Generar imagen Silver
+                silver_img = generate_silver_ranking_image(silver_ranking_data)
+                silver_buffer = io.BytesIO()
+                silver_img.save(silver_buffer, format='PNG')
+                silver_buffer.seek(0)
+                
+                # Botón de descarga Silver
+                try:
+                    icon = Image.open('downloadIcon.png')
+                    icon = icon.resize((32, 32), Image.Resampling.LANCZOS)
+                    
+                    import base64
+                    buffer_icon = io.BytesIO()
+                    icon.save(buffer_icon, format='PNG')
+                    buffer_icon.seek(0)
+                    icon_base64 = base64.b64encode(buffer_icon.getvalue()).decode()
+                    
+                    st.download_button(
+                        f"![Icon](data:image/png;base64,{icon_base64})",
+                        data=silver_buffer.getvalue(),
+                        file_name=f"ranking_silver_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                        mime="image/png",
+                        key="share_silver",
+                        help="Compartir ranking Silver en Instagram",
+                        use_container_width=True
+                    )
+                    
+                except FileNotFoundError:
+                    st.download_button(
+                        "📥",
+                        data=silver_buffer.getvalue(),
+                        file_name=f"ranking_silver_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                        mime="image/png",
+                        key="share_silver",
+                        help="Compartir ranking Silver en Instagram",
+                        use_container_width=True
+                    )
             
             if not silver_ranking.empty:
                 # Crear expanders para cada usuario Silver
