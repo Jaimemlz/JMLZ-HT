@@ -1601,6 +1601,25 @@ st.markdown("""
         font-size: 25px;
     }
 
+    .stHorizontalBlock:has(.ranking-panel) [data-testid="stExpanderDetails"]{
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+    }
+
+    .stHorizontalBlock:has(.ranking-panel) [data-testid="stExpander"]{
+        display: flex;
+    }
+
+    .stHorizontalBlock:has(.ranking-panel) [data-testid="stFullScreenFrame"]{
+        display: flex;
+        overflow: hidden;
+    }
+
+    .stHorizontalBlock:has(.ranking-panel) details{
+        overflow: hidden !important;
+    }
+
     /* Botones personalizados */
     .btn-primary {
         background-color: #6c757d;
