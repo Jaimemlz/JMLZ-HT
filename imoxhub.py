@@ -1293,26 +1293,7 @@ def show_login_page():
     
     [data-testid="stDataFrame"] table thead tr th {
         border-bottom: 1px solid #e0e0e0 !important;
-    }
-    
-    /* Alinear las tarjetas de ranking horizontalmente */
-     .ranking-panel.card {
-        background-color: white;
-        border-radius: 0.75rem;
-        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-        padding: 1.25rem;
-        width: calc(100% - 1rem);
-        border: 1px solid #e9ecef;
-        box-sizing: border-box;
-    }
-    
-    .ranking-panel .card-title {
-        flex-shrink: 0 !important;
-        margin-bottom: 0 !important;
-        height: 60px !important;
-        display: flex !important;
-        align-items: center !important;
-    }
+    }    
     
     /* Alinear los headers de las columnas */
     div[data-testid="column"] {
@@ -1589,6 +1570,20 @@ st.markdown("""
         height: 50px;
         text-transform: uppercase;
     }
+
+    .card-month{
+        background-color: white;
+        border: 1px solid #e9ecef;
+        border-radius: 0.5rem;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        padding: 0.5rem;
+    }
+
+    .card-month h2{
+        text-transform: uppercase;
+        text-align: center;
+        padding: 0;
+    }
     
     .stHorizontalBlock:has(.ranking-panel) > div:nth-child(2) button {
         height: 50px;
@@ -1611,9 +1606,21 @@ st.markdown("""
         display: flex;
     }
 
+    .stHorizontalBlock:has(.ranking-panel) [data-testid="stExpander"]{
+        background-color: white;
+    }
+
+    .stHorizontalBlock:has(.ranking-panel) [data-testid="stExpander"] summary{
+        background-color: white;
+    }
+
     .stHorizontalBlock:has(.ranking-panel) [data-testid="stFullScreenFrame"]{
         display: flex;
         overflow: hidden;
+    }
+
+    [data-testid="stFileUploaderDeleteBtn"] button{
+        border-radius: 50px;
     }
 
     .stHorizontalBlock:has(.ranking-panel) details{
@@ -1976,8 +1983,10 @@ st.markdown("""
     }
 
     .stFileUploaderFile button {
-        width: 20px !important;
         height: 20px !important;
+        width: 30px !important;
+        padding: 10px;
+        display: flex;
     }
     
     .stFileUploader button:hover {
@@ -3237,17 +3246,7 @@ with tab3:
             month_name = month_names[target_date.month - 1]
             year = target_date.year
             st.markdown(f"""
-            <div style="
-                background: #f8f9fa; 
-                padding: 0.5rem 1.5rem; 
-                border-radius: 25px; 
-                border: 2px solid #dee2e6;
-                font-size: 1.2rem;
-                font-weight: 600;
-                color: #495057;
-                text-align: center;
-                margin: 0.5rem 0;
-            ">{month_name} {year}</div>
+            <div class="card-month"><h2>{month_name} {year}</h2></div>
             """, unsafe_allow_html=True)
         
         with col_next:
