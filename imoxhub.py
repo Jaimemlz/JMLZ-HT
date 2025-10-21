@@ -206,6 +206,154 @@ def calcular_estadisticas_ea(df_ea):
         'Beneficio_Total': beneficio_total
     }
 
+def normalizar_nombre_ea(nombre_ea):
+    """
+    Normaliza el nombre de la EA eliminando sufijos como [sl], [tp], etc.
+    para agrupar variaciones de la misma estrategia.
+    
+    Ejemplos:
+    - GBPJPY_3_1_46[sl] -> GBPJPY_3_1_46
+    - GBPJPY_3_1_46[tp] -> GBPJPY_3_1_46
+    - GBPJPY_3_1_46 -> GBPJPY_3_1_46
+    """
+    if not nombre_ea or nombre_ea == 'Sin EA':
+        return nombre_ea
+    
+    # Eliminar sufijos entre corchetes [sl], [tp], etc.
+    import re
+    nombre_normalizado = re.sub(r'\[.*?\]', '', nombre_ea)
+    
+    # Limpiar espacios extra
+    nombre_normalizado = nombre_normalizado.strip()
+    
+    return nombre_normalizado
+
+def calcular_rentabilidad_por_riesgo(df_ea):
+    """
+    Calcula la rentabilidad basada en la proporción ganancia/riesgo máximo.
+    
+    Lógica:
+    1. Encuentra la pérdida máxima de la EA
+    2. Calcula la proporción: Beneficio Total / Pérdida Máxima
+    3. Convierte a porcentaje sobre cuenta de $100k
+    
+    Ejemplo:
+    - EA arriesga máximo $1,000, gana $2,000 → Proporción: 2 → Rentabilidad: 2%
+    - EA arriesga máximo $10, gana $20 → Proporción: 2 → Rentabilidad: 2%
+    """
+    if df_ea.empty:
+        return 0
+    
+    beneficio_total = df_ea['Beneficio'].sum()
+    perdida_maxima = abs(df_ea['Beneficio'].min())  # La pérdida más grande (valor más negativo)
+    
+    # Si no hay pérdidas, usar la pérdida promedio como referencia
+    if perdida_maxima == 0:
+        operaciones_perdedoras = df_ea[df_ea['Beneficio'] < 0]
+        if len(operaciones_perdedoras) > 0:
+            perdida_maxima = abs(operaciones_perdedoras['Beneficio'].mean())
+        else:
+            # Si no hay pérdidas, usar el beneficio promedio como referencia mínima
+            perdida_maxima = max(df_ea['Beneficio'].mean(), 1)  # Mínimo 1 para evitar división por cero
+    
+    if perdida_maxima == 0:
+        return float('inf') if beneficio_total > 0 else 0
+    
+    # Calcular proporción ganancia/riesgo
+    proporcion_ganancia_riesgo = beneficio_total / perdida_maxima
+    
+    # Convertir a porcentaje sobre cuenta de $100k
+    # Si la proporción es 2, significa que gana el doble de lo que arriesga
+    # En una cuenta de $100k, esto sería equivalente a ganar $200 sobre riesgo de $100
+    cuenta_inicial = 100000  # $100k
+    rentabilidad = (proporcion_ganancia_riesgo * 100) / cuenta_inicial * 100  # Convertir a porcentaje
+    
+    return rentabilidad
+
+def analisis_portafolio_por_riesgo(df):
+    """
+    Realiza análisis de portafolio basado en rentabilidad por riesgo máximo.
+    Agrupa estrategias por nombre base (elimina sufijos [sl], [tp], etc.).
+    """
+    if df.empty:
+        return pd.DataFrame()
+    
+    # Filtrar "Sin EA" para el análisis
+    df_filtrado = df[df['EA'] != 'Sin EA'].copy()
+    
+    if df_filtrado.empty:
+        return pd.DataFrame()
+    
+    # Normalizar nombres de EA para agrupar variaciones de la misma estrategia
+    df_filtrado['EA_Normalizado'] = df_filtrado['EA'].apply(normalizar_nombre_ea)
+    
+    # Agrupar por EA normalizado y Símbolo
+    grupos = df_filtrado.groupby(['EA_Normalizado', 'Símbolo'])
+    
+    analisis_data = []
+    for (ea_normalizado, simbolo), grupo in grupos:
+        total_ops = len(grupo)
+        ops_ganadoras = len(grupo[grupo['Beneficio'] > 0])
+        ops_perdedoras = len(grupo[grupo['Beneficio'] < 0])
+        
+        win_rate = (ops_ganadoras / total_ops * 100) if total_ops > 0 else 0
+        beneficio_total = grupo['Beneficio'].sum()
+        perdida_maxima = abs(grupo['Beneficio'].min())
+        beneficio_maximo = grupo['Beneficio'].max()
+        
+        # Calcular rentabilidad por riesgo
+        rentabilidad_por_riesgo = calcular_rentabilidad_por_riesgo(grupo)
+        
+        # Calcular métricas como porcentajes basados en proporción ganancia/riesgo
+        cuenta_inicial = 100000  # $100k
+        
+        # Calcular métricas adicionales primero
+        beneficio_promedio = grupo['Beneficio'].mean()
+        perdida_promedio = abs(grupo[grupo['Beneficio'] < 0]['Beneficio'].mean()) if ops_perdedoras > 0 else 0
+        
+        # Calcular proporción ganancia/riesgo para esta EA
+        proporcion_ganancia_riesgo = beneficio_total / perdida_maxima if perdida_maxima > 0 else 0
+        
+        # Convertir valores a porcentajes basados en la proporción
+        # Si la proporción es 2, significa que gana el doble de lo que arriesga
+        beneficio_total_porcentaje = (proporcion_ganancia_riesgo * 100) / cuenta_inicial * 100
+        perdida_maxima_porcentaje = (100 / cuenta_inicial) * 100  # Siempre 0.1% (riesgo de $100 sobre $100k)
+        beneficio_maximo_porcentaje = (beneficio_maximo / perdida_maxima * 100) / cuenta_inicial * 100 if perdida_maxima > 0 else 0
+        beneficio_promedio_porcentaje = (beneficio_promedio / perdida_maxima * 100) / cuenta_inicial * 100 if perdida_maxima > 0 else 0
+        perdida_promedio_porcentaje = (perdida_promedio / perdida_maxima * 100) / cuenta_inicial * 100 if perdida_maxima > 0 else 0
+        
+        # Ratio de eficiencia (beneficio total / pérdida máxima)
+        ratio_eficiencia = beneficio_total / perdida_maxima if perdida_maxima > 0 else float('inf')
+        
+        # Obtener variaciones de la estrategia para mostrar en el resultado
+        variaciones_ea = grupo['EA'].unique().tolist()
+        variaciones_str = ', '.join(variaciones_ea) if len(variaciones_ea) > 1 else variaciones_ea[0]
+        
+        analisis_data.append({
+            'EA': ea_normalizado,
+            'Total_Operaciones': total_ops,
+            'Operaciones_Ganadoras': ops_ganadoras,
+            'Operaciones_Perdedoras': ops_perdedoras,
+            'Win_Rate_%': round(win_rate, 2),
+            'Beneficio_Total': round(beneficio_total_porcentaje, 2),
+            'Perdida_Maxima': round(perdida_maxima_porcentaje, 2),
+            'Beneficio_Maximo': round(beneficio_maximo_porcentaje, 2),
+            'Rentabilidad_Por_Riesgo_%': round(rentabilidad_por_riesgo, 2),
+            'Ratio_Eficiencia': round(ratio_eficiencia, 2),
+            'Beneficio_Promedio': round(beneficio_promedio_porcentaje, 2),
+            'Perdida_Promedio': round(perdida_promedio_porcentaje, 2)
+        })
+    
+    analisis_df = pd.DataFrame(analisis_data)
+    
+    # Ordenar por rentabilidad por riesgo (descendente)
+    analisis_df = analisis_df.sort_values('Rentabilidad_Por_Riesgo_%', ascending=False)
+    
+    # Agregar posición en el ranking
+    analisis_df['Posicion'] = range(1, len(analisis_df) + 1)
+    
+    return analisis_df
+
 def crear_ranking_ea(df):
     """
     Crea un ranking de todas las EAs basado en un score de rentabilidad que combina
@@ -1986,7 +2134,6 @@ st.markdown("""
         height: 20px !important;
         width: 30px !important;
         padding: 10px;
-        display: flex;
     }
     
     .stFileUploader button:hover {
@@ -2478,7 +2625,7 @@ st.markdown('<div class="main-container">', unsafe_allow_html=True)
 # Panel central con contenido dinámico según el tab
 with tab1:
     # Crear tabs anidados dentro del tab 1
-    sub_tab1, sub_tab2 = st.tabs(["📈 Análisis de Portafolio", "🔍 Análisis de Prop Firm"])
+    sub_tab1, sub_tab2, sub_tab3 = st.tabs(["📈 Análisis de Portafolio", "⚖️ Análisis por Riesgo", "🔍 Análisis de Prop Firm"])
     
     with sub_tab1:
         # Tarjeta de carga de archivo
@@ -2936,6 +3083,422 @@ with tab1:
             st.markdown('</div>', unsafe_allow_html=True)
     
     with sub_tab2:
+        # Tarjeta de análisis por riesgo
+        st.markdown("""
+        <div class="card">
+            <div class="card-title">⚖️ Análisis de Portafolio por Riesgo</div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("""
+        <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+            <h4 style="margin: 0 0 0.5rem 0; color: #495057;">🎯 ¿Qué es el Análisis por Riesgo?</h4>
+            <p style="margin: 0; color: #6c757d; font-size: 0.9rem;">
+                Este análisis compara EAs basándose en la proporción ganancia/riesgo máximo. Todas las EAs se evalúan de forma justa independientemente del tamaño de su riesgo.
+                <strong>Fórmula:</strong> Proporción = Beneficio Total / Pérdida Máxima → Rentabilidad = (Proporción × $100) / $100,000 × 100
+            </p>
+            <p style="margin: 0.5rem 0 0 0; color: #6c757d; font-size: 0.9rem;">
+                <strong>Ejemplo:</strong> EA arriesga máximo $1,000, gana $2,000 → Proporción: 2 → Rentabilidad: 2%<br>
+                EA arriesga máximo $10, gana $20 → Proporción: 2 → Rentabilidad: 2% (igual de rentable)
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Contenedor para subir archivo HTML
+        archivo_html_riesgo = st.file_uploader("Elegir archivo HTML", type=["html"], label_visibility="collapsed", key="analisis_riesgo_html")
+        
+        if archivo_html_riesgo:
+            try:
+                # Procesar archivo HTML específico de MT4
+                soup = BeautifulSoup(archivo_html_riesgo, 'html.parser')
+                rows = soup.find_all('tr', align='right')
+                
+                st.info(f"🔍 Procesando archivo: {archivo_html_riesgo.name} - Encontradas {len(rows)} filas con align='right'")
+
+                datos = []
+                total_operaciones = 0
+
+                for i in range(len(rows)):
+                    try:
+                        fila_op = rows[i].find_all('td')
+                        
+                        # Verificar que la fila tenga suficientes columnas para ser una operación
+                        if len(fila_op) < 14:
+                            continue  # Saltar filas con estructura incompleta
+                        
+                        # Verificar que la primera celda contenga un número (ticket)
+                        try:
+                            ticket = int(fila_op[0].text.strip())
+                        except:
+                            continue  # No es una fila de operación válida
+                        
+                        # Verificar que la segunda celda contenga una fecha
+                        fecha_str = fila_op[1].text.strip()
+                        if not fecha_str or len(fecha_str) < 8:
+                            continue
+                        
+                        # Extraer datos de la operación según el formato específico
+                        try:
+                            # Obtener EA del atributo title del primer td
+                            ea_title = fila_op[0].get('title', '')
+                            if ea_title:
+                                # Extraer EA del formato "#412361 GBPJPY_4_12_36[sl]"
+                                ea_parts = ea_title.split(' ')
+                                if len(ea_parts) > 1:
+                                    ea = ea_parts[1]  # "GBPJPY_4_12_36[sl]"
+                                else:
+                                    ea = "Sin EA"
+                            else:
+                                ea = "Sin EA"
+                            
+                            # Obtener símbolo (columna 4)
+                            simbolo = fila_op[4].text.strip()
+                            
+                            # Obtener tipo (columna 2)
+                            tipo = fila_op[2].text.strip()
+                            
+                            # Obtener volumen (columna 3)
+                            volumen = float(fila_op[3].text.strip().replace(',', ''))
+                            
+                            # Obtener precio de apertura (columna 5)
+                            precio_apertura = float(fila_op[5].text.strip().replace(',', ''))
+                            
+                            # Obtener precio de cierre (columna 9)
+                            precio_cierre = float(fila_op[9].text.strip().replace(',', ''))
+                            
+                            # Obtener beneficio (columna 13)
+                            beneficio = float(fila_op[13].text.strip().replace(',', ''))
+                            
+                            # Calcular duración entre fechas
+                            fecha_apertura = fila_op[1].text.strip()
+                            fecha_cierre = fila_op[8].text.strip()
+                            
+                            # Convertir fechas y calcular duración
+                            try:
+                                from datetime import datetime
+                                fecha_ap = datetime.strptime(fecha_apertura, '%Y.%m.%d %H:%M:%S')
+                                fecha_ci = datetime.strptime(fecha_cierre, '%Y.%m.%d %H:%M:%S')
+                                duracion_minutos = int((fecha_ci - fecha_ap).total_seconds() / 60)
+                            except:
+                                duracion_minutos = 0
+                            
+                            datos.append({
+                                'Ticket': ticket,
+                                'EA': ea,
+                                'Símbolo': simbolo,
+                                'Tipo': tipo,
+                                'Volumen': volumen,
+                                'Precio_Apertura': precio_apertura,
+                                'Precio_Cierre': precio_cierre,
+                                'Beneficio': beneficio,
+                                'Duración': duracion_minutos,
+                                'Fecha_Apertura': fecha_apertura,
+                                'Fecha_Cierre': fecha_cierre
+                            })
+                            
+                            total_operaciones += 1
+                            
+                        except (ValueError, IndexError) as e:
+                            continue
+                            
+                    except Exception as e:
+                        continue
+                
+                if datos:
+                    st.success(f"✅ Se extrajeron {len(datos)} operaciones del archivo HTML")
+                    df_riesgo = pd.DataFrame(datos)
+                    
+                    # Realizar análisis por riesgo
+                    analisis_riesgo = analisis_portafolio_por_riesgo(df_riesgo)
+                    
+                    if not analisis_riesgo.empty:
+                        st.markdown("### 📊 Ranking por Rentabilidad por Riesgo")
+                        
+                        # Mostrar métricas resumen
+                        col1, col2, col3, col4 = st.columns(4)
+                        
+                        with col1:
+                            st.metric(
+                                "Total EAs Analizadas",
+                                len(analisis_riesgo),
+                                help="Número total de EAs en el análisis"
+                            )
+                        
+                        with col2:
+                            mejor_ea = analisis_riesgo.iloc[0]
+                            st.metric(
+                                "Mejor EA",
+                                f"{mejor_ea['EA']}",
+                                f"{mejor_ea['Rentabilidad_Por_Riesgo_%']:.1f}%",
+                                help="EA con mayor rentabilidad por riesgo"
+                            )
+                        
+                        with col3:
+                            rentabilidad_promedio = analisis_riesgo['Rentabilidad_Por_Riesgo_%'].mean()
+                            st.metric(
+                                "Rentabilidad Promedio",
+                                f"{rentabilidad_promedio:.1f}%",
+                                help="Rentabilidad promedio por riesgo de todas las EAs"
+                            )
+                        
+                        with col4:
+                            riesgo_promedio = analisis_riesgo['Perdida_Maxima'].mean()
+                            st.metric(
+                                "Riesgo Promedio",
+                                f"{riesgo_promedio:.2f}%",
+                                help="Pérdida máxima promedio de todas las EAs como % de cuenta $100k"
+                            )
+                        
+                        # Configurar columnas para la tabla
+                        column_config_riesgo = {
+                            "Posicion": st.column_config.NumberColumn("Posición", help="Posición en el ranking", format="%d"),
+                            "EA": st.column_config.TextColumn("EA", help="Nombre del Expert Advisor"),
+                            "Total_Operaciones": st.column_config.NumberColumn("Total Ops", help="Total de operaciones", format="%d"),
+                            "Operaciones_Ganadoras": st.column_config.NumberColumn("Ops Ganadoras", help="Operaciones ganadoras", format="%d"),
+                            "Operaciones_Perdedoras": st.column_config.NumberColumn("Ops Perdedoras", help="Operaciones perdedoras", format="%d"),
+                            "Win_Rate_%": st.column_config.NumberColumn("Win Rate %", help="Porcentaje de operaciones ganadoras", format="%.2f"),
+                            "Beneficio_Total": st.column_config.NumberColumn("Beneficio Total %", help="Beneficio total como % de cuenta $100k", format="%.2f"),
+                            "Perdida_Maxima": st.column_config.NumberColumn("Pérdida Máxima %", help="Mayor pérdida individual como % de cuenta $100k", format="%.2f"),
+                            "Beneficio_Maximo": st.column_config.NumberColumn("Beneficio Máximo %", help="Mayor beneficio individual como % de cuenta $100k", format="%.2f"),
+                            "Rentabilidad_Por_Riesgo_%": st.column_config.NumberColumn("Rentabilidad por Riesgo %", help="Rentabilidad basada en riesgo máximo", format="%.2f"),
+                            "Ratio_Eficiencia": st.column_config.NumberColumn("Ratio Eficiencia", help="Beneficio total / Pérdida máxima", format="%.2f"),
+                            "Beneficio_Promedio": st.column_config.NumberColumn("Beneficio Promedio %", help="Beneficio promedio por operación como % de cuenta $100k", format="%.2f"),
+                            "Perdida_Promedio": st.column_config.NumberColumn("Pérdida Promedio %", help="Pérdida promedio por operación como % de cuenta $100k", format="%.2f")
+                        }
+                        
+                        # Mostrar tabla principal
+                        st.dataframe(
+                            analisis_riesgo, 
+                            use_container_width=True,
+                            column_config=column_config_riesgo,
+                            hide_index=True
+                        )
+                        
+                        # Análisis adicional
+                        st.markdown("### 🔍 Análisis Detallado")
+                        
+                        # Top 5 EAs
+                        st.markdown("#### 🏆 Top 5 EAs por Rentabilidad por Riesgo")
+                        top_5 = analisis_riesgo.head(5)
+                        
+                        for idx, row in top_5.iterrows():
+                            with st.expander(f"🥇 {row['Posicion']}° - {row['EA']} - {row['Rentabilidad_Por_Riesgo_%']:.1f}%"):
+                                col1, col2 = st.columns(2)
+                                
+                                with col1:
+                                    st.markdown(f"**📊 Estadísticas Generales:**")
+                                    st.markdown(f"- Total Operaciones: {row['Total_Operaciones']}")
+                                    st.markdown(f"- Win Rate: {row['Win_Rate_%']:.1f}%")
+                                    st.markdown(f"- Beneficio Total: ${row['Beneficio_Total']:.2f}")
+                                    st.markdown(f"- Beneficio Promedio: ${row['Beneficio_Promedio']:.2f}")
+                                
+                                with col2:
+                                    st.markdown(f"**⚖️ Análisis de Riesgo:**")
+                                    st.markdown(f"- Pérdida Máxima: ${row['Perdida_Maxima']:.2f}")
+                                    st.markdown(f"- Beneficio Máximo: ${row['Beneficio_Maximo']:.2f}")
+                                    st.markdown(f"- Rentabilidad por Riesgo: {row['Rentabilidad_Por_Riesgo_%']:.1f}%")
+                                    st.markdown(f"- Ratio Eficiencia: {row['Ratio_Eficiencia']:.2f}")
+                        
+                        # Gráfico de evolución de rentabilidad por riesgo (estilo análisis de portafolio)
+                        st.markdown("#### 📈 Evolución de Rentabilidad por Riesgo")
+                        
+                        # Crear datos para el gráfico de evolución trade por trade
+                        df_riesgo_grafico = df_riesgo.copy()
+                        df_riesgo_grafico['EA_Normalizado'] = df_riesgo_grafico['EA'].apply(normalizar_nombre_ea)
+                        
+                        # Configuración de cuenta estándar
+                        CUENTA_INICIAL = 100000  # $100k
+                        RIESGO_MAXIMO_POR_TRADE = 200  # $200 máximo por trade
+                        
+                        # Procesar fechas para el eje X usando las fechas reales de apertura
+                        # Las fechas están en formato 'YYYY.MM.DD HH:MM:SS'
+                        df_riesgo_grafico['Fecha'] = pd.to_datetime(df_riesgo_grafico['Fecha_Apertura'], format='%Y.%m.%d %H:%M:%S', errors='coerce')
+                        
+                        # Si hay fechas inválidas, usar fechas simuladas
+                        if df_riesgo_grafico['Fecha'].isna().any():
+                            # Crear fechas simuladas empezando desde una fecha base
+                            fecha_base = pd.Timestamp('2024-01-01')
+                            df_riesgo_grafico['Numero_Trade'] = df_riesgo_grafico.groupby('EA_Normalizado').cumcount() + 1
+                            df_riesgo_grafico['Fecha'] = fecha_base + pd.to_timedelta(df_riesgo_grafico['Numero_Trade'] - 1, unit='D')
+                        
+                        # Convertir a fecha (sin hora) para el gráfico
+                        df_riesgo_grafico['Fecha'] = df_riesgo_grafico['Fecha'].dt.date
+                        
+                        # Calcular porcentaje de rentabilidad por trade con normalización de riesgo
+                        # Para cada EA, calcular el factor de normalización basado en su pérdida máxima
+                        df_riesgo_grafico['Factor_Normalizacion'] = 0.0
+                        df_riesgo_grafico['Beneficio_Normalizado'] = 0.0
+                        
+                        for ea in df_riesgo_grafico['EA_Normalizado'].unique():
+                            ea_data = df_riesgo_grafico[df_riesgo_grafico['EA_Normalizado'] == ea]
+                            perdida_maxima = abs(ea_data['Beneficio'].min())
+                            
+                            # Si no hay pérdidas, usar la pérdida promedio como referencia
+                            if perdida_maxima == 0:
+                                operaciones_perdedoras = ea_data[ea_data['Beneficio'] < 0]
+                                if len(operaciones_perdedoras) > 0:
+                                    perdida_maxima = abs(operaciones_perdedoras['Beneficio'].mean())
+                                else:
+                                    perdida_maxima = max(ea_data['Beneficio'].mean(), 1)
+                            
+                            if perdida_maxima > 0:
+                                # Calcular proporción ganancia/riesgo para cada trade
+                                proporcion_por_trade = ea_data['Beneficio'] / perdida_maxima
+                                df_riesgo_grafico.loc[df_riesgo_grafico['EA_Normalizado'] == ea, 'Proporcion_Ganancia_Riesgo'] = proporcion_por_trade
+                        
+                        # Calcular porcentaje de rentabilidad basado en proporción ganancia/riesgo
+                        df_riesgo_grafico['Porcentaje_Rentabilidad'] = (df_riesgo_grafico['Proporcion_Ganancia_Riesgo'] * 100) / CUENTA_INICIAL * 100
+                        
+                        # Calcular rentabilidad acumulada por EA (empezando desde 0%)
+                        df_riesgo_grafico['Rentabilidad_Acumulada_Porcentaje'] = df_riesgo_grafico.groupby('EA_Normalizado')['Porcentaje_Rentabilidad'].cumsum()
+                        
+                        # Asegurar que todas las líneas empiecen desde 0%
+                        # Agregar un punto inicial en 0% para cada EA
+                        puntos_iniciales = []
+                        for ea in df_riesgo_grafico['EA_Normalizado'].unique():
+                            ea_data = df_riesgo_grafico[df_riesgo_grafico['EA_Normalizado'] == ea]
+                            if not ea_data.empty:
+                                primera_fecha = ea_data['Fecha'].min()
+                                puntos_iniciales.append({
+                                    'EA_Normalizado': ea,
+                                    'Fecha': primera_fecha,
+                                    'Rentabilidad_Acumulada_Porcentaje': 0.0,
+                                    'Porcentaje_Rentabilidad': 0.0,
+                                    'Numero_Trade': 0,
+                                    'Ticket': f"{ea}_inicio",
+                                    'Símbolo': ea_data.iloc[0]['Símbolo'],
+                                    'Tipo': 'inicio',
+                                    'Volumen': 0,
+                                    'Precio_Apertura': 0,
+                                    'Precio_Cierre': 0,
+                                    'Beneficio': 0,
+                                    'Proporcion_Ganancia_Riesgo': 0,
+                                    'Duración': 0,
+                                    'Fecha_Apertura': primera_fecha,
+                                    'Fecha_Cierre': primera_fecha
+                                })
+                        
+                        # Agregar puntos iniciales al DataFrame
+                        if puntos_iniciales:
+                            df_puntos_iniciales = pd.DataFrame(puntos_iniciales)
+                            df_riesgo_grafico = pd.concat([df_puntos_iniciales, df_riesgo_grafico], ignore_index=True)
+                            df_riesgo_grafico = df_riesgo_grafico.sort_values(['EA_Normalizado', 'Fecha']).reset_index(drop=True)
+                        
+                        # Recalcular rentabilidad acumulada después de agregar puntos iniciales
+                        df_riesgo_grafico['Rentabilidad_Acumulada_Porcentaje'] = df_riesgo_grafico.groupby('EA_Normalizado')['Porcentaje_Rentabilidad'].cumsum()
+                            
+                        # Crear gráfico de líneas por EA
+                        fig_riesgo = px.line(
+                            df_riesgo_grafico,
+                            x="Fecha",
+                            y="Rentabilidad_Acumulada_Porcentaje",
+                            color="EA_Normalizado",
+                            markers=True,
+                            labels={
+                                "Rentabilidad_Acumulada_Porcentaje": "Rentabilidad Acumulada (%)", 
+                                "Fecha": "Fecha"
+                            }
+                        )
+                            
+                        fig_riesgo.update_layout(
+                            title="Evolución de Rentabilidad Acumulada por EA (Riesgo Normalizado a $100 máximo)",
+                            height=400,
+                            margin=dict(l=20, r=20, t=40, b=20),
+                            template="plotly_white",
+                            plot_bgcolor='white',
+                            paper_bgcolor='white',
+                            font=dict(color='#495057'),
+                            xaxis=dict(
+                                gridcolor='#e9ecef',
+                                linecolor='#e9ecef',
+                                tickcolor='#495057',
+                                tickfont=dict(color='#495057')
+                            ),
+                            yaxis=dict(
+                                gridcolor='#e9ecef',
+                                linecolor='#e9ecef',
+                                tickcolor='#495057',
+                                tickfont=dict(color='#495057')
+                            )
+                        )
+                        
+                        # Añadir tooltip personalizado
+                        fig_riesgo.update_traces(
+                            hovertemplate=
+                            "<b>EA:</b> %{fullData.name}<br>" +
+                            "<b>Fecha:</b> %{x|%d-%m-%Y}<br>" +
+                            "<b>Rentabilidad Acumulada:</b> %{y:.2f}%<br>" +
+                            "<b>Riesgo normalizado a $100 máximo</b><extra></extra>"
+                        )
+                        
+                        st.plotly_chart(fig_riesgo, use_container_width=True)
+                        
+                        # Gráfico de barras: Rentabilidad por Riesgo de cada EA
+                        st.markdown("#### 📊 Rentabilidad por Riesgo por EA")
+                        
+                        fig_barras = go.Figure()
+                        
+                        # Ordenar por rentabilidad para mejor visualización
+                        analisis_ordenado = analisis_riesgo.sort_values('Rentabilidad_Por_Riesgo_%', ascending=True)
+                        
+                        fig_barras.add_trace(go.Bar(
+                            y=analisis_ordenado['EA'],
+                            x=analisis_ordenado['Rentabilidad_Por_Riesgo_%'],
+                            orientation='h',
+                            marker=dict(
+                                color=analisis_ordenado['Rentabilidad_Por_Riesgo_%'],
+                                colorscale='RdYlGn',
+                                showscale=True,
+                                colorbar=dict(title="Rentabilidad %")
+                            ),
+                            text=[f"{x:.1f}%" for x in analisis_ordenado['Rentabilidad_Por_Riesgo_%']],
+                            textposition='auto'
+                        ))
+                        
+                        fig_barras.update_layout(
+                            title="Rentabilidad por Riesgo de cada EA",
+                            xaxis_title="Rentabilidad por Riesgo (%)",
+                            yaxis_title="EA",
+                            template="plotly_white",
+                            height=max(400, len(analisis_riesgo) * 30),  # Altura dinámica según número de EAs
+                            margin=dict(l=20, r=20, t=40, b=20)
+                        )
+                        
+                        st.plotly_chart(fig_barras, use_container_width=True)
+                            
+                    else:
+                        st.warning("No se encontraron datos válidos para el análisis por riesgo.")
+                
+                else:
+                    st.error(f"❌ No se pudieron extraer datos del archivo HTML. Se encontraron {len(rows)} filas pero ninguna válida.")
+                    
+            except Exception as e:
+                st.error(f"❌ Error al procesar el archivo HTML: {str(e)}")
+        
+        else:
+            st.markdown("""
+            <div style="text-align: center; padding: 2rem; color: #6c757d;">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">⚖️</div>
+                <h3 style="margin-bottom: 1rem;">Análisis de Portafolio por Riesgo</h3>
+                <p style="margin-bottom: 1rem;">
+                    Sube tu archivo HTML para analizar la rentabilidad de cada EA basándose en el riesgo máximo asumido.
+                    Esta métrica te permite comparar EAs de manera más justa, independientemente del tamaño de las operaciones.
+                </p>
+                <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; margin-top: 1rem;">
+                    <h4 style="margin: 0 0 0.5rem 0;">🎯 Ventajas del análisis por riesgo:</h4>
+                    <ul style="margin: 0; font-size: 0.9rem; text-align: left;">
+                        <li>Comparación justa entre EAs con diferentes tamaños de operación</li>
+                        <li>Identificación de EAs más eficientes en términos de riesgo</li>
+                        <li>Mejor comprensión del rendimiento relativo</li>
+                        <li>Análisis visual con gráficos de dispersión</li>
+                        <li>Ranking basado en eficiencia de riesgo</li>
+                    </ul>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    with sub_tab3:
         # Tarjeta de análisis de Prop Firm
         st.markdown("""
         <div class="card">
