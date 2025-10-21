@@ -1110,11 +1110,6 @@ def display_evolution_interface(df_csv, config):
     if 'evolution_config_hash' not in st.session_state:
         st.session_state.evolution_config_hash = None
     
-    st.markdown("""
-    <div class="card">
-        <div class="card-title">📈 Evolución Detallada de Challenges</div>
-    """, unsafe_allow_html=True)
-    
     # Preparar datos
     df_processed = df_csv.copy()
     df_processed['Open time'] = pd.to_datetime(df_processed['Open time'])
@@ -1125,9 +1120,6 @@ def display_evolution_interface(df_csv, config):
     
     # Procesar tipo de cierre
     df_processed['close_type'] = df_processed['Close type'].fillna('Unknown')
-    
-    # Información sobre la funcionalidad
-    st.info("Esta tabla muestra la evolución trade por trade de cada challenge, permitiendo ver exactamente cómo progresa el balance y en qué momento se aprueba o suspende cada examen.")
     
     # Crear hash de la configuración para detectar cambios
     import hashlib
@@ -1149,9 +1141,79 @@ def display_evolution_interface(df_csv, config):
         st.warning("No se pudieron generar challenges con los datos disponibles.")
         return
     
-    # Mostrar todos los challenges sin paginación
+    # Calcular estadísticas del CSV
+    total_dias_csv = df_processed['date'].nunique()
+    fecha_inicio = df_processed['date'].min()
+    fecha_fin = df_processed['date'].max()
+    
+    # Calcular estadísticas de challenges
     available_challenges = sorted(evolution_df['challenge_num'].unique())
     total_challenges = len(available_challenges)
+    
+    # Contar challenges por estado
+    challenges_aprobados = 0
+    challenges_suspendidos = 0
+    challenges_incompletos = 0
+    
+    for challenge_num in available_challenges:
+        challenge_data = evolution_df[evolution_df['challenge_num'] == challenge_num]
+        final_status = challenge_data.iloc[-1]['status']
+        
+        if final_status == "APROBADO":
+            challenges_aprobados += 1
+        elif "SUSPENDIDO" in final_status:
+            challenges_suspendidos += 1
+        else:
+            challenges_incompletos += 1
+    
+    # Mostrar estadísticas en métricas
+    st.markdown("### 📊 Estadísticas del Análisis")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric(
+            "📅 Días Totales",
+            f"{total_dias_csv}",
+            help=f"Del {fecha_inicio} al {fecha_fin}"
+        )
+    
+    with col2:
+        st.metric(
+            "🎯 Challenges Totales",
+            f"{total_challenges}",
+            help="Número total de challenges simulados"
+        )
+    
+    with col3:
+        st.metric(
+            "✅ Challenges Aprobados",
+            f"{challenges_aprobados}",
+            f"{challenges_aprobados/total_challenges*100:.1f}%" if total_challenges > 0 else "0%",
+            help="Challenges que completaron ambas fases"
+        )
+    
+    with col4:
+        st.metric(
+            "❌ Challenges Suspendidos",
+            f"{challenges_suspendidos}",
+            f"{challenges_suspendidos/total_challenges*100:.1f}%" if total_challenges > 0 else "0%",
+            help="Challenges que superaron los límites de drawdown"
+        )
+    
+    # Mostrar información adicional
+    if challenges_incompletos > 0:
+        st.info(f"ℹ️ **{challenges_incompletos} challenges incompletos** (no terminaron por falta de datos)")
+    
+    st.markdown("---")
+    
+    st.markdown("""
+    <div class="card">
+        <div class="card-title">📈 Evolución Detallada de Challenges</div>
+    """, unsafe_allow_html=True)
+
+    # Información sobre la funcionalidad
+    st.info("Esta tabla muestra la evolución trade por trade de cada challenge, permitiendo ver exactamente cómo progresa el balance y en qué momento se aprueba o suspende cada examen.")
     
     # Mostrar información de todos los challenges
     st.markdown(f"**Mostrando todos los {total_challenges} challenges disponibles**")
