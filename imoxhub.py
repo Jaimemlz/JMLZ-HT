@@ -3810,7 +3810,19 @@ promociones = [
         "logo": "https://www.thetradingpit.com/assets/global/logo-dark-4.svg",
         "badge": "⭐ NUEVO",
         "descuento": "15% DESCUENTO",
-        "codigo": "TTP15",
+        "codigo": "IMOX20",
+        "descripcion": "Accede a hasta $200,000 en capital con condiciones de trading flexibles y sin límite de tiempo. Perfecto para traders principiantes.",
+        "url": "https://thetradingpit.com",
+        "boton_texto": "Ir a The Trading Pit",
+        "tiene_timer": False
+    },
+    {
+        "id": "ttp",
+        "nombre": "Darwinex",
+        "logo": "https://cdn.document360.io/logo/5f0936e1-6677-439a-8c1d-7fb2b7944358/2c45aeb889744ddf8ade39331d5b2a85-Dzero-logo-hor.svg",
+        "badge": "⭐ NUEVO",
+        "descuento": "20% DESCUENTO",
+        "codigo": "IMOXCODE",
         "descripcion": "Accede a hasta $200,000 en capital con condiciones de trading flexibles y sin límite de tiempo. Perfecto para traders principiantes.",
         "url": "https://thetradingpit.com",
         "boton_texto": "Ir a The Trading Pit",
@@ -3825,7 +3837,7 @@ def generar_promo_html(promo):
         timer = promo["timer"]
         timer_html = f'<div class="countdown-timer" id="{promo["id"]}-timer"><div class="timer-label">⏰ Oferta termina en:</div><div class="timer-display"><span id="{promo["id"]}-days">{timer["dias"]}</span>d<span id="{promo["id"]}-hours">{timer["horas"]}</span>h<span id="{promo["id"]}-minutes">{timer["minutos"]}</span>m</div></div>'
     
-    return f'<div class="promo-card-full"><div class="promo-image-section"><img src="{promo["logo"]}" alt="{promo["nombre"]}" class="promo-main-logo"></div><div class="promo-content-section"><div class="promo-info"><div class="promo-discount">{promo["descuento"]}</div><div class="promo-code"><span>Código: </span><code id="{promo["id"]}-code">{promo["codigo"]}</code><button class="copy-btn" onclick="copyCode(\'{promo["id"]}-code\')">📋</button></div></div><div class="promo-actions">{timer_html}<a href="{promo["url"]}" target="_blank" class="promo-link"></a></div></div></div>'
+    return f'<div class="promo-card-full" style="cursor:pointer;"><div class="promo-image-section"><img src="{promo["logo"]}" alt="{promo["nombre"]}" class="promo-main-logo"></div><div class="promo-content-section"><div class="promo-info"><div class="promo-discount">{promo["descuento"]}</div><div class="promo-code"><span>Código: </span><code id="{promo["id"]}-code">{promo["codigo"]}</code><button class="copy-btn" onclick="copyCode(\'{promo["id"]}-code\')">📋</button></div></div><div class="promo-actions">{timer_html}<a href="{promo["url"]}" target="_blank" class="promo-link"></a></div></div></div>'
 
 # Tab de Prop Firms
 with tab2:
@@ -4557,6 +4569,170 @@ with tab3:
                 """, unsafe_allow_html=True)
             
             st.markdown('</div></div>', unsafe_allow_html=True)
+    
+    # Gráfico de evolución mensual por categoría (después de todos los rankings)
+    st.markdown("""
+    <div class="card" style="margin-top: 2rem;">
+        <div class="card-title">📈 Evolución Mensual por Categoría</div>
+    """, unsafe_allow_html=True)
+    
+    # Preparar datos para el gráfico mensual de payouts
+    df_payouts = pd.DataFrame(payouts_data)
+    df_payouts['fecha_payout'] = pd.to_datetime(df_payouts['fecha_payout'], errors='coerce')
+    
+    # Filtrar solo payouts válidos
+    df_payouts_valid = df_payouts.dropna(subset=['fecha_payout']).copy()
+    
+    if not df_payouts_valid.empty:
+        # Convertir payout a float
+        df_payouts_valid['payout_amount'] = pd.to_numeric(df_payouts_valid['payout'], errors='coerce')
+        df_payouts_valid = df_payouts_valid.dropna(subset=['payout_amount'])
+        
+        # Crear diccionario de usuarios para obtener rangos
+        users_dict = {user['nick']: {'name': user['name'], 'rank': user['rank']} for user in users_data}
+        
+        # Agregar información de usuario
+        df_payouts_valid['rank'] = df_payouts_valid['nick'].map(lambda x: users_dict.get(x, {}).get('rank', 'unknown'))
+        
+        # Agrupar por mes y categoría
+        df_payouts_valid['year_month'] = df_payouts_valid['fecha_payout'].dt.to_period('M')
+        
+        # Calcular totales mensuales por categoría
+        datos_mensuales = []
+        
+        for mes in df_payouts_valid['year_month'].unique():
+            df_mes = df_payouts_valid[df_payouts_valid['year_month'] == mes]
+            
+            # Global (todos los datos)
+            total_global = df_mes['payout_amount'].sum()
+            
+            # Gold (usuarios con rank 'gold')
+            df_gold = df_mes[df_mes['rank'] == 'gold']
+            total_gold = df_gold['payout_amount'].sum()
+            
+            # Silver (usuarios con rank 'silver')
+            df_silver = df_mes[df_mes['rank'] == 'silver']
+            total_silver = df_silver['payout_amount'].sum()
+            
+            datos_mensuales.append({
+                'Mes': mes,
+                'Global': total_global,
+                'Gold': total_gold,
+                'Silver': total_silver
+            })
+        
+        # Crear DataFrame para el gráfico
+        df_mensual = pd.DataFrame(datos_mensuales)
+        df_mensual = df_mensual.sort_values('Mes')
+        df_mensual['Mes_Str'] = df_mensual['Mes'].astype(str)
+        
+        # Crear gráfico de líneas
+        import plotly.graph_objects as go
+        
+        fig_mensual = go.Figure()
+        
+        # Línea Global
+        fig_mensual.add_trace(go.Scatter(
+            x=df_mensual['Mes_Str'],
+            y=df_mensual['Global'],
+            mode='lines+markers',
+            name='Global',
+            line=dict(color='#1f77b4', width=3),
+            marker=dict(size=8),
+            hovertemplate='<b>Global</b><br>Mes: %{x}<br>Total: $%{y:,.2f}<extra></extra>'
+        ))
+        
+        # Línea Gold
+        fig_mensual.add_trace(go.Scatter(
+            x=df_mensual['Mes_Str'],
+            y=df_mensual['Gold'],
+            mode='lines+markers',
+            name='Gold',
+            line=dict(color='#ffd700', width=3),
+            marker=dict(size=8),
+            hovertemplate='<b>Gold</b><br>Mes: %{x}<br>Total: $%{y:,.2f}<extra></extra>'
+        ))
+        
+        # Línea Silver
+        fig_mensual.add_trace(go.Scatter(
+            x=df_mensual['Mes_Str'],
+            y=df_mensual['Silver'],
+            mode='lines+markers',
+            name='Silver',
+            line=dict(color='#c0c0c0', width=3),
+            marker=dict(size=8),
+            hovertemplate='<b>Silver</b><br>Mes: %{x}<br>Total: $%{y:,.2f}<extra></extra>'
+        ))
+        
+        # Configurar layout
+        fig_mensual.update_layout(
+            title="Evolución Mensual de Payouts por Categoría",
+            xaxis_title="Mes",
+            yaxis_title="Payout Total ($)",
+            template="plotly_white",
+            height=500,
+            margin=dict(l=20, r=20, t=40, b=20),
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            font=dict(color='#495057'),
+            xaxis=dict(
+                gridcolor='#e9ecef',
+                linecolor='#e9ecef',
+                tickcolor='#495057',
+                tickfont=dict(color='#495057')
+            ),
+            yaxis=dict(
+                gridcolor='#e9ecef',
+                linecolor='#e9ecef',
+                tickcolor='#495057',
+                tickfont=dict(color='#495057'),
+                tickformat='$,.0f'
+            ),
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            )
+        )
+        
+        st.plotly_chart(fig_mensual, use_container_width=True)
+        
+        # Mostrar estadísticas del gráfico
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            total_global_periodo = df_mensual['Global'].sum()
+            st.metric(
+                "Total Global",
+                f"${total_global_periodo:,.2f}",
+                help="Suma total de todos los payouts en el período"
+            )
+        
+        with col2:
+            total_gold_periodo = df_mensual['Gold'].sum()
+            porcentaje_gold = (total_gold_periodo / total_global_periodo * 100) if total_global_periodo > 0 else 0
+            st.metric(
+                "Total Gold",
+                f"${total_gold_periodo:,.2f}",
+                f"{porcentaje_gold:.1f}% del total",
+                help="Suma de usuarios Gold"
+            )
+        
+        with col3:
+            total_silver_periodo = df_mensual['Silver'].sum()
+            porcentaje_silver = (total_silver_periodo / total_global_periodo * 100) if total_global_periodo > 0 else 0
+            st.metric(
+                "Total Silver",
+                f"${total_silver_periodo:,.2f}",
+                f"{porcentaje_silver:.1f}% del total",
+                help="Suma de usuarios Silver"
+            )
+    else:
+        st.info("No hay datos de payouts suficientes para generar el gráfico")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
     
     with ranking_sub_tab2:
         st.markdown("""
