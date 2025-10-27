@@ -20,6 +20,15 @@ pio.templates.default = "plotly_white"
 # Configuración de la URL del backend
 API_BASE_URL = os.getenv("API_URL", "https://imoxhub-backend.onrender.com")
 
+# Asegurar que la URL tenga esquema (https://) y dominio completo
+if not API_BASE_URL.startswith(("http://", "https://")):
+    # Si la URL viene sin esquema desde la variable de entorno, agregarlo
+    if "imoxhub-backend" in API_BASE_URL and not API_BASE_URL.endswith(".onrender.com"):
+        # Si es imoxhub-backend pero le falta el dominio completo
+        API_BASE_URL = f"https://imoxhub-backend.onrender.com"
+    else:
+        API_BASE_URL = f"https://{API_BASE_URL}"
+
 # AÑADIR ESTAS FUNCIONES AQUÍ (después de la línea 17)
 def get_medal_emoji(position):
     """Obtener emoji de medalla según posición"""
