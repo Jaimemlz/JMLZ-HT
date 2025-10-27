@@ -10,8 +10,15 @@ import os
 from typing import List, Optional
 
 # Configuración de la base de datos
-DATABASE_URL = "sqlite:///./imoxhub.db"
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./imoxhub.db")
+
+# Configurar engine según el tipo de base de datos
+if DATABASE_URL.startswith("postgresql://"):
+    engine = create_engine(DATABASE_URL)
+else:
+    # SQLite
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -22,11 +29,11 @@ class UserRank(PyEnum):
     SILVER = "silver"
 
 class Herramienta(PyEnum):
-    AXI_SELECT = "AXI SELECT"
+    AXI_SELECT = "AXI_SELECT"
     FTMO = "FTMO"
-    DARWINEX_ZERO = "DARWINEX ZERO"
+    DARWINEX_ZERO = "DARWINEX_ZERO"
     TTP = "TTP"
-    CUENTA_PERSONAL = "CUENTA PERSONAL"
+    CUENTA_PERSONAL = "CUENTA_PERSONAL"
     OTROS = "OTROS"
 
 # Modelos de base de datos
