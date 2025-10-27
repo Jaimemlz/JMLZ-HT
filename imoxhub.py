@@ -2678,7 +2678,7 @@ with col3:
         st.rerun()
 
 # Usar tabs de Streamlit para el contenido
-tab1, tab2, tab3, tab4 = st.tabs(["📊 Análisis", "% Descuentos", "🏆 Ranking", "⚙️ Configuración"])
+tab1, tab2, tab3, tab4 = st.tabs(["📊 Análisis", "% Descuentos", "🏆 Ranking", "⚙️ Herramientas"])
 
 # Contenedor principal
 st.markdown('<div class="main-container">', unsafe_allow_html=True)
@@ -4018,10 +4018,10 @@ with tab3:
                     # Total generado al final con $ al final y sin centavos, usando punto como separador de miles
                     total_amount = sum([float(row['total_payout']) for _, row in global_ranking.head(10).iterrows()])
                     total_text = f"Total: {total_amount:,.0f}$".replace(',', '.')
-                    draw.text((width//2, height-200), total_text, fill='#1a1a1a', font=total_font, anchor='mm')
+                    draw.text((width//2, height-150), total_text, fill='#1a1a1a', font=total_font, anchor='mm')
                     
                     # Marca de agua
-                    draw.text((width//2, height-100), "@imoxtrading", fill='#999999', font=subtitle_font, anchor='mm')
+                    draw.text((width//2, height-50), "@imoxtrading", fill='#999999', font=subtitle_font, anchor='mm')
                     
                     return img
                 
@@ -4748,11 +4748,11 @@ with tab3:
         </div>
         """, unsafe_allow_html=True)
 
-# Tab de Configuración
+# Tab de Herramientas
 with tab4:
     st.markdown("""
     <div class="card">
-        <div class="card-title">⚙️ Configuración</div>
+        <div class="card-title">⚙️ Herramientas</div>
         <div style="text-align: center; padding: 2rem;">
             <div style="font-size: 4rem; margin-bottom: 1rem;" class="construction-icon">⚡</div>
             <h2 style="color: #6c757d; margin-bottom: 1rem;">¡En Desarrollo!</h2>
