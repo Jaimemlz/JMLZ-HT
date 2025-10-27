@@ -259,10 +259,6 @@ def delete_payout(payout_id: int, db: Session = Depends(get_db)):
     return {"message": "Payout eliminado correctamente"}
 
 # Ruta de salud
-@app.get("/")
-def root():
-    return {"status": "ok", "message": "IMOXHUB API está funcionando", "docs": "/docs"}
-
 @app.get("/health")
 def health_check():
     return {"status": "ok", "message": "IMOXHUB API está funcionando"}
