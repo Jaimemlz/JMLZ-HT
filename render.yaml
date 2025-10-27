@@ -1,0 +1,44 @@
+services:
+  # Backend FastAPI
+  - type: web
+    name: imoxhub-backend
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r backend/requirements.txt && python backend/init_db.py
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: imoxhub-db
+          property: connectionString
+      - key: PYTHON_VERSION
+        value: 3.11.0
+    healthCheckPath: /health
+
+  # Frontend Streamlit
+  - type: web
+    name: imoxhub-frontend
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run imoxhub.py --server.port $PORT --server.address 0.0.0.0 --server.headless=true
+    envVars:
+      - key: API_URL
+        fromService:
+          type: web
+          name: imoxhub-backend
+          property: host
+      - key: STREAMLIT_SERVER_HEADLESS
+        value: "true"
+      - key: PYTHON_VERSION
+        value: 3.11.0
+
+databases:
+  - name: imoxhub-db
+    databaseName: imoxhub
+    user: imoxhub
+    region: oregon
+    plan: free
+

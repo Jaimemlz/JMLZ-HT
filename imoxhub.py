@@ -12,9 +12,13 @@ import requests
 import json
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 import io
+import os
 
 # Configurar tema claro por defecto para Plotly
 pio.templates.default = "plotly_white"
+
+# Configuración de la URL del backend
+API_BASE_URL = os.getenv("API_URL", "http://localhost:8000")
 
 # AÑADIR ESTAS FUNCIONES AQUÍ (después de la línea 17)
 def get_medal_emoji(position):
@@ -419,14 +423,14 @@ def get_payouts_from_api():
     Obtiene todos los payouts desde la API del backend
     """
     try:
-        response = requests.get("http://localhost:8000/payouts/")
+        response = requests.get(f"{API_BASE_URL}/payouts/")
         if response.status_code == 200:
             return response.json()
         else:
             st.error(f"Error al obtener payouts: {response.status_code}")
             return []
     except requests.exceptions.ConnectionError:
-        st.error("No se puede conectar con el backend. Asegúrate de que esté ejecutándose en http://localhost:8000")
+        st.error(f"No se puede conectar con el backend. Asegúrate de que esté ejecutándose en {API_BASE_URL}")
         return []
     except Exception as e:
         st.error(f"Error inesperado: {str(e)}")
@@ -437,14 +441,14 @@ def get_users_from_api():
     Obtiene todos los usuarios desde la API del backend
     """
     try:
-        response = requests.get("http://localhost:8000/users/")
+        response = requests.get(f"{API_BASE_URL}/users/")
         if response.status_code == 200:
             return response.json()
         else:
             st.error(f"Error al obtener usuarios: {response.status_code}")
             return []
     except requests.exceptions.ConnectionError:
-        st.error("No se puede conectar con el backend. Asegúrate de que esté ejecutándose en http://localhost:8000")
+        st.error(f"No se puede conectar con el backend. Asegúrate de que esté ejecutándose en {API_BASE_URL}")
         return []
     except Exception as e:
         st.error(f"Error inesperado: {str(e)}")
