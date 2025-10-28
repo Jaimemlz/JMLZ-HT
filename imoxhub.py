@@ -2605,6 +2605,11 @@ with tab1:
                         tipo = fila_op[2].text.strip().lower()
                         size = float(fila_op[3].text.replace(' ', ''))
                         symbol = fila_op[4].text.strip().lower()
+                        
+                        # Extraer SL y TP
+                        sl_str = fila_op[6].text.strip()
+                        tp_str = fila_op[7].text.strip()
+                        
                         close_time = datetime.strptime(fila_op[8].text.strip(), "%Y.%m.%d %H:%M:%S")
                         profit = float(fila_op[13].text.replace(' ', ''))
 
@@ -2627,6 +2632,8 @@ with tab1:
                             "Beneficio": profit,
                             "Open": open_time,
                             "Close": close_time,
+                            "SL": sl_str,
+                            "TP": tp_str,
                             "Duración": (close_time - open_time).total_seconds() / 60  # en minutos
                         })
                     except Exception as e:
@@ -2641,10 +2648,232 @@ with tab1:
                     if eas_filtradas > 0:
                         st.info(f"ℹ️ Se eliminaron {eas_filtradas} operaciones que no pertenecen a ninguna EA de un total de {total_operaciones} operaciones. Se procesaron {len(datos)} operaciones válidas.")
 
-                    # Crear gráfico de beneficio acumulado (incluyendo "Sin EA")
-                    df_filtrado_grafico = df.copy()
-                    df_filtrado_grafico['Fecha'] = df_filtrado_grafico['Close'].dt.date
-                    beneficios_diarios = df_filtrado_grafico.groupby(['EA', 'Fecha'])['Beneficio'].sum().reset_index()
+                
+                    # Filtrar "Sin EA" para el resto del análisis
+                    df = df[df['EA'] != 'Sin EA']
+                    
+                    if df.empty:
+                        st.warning("No hay operaciones válidas para mostrar en las tablas.")
+                        st.markdown('</div>', unsafe_allow_html=True)
+                    else:
+                        # Funciones auxiliares para calcular métricas
+                        def calcular_max_drawdown(serie_beneficios):
+                            """Calcula el drawdown máximo de una serie de beneficios acumulados"""
+                            acumulado = serie_beneficios.cumsum()
+                            running_max = acumulado.expanding().max()
+                            drawdown = acumulado - running_max
+                            return drawdown.min()
+                        
+                        def calcular_max_consecutive_loss(serie_beneficios):
+                            """Calcula la máxima racha de pérdidas consecutivas"""
+                            consecutivo = 0
+                            max_consecutivo = 0
+                            for val in serie_beneficios:
+                                if val < 0:
+                                    consecutivo += 1
+                                    max_consecutivo = max(max_consecutivo, consecutivo)
+                                else:
+                                    consecutivo = 0
+                            return max_consecutivo
+                        
+                        def contar_sl_tp(grupo):
+                            """Cuenta cuántos trades tienen SL y cuántos tienen TP"""
+                            cantidad_sl = 0
+                            cantidad_tp = 0
+                            
+                            for sl in grupo['SL']:
+                                try:
+                                    if sl and str(sl).strip() != '' and float(sl) != 0.0:
+                                        cantidad_sl += 1
+                                except (ValueError, TypeError):
+                                    pass
+                            
+                            for tp in grupo['TP']:
+                                try:
+                                    if tp and str(tp).strip() != '' and float(tp) != 0.0:
+                                        cantidad_tp += 1
+                                except (ValueError, TypeError):
+                                    pass
+                            
+                            return cantidad_sl, cantidad_tp
+                        
+                        def calcular_avg_trades_por_mes(grupo):
+                            """Calcula el promedio de trades por mes"""
+                            import numpy as np
+                            # Obtener fechas de apertura
+                            fechas = grupo['Open'].dt.to_period('M').value_counts()
+                            if len(fechas) > 0:
+                                return fechas.mean()
+                            return 0
+                        
+                        # Análisis de riesgo por EA y SL directo vs trailing stop
+                        st.markdown("""
+                        <div style="margin-top: 2rem;">
+                            <h3>📊 Resumen de Estrategias</h3>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        analisis_data = []
+                        for (ea, simbolo), grupo in df.groupby(["EA", "Símbolo"]):
+                            ordenado = grupo.sort_values(by='Open')
+                            
+                            # Detectar el riesgo típico (SL) de la EA
+                            # Analizamos la distribución de pérdidas para encontrar el valor más común
+                            perdidas = ordenado[ordenado['Beneficio'] < 0]['Beneficio'].abs()
+                            
+                            if len(perdidas) > 0:
+                                # Agrupar pérdidas con tolerancia del 10% para encontrar el SL más común
+                                # Primero, tomamos la pérdida máxima como candidato inicial
+                                perdida_maxima = perdidas.max()
+                                
+                                # Buscamos pérdidas cercanas al máximo (dentro del 10%)
+                                margen_busqueda = perdida_maxima * 0.10
+                                sl_detected = perdidas[perdidas >= (perdida_maxima - margen_busqueda)].mode()
+                                
+                                if len(sl_detected) > 0:
+                                    riesgo_ea = sl_detected.iloc[0]  # Tomamos el valor más común
+                                else:
+                                    riesgo_ea = perdida_maxima
+                                
+                                # Analizar SL directo vs trailing stop
+                                sl_directos = 0
+                                sl_trailing = 0
+                                perdidas_nulas = 0
+                                
+                                # Margen de tolerancia (10% del riesgo detectado)
+                                margen_tolerancia = riesgo_ea * 0.10
+                                
+                                for _, trade in ordenado.iterrows():
+                                    perdida = trade['Beneficio']
+                                    
+                                    if perdida < 0:  # Es una pérdida
+                                        perdida_abs = abs(perdida)
+                                        if perdida_abs >= (riesgo_ea - margen_tolerancia):
+                                            # Se considera SL directo si la pérdida está cerca del SL detectado
+                                            sl_directos += 1
+                                        elif perdida_abs > 0:
+                                            # Trailing stop - pérdida menor que el SL detectado
+                                            sl_trailing += 1
+                                        else:
+                                            # Pérdida nula
+                                            perdidas_nulas += 1
+                            else:
+                                # No hay pérdidas, no podemos calcular el riesgo
+                                riesgo_ea = 0
+                                sl_directos = 0
+                                sl_trailing = 0
+                                perdidas_nulas = 0
+                            
+                            # Calcular métricas completas
+                            net_profit = ordenado['Beneficio'].sum()
+                            ganancias_totales = ordenado[ordenado['Beneficio'] > 0]['Beneficio'].sum()
+                            perdidas_totales = abs(ordenado[ordenado['Beneficio'] < 0]['Beneficio'].sum())
+                            
+                            # Profit Factor
+                            profit_factor = ganancias_totales / perdidas_totales if perdidas_totales > 0 else float('inf')
+                            
+                            # Max Drawdown
+                            max_dd = calcular_max_drawdown(ordenado['Beneficio'])
+                            
+                            # Return on Drawdown (ratio, no porcentaje)
+                            ret_dd = net_profit / abs(max_dd) if max_dd != 0 else 0
+                            
+                            # Max Consecutive Loss
+                            max_consec_loss = calcular_max_consecutive_loss(ordenado['Beneficio'])
+                            
+                            # Avg Trades per Month
+                            avg_trades_mes = calcular_avg_trades_por_mes(ordenado)
+                            
+                            # Contar TP (trades ganadores)
+                            tp_trades = len(ordenado[ordenado['Beneficio'] > 0])
+                            
+                            analisis_data.append({
+                                "Nombre": ea,
+                                "retDD": f"{ret_dd:.2f}",
+                                "Net Profit": f"${net_profit:.2f}",
+                                "maxDD": f"${max_dd:.2f}",
+                                "PF": f"{profit_factor:.2f}" if profit_factor != float('inf') else "∞",
+                                "SL": int(sl_directos),
+                                "TP": int(tp_trades),
+                                "TS": int(sl_trailing),
+                                "Max Consec Loss": int(max_consec_loss),
+                                "Avg Trade Mensual": round(avg_trades_mes, 1)
+                            })
+                        
+                        # Crear DataFrame del análisis
+                        df_analisis = pd.DataFrame(analisis_data)
+                        
+                        # Ordenar por retDD de forma descendente
+                        df_analisis['retDD_num'] = df_analisis['retDD'].str.replace('∞', '999999').astype(float)
+                        df_analisis = df_analisis.sort_values(by='retDD_num', ascending=False)
+                        df_analisis = df_analisis.drop(columns=['retDD_num'])
+                        
+                        # Mostrar tabla de análisis
+                        column_config_analisis = {
+                            "Nombre": st.column_config.TextColumn(
+                                "Nombre",
+                                help="Nombre del Expert Advisor y símbolo"
+                            ),
+                            "retDD": st.column_config.TextColumn(
+                                "retDD",
+                                help="Return on Drawdown - Ratio: Net Profit / maxDD. Ej: 20 = beneficio es 20x el drawdown"
+                            ),
+                            "Net Profit": st.column_config.TextColumn(
+                                "Net Profit",
+                                help="Beneficio neto total"
+                            ),
+                            "maxDD": st.column_config.TextColumn(
+                                "maxDD",
+                                help="Máximo drawdown (desde el pico más alto)"
+                            ),
+                            "PF": st.column_config.TextColumn(
+                                "PF",
+                                help="Profit Factor - Ratio ganancias totales / pérdidas totales"
+                            ),
+                            "SL": st.column_config.NumberColumn(
+                                "SL",
+                                help="Trades con SL directo",
+                                format="%d"
+                            ),
+                            "TP": st.column_config.NumberColumn(
+                                "TP",
+                                help="Trades con TP (Take Profit)",
+                                format="%d"
+                            ),
+                            "TS": st.column_config.NumberColumn(
+                                "TS",
+                                help="Trades con Trailing Stop",
+                                format="%d"
+                            ),
+                            "Max Consec Loss": st.column_config.NumberColumn(
+                                "Max Consec Loss",
+                                help="Máxima racha de pérdidas consecutivas",
+                                format="%d"
+                            ),
+                            "Avg Trade Mensual": st.column_config.NumberColumn(
+                                "Avg Trade Mensual",
+                                help="Promedio de trades por mes",
+                                format="%.1f"
+                            )
+                        }
+                        
+                        st.dataframe(
+                            df_analisis,
+                            use_container_width=True,
+                            column_config=column_config_analisis,
+                            hide_index=True
+                        )
+                        
+                        # Crear gráfico de beneficio acumulado
+                        st.markdown("""
+                        <div style="margin-top: 2rem;">
+                            <h3 style="margin-bottom: 1rem;">📈 Evolución de Beneficios Acumulados</h3>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        df_grafico = df.copy()
+                        df_grafico['Fecha'] = df_grafico['Close'].dt.date
+                        beneficios_diarios = df_grafico.groupby(['EA', 'Fecha'])['Beneficio'].sum().reset_index()
                     beneficios_diarios['Beneficio_acumulado'] = beneficios_diarios.groupby('EA')['Beneficio'].cumsum()
 
                     if len(beneficios_diarios) > 0:
@@ -2657,7 +2886,6 @@ with tab1:
                             labels={"Beneficio_acumulado": "Beneficio acumulado", "Fecha": "Fecha"}
                         )
 
-                        # Añadir tooltip personalizado
                         fig.update_traces(
                             hovertemplate=
                             "<b>Estrategia:</b> %{fullData.name}<br>" +
@@ -2690,298 +2918,166 @@ with tab1:
                     else:
                         st.info("No hay datos suficientes para mostrar el gráfico")
                 
-                    # Filtrar "Sin EA" para el resto del análisis
-                    df = df[df['EA'] != 'Sin EA']
+                    # Resumen mensual por EA
+                    st.markdown("""
+                    <div style="margin-top: 2rem;">
+                        <h3>📅 Estadísticas por Mes</h3>
+                    </div>
+                    """, unsafe_allow_html=True)
                     
-                    if df.empty:
-                        st.warning("No hay operaciones válidas para mostrar en las tablas.")
-                        st.markdown('</div>', unsafe_allow_html=True)
-                    else:
-                        resumen = df.groupby(["EA", "Símbolo"]).agg(
-                            Ops=('Beneficio', 'count'),
-                            Win_pct=('Beneficio', lambda x: 100 * (x > 0).sum() / len(x)),
-                            Profit_medio=('Beneficio', 'mean'),
-                            Max_Loss=('Beneficio', 'min'),
-                            Duracion_media_min=('Duración', 'mean'),
-                            Beneficio_total=('Beneficio', 'sum')
-                        ).reset_index()
-
-                        # Redondear numéricos primero
-                        resumen = resumen.round({
-                            "Win_pct": 2,
-                            "Profit_medio": 2,
-                            "Max_Loss": 2,
-                            "Duracion_media_min": 1,
-                            "Beneficio_total": 2
-                        })
-
-                        resumen["Beneficio_total_raw"] = resumen["Beneficio_total"]
-
-                        # 💡 Formatear columnas para presentación legible
-                        def formatear_duracion(minutos):
-                            horas = int(minutos) // 60
-                            mins = int(minutos) % 60
-                            return f"{horas}h {mins}m"
-
-                        resumen["Win_pct"] = resumen["Win_pct"].astype(str) + " %"
-                        resumen["Profit_medio"] = resumen["Profit_medio"].apply(lambda x: f"${x:.2f}")
-                        resumen["Max_Loss"] = resumen["Max_Loss"].apply(lambda x: f"${x:.2f}")
-                        resumen["Beneficio_total"] = resumen["Beneficio_total"].apply(lambda x: f"${x:.2f}")
-                        resumen["Duracion_media"] = resumen["Duracion_media_min"].apply(formatear_duracion)
-                        resumen = resumen.drop(columns=["Duracion_media_min"])  # Quitamos la versión cruda
-
-                        # Ordenar y preparar resumen
-                        resumen = resumen.sort_values(by="Beneficio_total_raw", ascending=False)
-
-                        # Selector de EA para filtrar
-                        ea_opciones = ["Todas"] + sorted(resumen["EA"].unique())
-                        ea_seleccionada = st.selectbox("🧠 Selecciona una EA para filtrar", ea_opciones)
-
-                        # Filtrar datos según selección
-                        if ea_seleccionada != "Todas":
-                            resumen_filtrado = resumen[resumen["EA"] == ea_seleccionada]
-                            df_filtrado = df[df["EA"] == ea_seleccionada]
+                    # Guardar datos para el resumen mensual con expandables
+                    resumen_mensual_data = []
+                    
+                    # Crear resumen mensual para cada EA
+                    for (ea, simbolo), grupo in df.groupby(["EA", "Símbolo"]):
+                        ordenado = grupo.sort_values(by='Open')
+                        
+                        # Detectar el riesgo de la EA para calcular SL
+                        perdidas = ordenado[ordenado['Beneficio'] < 0]['Beneficio'].abs()
+                        if len(perdidas) > 0:
+                            perdida_maxima = perdidas.max()
+                            margen_busqueda = perdida_maxima * 0.10
+                            sl_detected = perdidas[perdidas >= (perdida_maxima - margen_busqueda)].mode()
+                            if len(sl_detected) > 0:
+                                riesgo_ea = sl_detected.iloc[0]
+                            else:
+                                riesgo_ea = perdida_maxima
+                            margen_tolerancia = riesgo_ea * 0.10
                         else:
-                            resumen_filtrado = resumen
-                            df_filtrado = df
-
-                        # Cerrar tarjeta de análisis
-                        st.markdown('</div>', unsafe_allow_html=True)
-                    
-                    # Panel de Ranking por Score de Rentabilidad
-                    st.markdown("""
-                    <div class="card">
-                        <div class="card-title">🏆 Ranking por Score de Rentabilidad</div>
-                    """, unsafe_allow_html=True)
-                
-                    # Crear ranking
-                    ranking_df = crear_ranking_ea(df_filtrado)
-                    
-                    if not ranking_df.empty:
-                        # Crear tabla de ranking con columnas formateadas
-                        ranking_mostrar = ranking_df[[
-                            'Posicion', 'EA', 'Símbolo', 'Total_Ops', 'Win_Rate_Formateado',
-                            'Beneficio_Promedio_Formateado', 'Perdida_Promedio_Formateado',
-                            'Ratio_Formateado', 'Score_Formateado', 'Beneficio_Total_Formateado'
-                        ]].copy()
+                            riesgo_ea = 0
+                            margen_tolerancia = 0
                         
-                        # Renombrar columnas para mejor presentación
-                        ranking_mostrar.columns = [
-                            'Posición', 'EA', 'Símbolo', 'Total Ops', 'Win Rate',
-                            'Beneficio Promedio', 'Pérdida Promedio', 'Ratio R/B', 'Score Rentabilidad', 'Beneficio Total'
-                        ]
-                    
-                        # Configurar columnas para tema claro
-                        column_config = {
-                            "Posición": st.column_config.NumberColumn(
-                                "Posición",
-                                help="Posición en el ranking",
-                                format="%d"
-                            ),
-                            "EA": st.column_config.TextColumn(
-                                "EA",
-                                help="Nombre del Expert Advisor"
-                            ),
-                            "Símbolo": st.column_config.TextColumn(
-                                "Símbolo",
-                                help="Símbolo de trading"
-                            ),
-                            "Total Ops": st.column_config.NumberColumn(
-                                "Total Ops",
-                                help="Total de operaciones",
-                                format="%d"
-                            ),
-                            "Win Rate": st.column_config.TextColumn(
-                                "Win Rate",
-                                help="Porcentaje de operaciones ganadoras"
-                            ),
-                            "Beneficio Promedio": st.column_config.TextColumn(
-                                "Beneficio Promedio",
-                                help="Beneficio promedio por operación ganadora"
-                            ),
-                            "Pérdida Promedio": st.column_config.TextColumn(
-                                "Pérdida Promedio",
-                                help="Pérdida promedio por operación perdedora"
-                            ),
-                            "Ratio R/B": st.column_config.TextColumn(
-                                "Ratio R/B",
-                                help="Ratio Riesgo-Beneficio"
-                            ),
-                            "Score Rentabilidad": st.column_config.TextColumn(
-                                "Score Rentabilidad",
-                                help="Score que combina Win Rate y Ratio R/B (Win Rate × Ratio R/B)"
-                            ),
-                            "Beneficio Total": st.column_config.TextColumn(
-                                "Beneficio Total",
-                                help="Beneficio total acumulado"
-                            )
-                        }
+                        # Agrupar por mes
+                        ordenado['Mes'] = ordenado['Open'].dt.to_period('M')
                         
-                        # Mostrar tabla de ranking con configuración de tema claro
-                        st.dataframe(
-                            ranking_mostrar, 
-                            use_container_width=True,
-                            column_config=column_config,
-                            hide_index=True
-                        )
+                        resumen_mensual = []
+                        for mes, grupo_mes in ordenado.groupby('Mes'):
+                            ano = mes.year
+                            mes_num = mes.month
+                            meses_es = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                                      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+                            mes_nombre = meses_es[mes_num - 1]
+                            
+                            # Calcular métricas del mes
+                            beneficio_mes = grupo_mes['Beneficio'].sum()
+                            total_trades = len(grupo_mes)
+                            
+                            # Contar SL, TS, TP
+                            sl_mes = 0
+                            ts_mes = 0
+                            tp_mes = 0
+                            
+                            for _, trade in grupo_mes.iterrows():
+                                beneficio = trade['Beneficio']
+                                if beneficio < 0:  # Es pérdida
+                                    perdida_abs = abs(beneficio)
+                                    if perdida_abs >= (riesgo_ea - margen_tolerancia):
+                                        sl_mes += 1
+                                    else:
+                                        ts_mes += 1
+                                else:  # Es ganancia
+                                    tp_mes += 1
+                            
+                            resumen_mensual.append({
+                                "Año - Mes": f"{ano} - {mes_nombre}",
+                                "Beneficio": f"${beneficio_mes:.2f}",
+                                "Trades": total_trades,
+                                "SL": sl_mes,
+                                "TS": ts_mes,
+                                "TP": tp_mes
+                            })
                         
-                        # Explicación del ranking
-                        st.markdown("""
-                        <div style="margin-top: -1rem; padding: 1rem; background-color: #f8f9fa; border-left: 7px solid #6c757d;">
-                            <h4 style="margin: 0 0 0.5rem 0; color: #495057;">📊 Cómo se calcula el Score de Rentabilidad:</h4>
-                            <p style="margin: 0; color: #6c757d; font-size: 0.9rem;">
-                                <strong>Score de Rentabilidad = Win Rate × Ratio Riesgo-Beneficio</strong><br>
-                                Este score combina la frecuencia de ganancias (Win Rate) con la eficiencia (Ratio R/B).<br>
-                                <em>Ejemplo:</em> EA con 60% Win Rate y Ratio 2:1 = Score 1.2, mientras que EA con 20% Win Rate y Ratio 4:1 = Score 0.8
-                            </p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    else:
-                        st.info("No hay datos suficientes para crear el ranking")
-                    
-                    st.markdown('</div>', unsafe_allow_html=True)
-                    
-                    # Tarjeta de tabla resumen
-                    st.markdown("""
-                    <div class="card">
-                        <div class="card-title">💰 Ranking por beneficio total</div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Crear una copia para mostrar sin la columna raw
-                    resumen_mostrar = resumen_filtrado.drop(columns=['Beneficio_total_raw'])
-                    
-                    # Configurar columnas para la tabla comparativa
-                    column_config_resumen = {
-                        "EA": st.column_config.TextColumn(
-                            "EA",
-                            help="Nombre del Expert Advisor"
-                        ),
-                        "Símbolo": st.column_config.TextColumn(
-                            "Símbolo",
-                            help="Símbolo de trading"
-                        ),
-                        "Ops": st.column_config.NumberColumn(
-                            "Ops",
-                            help="Número de operaciones",
-                            format="%d"
-                        ),
-                        "Win_pct": st.column_config.TextColumn(
-                            "Win %",
-                            help="Porcentaje de operaciones ganadoras"
-                        ),
-                        "Profit_medio": st.column_config.TextColumn(
-                            "Profit Medio",
-                            help="Beneficio promedio por operación"
-                        ),
-                        "Max_Loss": st.column_config.TextColumn(
-                            "Max Loss",
-                            help="Pérdida máxima registrada"
-                        ),
-                        "Duracion_media": st.column_config.TextColumn(
-                            "Duración Media",
-                            help="Duración promedio de las operaciones"
-                        ),
-                        "Beneficio_total": st.column_config.TextColumn(
-                            "Beneficio Total",
-                            help="Beneficio total acumulado"
-                        )
-                    }
-                    
-                    st.dataframe(
-                        resumen_mostrar, 
-                        use_container_width=True,
-                        column_config=column_config_resumen,
-                        hide_index=True
-                    )
-                    
-                    st.markdown('</div>', unsafe_allow_html=True)
-                    
-                    # Tarjeta de estadísticas por EA
-                    st.markdown("""
-                    <div class="card">
-                        <div class="card-title">📊 Estadísticas por EA</div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Crear análisis estadístico detallado
-                    estadisticas_detalladas = []
-                    for ea in df_filtrado['EA'].unique():
-                        df_ea = df_filtrado[df_filtrado['EA'] == ea]
-                        
-                        # Calcular estadísticas por EA
-                        total_ops = len(df_ea)
-                        ops_ganadoras = len(df_ea[df_ea['Beneficio'] > 0])
-                        ops_perdedoras = len(df_ea[df_ea['Beneficio'] < 0])
-                        ops_cero = len(df_ea[df_ea['Beneficio'] == 0])
-                        
-                        win_rate = (ops_ganadoras / total_ops * 100) if total_ops > 0 else 0
-                        beneficio_total = df_ea['Beneficio'].sum()
-                        beneficio_promedio = df_ea['Beneficio'].mean()
-                        beneficio_max = df_ea['Beneficio'].max()
-                        perdida_max = df_ea['Beneficio'].min()
-                        
-                        # Duración promedio
-                        duracion_promedio = df_ea['Duración'].mean()
-                        
-                        estadisticas_detalladas.append({
+                        # Guardar datos para mostrar después con expandables
+                        resumen_mensual_data.append({
                             'EA': ea,
-                            'Total_Operaciones': total_ops,
-                            'Operaciones_Ganadoras': ops_ganadoras,
-                            'Operaciones_Perdedoras': ops_perdedoras,
-                            'Operaciones_Cero': ops_cero,
-                            'Win_Rate_%': round(win_rate, 2),
-                            'Beneficio_Total': round(beneficio_total, 2),
-                            'Beneficio_Promedio': round(beneficio_promedio, 2),
-                            'Beneficio_Maximo': round(beneficio_max, 2),
-                            'Perdida_Maxima': round(perdida_max, 2),
-                            'Duracion_Promedio_Min': round(duracion_promedio, 1)
+                            'Simbolo': simbolo,
+                            'Data': resumen_mensual
                         })
                     
-                    if estadisticas_detalladas:
-                        df_estadisticas = pd.DataFrame(estadisticas_detalladas)
-                        df_estadisticas = df_estadisticas.sort_values('Beneficio_Total', ascending=False)
-                        
-                        # Configurar columnas para la tabla de estadísticas
-                        column_config_stats = {
-                            "EA": st.column_config.TextColumn("EA", help="Nombre del Expert Advisor"),
-                            "Total_Operaciones": st.column_config.NumberColumn("Total Ops", help="Total de operaciones", format="%d"),
-                            "Operaciones_Ganadoras": st.column_config.NumberColumn("Ops Ganadoras", help="Operaciones ganadoras", format="%d"),
-                            "Operaciones_Perdedoras": st.column_config.NumberColumn("Ops Perdedoras", help="Operaciones perdedoras", format="%d"),
-                            "Operaciones_Cero": st.column_config.NumberColumn("Ops Cero", help="Operaciones con beneficio cero", format="%d"),
-                            "Win_Rate_%": st.column_config.NumberColumn("Win Rate %", help="Porcentaje de operaciones ganadoras", format="%.2f"),
-                            "Beneficio_Total": st.column_config.NumberColumn("Beneficio Total", help="Beneficio total acumulado", format="$%.2f"),
-                            "Beneficio_Promedio": st.column_config.NumberColumn("Beneficio Promedio", help="Beneficio promedio por operación", format="$%.2f"),
-                            "Beneficio_Maximo": st.column_config.NumberColumn("Beneficio Máximo", help="Mayor beneficio individual", format="$%.2f"),
-                            "Perdida_Maxima": st.column_config.NumberColumn("Pérdida Máxima", help="Mayor pérdida individual", format="$%.2f"),
-                            "Duracion_Promedio_Min": st.column_config.NumberColumn("Duración Promedio (min)", help="Duración promedio en minutos", format="%.1f")
-                        }
-                        
-                        st.dataframe(
-                            df_estadisticas, 
-                            use_container_width=True,
-                            column_config=column_config_stats,
-                            hide_index=True
-                        )
+                    # Mostrar con expandables
+                    grupos_ordenados_mes = df.groupby(["EA", "Símbolo"]).agg(Beneficio_total=('Beneficio', 'sum')).reset_index()
+                    grupos_ordenados_mes = grupos_ordenados_mes.sort_values(by="Beneficio_total", ascending=False)
                     
-                    st.markdown('</div>', unsafe_allow_html=True)
+                    for _, row in grupos_ordenados_mes.iterrows():
+                        ea = row["EA"]
+                        symbol = row["Símbolo"]
+                        
+                        # Buscar los datos del resumen mensual para esta EA
+                        resumen_ea = next((item for item in resumen_mensual_data if item['EA'] == ea and item['Simbolo'] == symbol), None)
+                        
+                        if resumen_ea and resumen_ea['Data']:
+                            df_resumen_mes = pd.DataFrame(resumen_ea['Data'])
+                            
+                            # Aplicar colores a la columna Beneficio
+                            def estilizar_beneficio(valor):
+                                # Extraer el número del valor formateado (ej: "$150.50" -> 150.50)
+                                import re
+                                num = re.findall(r'-?\d+\.?\d*', str(valor))
+                                if num:
+                                    beneficio = float(num[0])
+                                    if beneficio >= 0:
+                                        return 'background-color: #90EE90'  # Verde claro
+                                    else:
+                                        return 'background-color: #FFB6C1'  # Rojo claro
+                                return ''
+                            
+                            # Aplicar estilo solo a la columna Beneficio
+                            styled_df = df_resumen_mes.style.applymap(estilizar_beneficio, subset=['Beneficio'])
+                            
+                            column_config_mes = {
+                                "Año - Mes": st.column_config.TextColumn("Año - Mes", help="Año y mes"),
+                                "Beneficio": st.column_config.TextColumn("Beneficio", help="Beneficio del mes"),
+                                "Trades": st.column_config.NumberColumn("Trades", help="Total de operaciones", format="%d"),
+                                "SL": st.column_config.NumberColumn("SL", help="Trades con SL directo", format="%d"),
+                                "TS": st.column_config.NumberColumn("TS", help="Trades con trailing stop", format="%d"),
+                                "TP": st.column_config.NumberColumn("TP", help="Trades con TP", format="%d")
+                            }
+                            
+                            with st.expander(f"📌 {ea}"):
+                                st.dataframe(styled_df, use_container_width=True, column_config=column_config_mes, hide_index=True)
                     
-                    # Tarjeta de operaciones detalladas por estrategia
+                    # Separador visual
+                    st.markdown("<br>", unsafe_allow_html=True)
                     st.markdown("""
-                    <div class="card">
-                        <div class="card-title">📋 Operaciones por Estrategia</div>
+                    <div style="margin-top: 2rem;">
+                        <h3>📋 Trades por Estrategia</h3>
+                    </div>
                     """, unsafe_allow_html=True)
                     
-                    # Mostrar operaciones individuales por EA y símbolo
-                    grupos_ordenados = df_filtrado.groupby(["EA", "Símbolo"]).agg(Beneficio_total=('Beneficio', 'sum')).reset_index()
+                    # Mostrar operaciones individuales por EA y símbolo usando expanders
+                    # Mostrar operaciones individuales por EA y símbolo usando expanders
+                    grupos_ordenados = df.groupby(["EA", "Símbolo"]).agg(Beneficio_total=('Beneficio', 'sum')).reset_index()
                     grupos_ordenados = grupos_ordenados.sort_values(by="Beneficio_total", ascending=False)
 
                     for _, row in grupos_ordenados.iterrows():
                         ea = row["EA"]
                         symbol = row["Símbolo"]
-                        grupo = df_filtrado[(df_filtrado["EA"] == ea) & (df_filtrado["Símbolo"] == symbol)]
-                        with st.expander(f"📌 {ea} - {symbol} ({len(grupo)} operaciones)"):
-                            st.dataframe(grupo.sort_values(by="Open"), use_container_width=True)
-                    
-                    st.markdown('</div>', unsafe_allow_html=True)
+                        grupo = df[(df["EA"] == ea) & (df["Símbolo"] == symbol)]
+                        
+                        # Formatear duración en horas y minutos y beneficio con $
+                        grupo_display = grupo.sort_values(by="Open").copy()
+                        
+                        def formatear_duracion(minutos):
+                            if pd.isna(minutos):
+                                return "-"
+                            horas = int(minutos) // 60
+                            mins = int(minutos) % 60
+                            if horas > 0:
+                                if mins > 0:
+                                    return f"{horas}h {mins}m"
+                                else:
+                                    return f"{horas}h"
+                            else:
+                                return f"{mins}m"
+                        
+                        def formatear_beneficio(beneficio):
+                            return f"${beneficio:.2f}"
+                        
+                        grupo_display['Duración'] = grupo_display['Duración'].apply(formatear_duracion)
+                        grupo_display['Beneficio'] = grupo_display['Beneficio'].apply(formatear_beneficio)
+                        
+                        with st.expander(f"📌 {ea} ({len(grupo)} operaciones)"):
+                            st.dataframe(grupo_display, use_container_width=True)
                 
                 else:
                     st.markdown("""
