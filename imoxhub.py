@@ -2561,92 +2561,103 @@ with tab1:
             <div class="card-title">Analiza tu portafolio</div>
         """, unsafe_allow_html=True)
 
-        archivo = st.file_uploader("Elegir archivo", type=["htm", "html"], label_visibility="collapsed")
+        archivos = st.file_uploader("Elegir archivo(s)", type=["htm", "html"], label_visibility="collapsed", accept_multiple_files=True)
 
-        if archivo:
+        if archivos:
             try:
-                soup = BeautifulSoup(archivo, 'html.parser')
-                rows = soup.find_all('tr', align='right')
-
                 datos = []
                 eas_filtradas = 0
                 total_operaciones = 0
+                archivos_procesados = 0
 
-                for i in range(len(rows)):
+                # Procesar cada archivo subido
+                for archivo in archivos:
                     try:
-                        fila_op = rows[i].find_all('td')
-                        
-                        # Verificar que la fila tenga suficientes columnas para ser una operación
-                        if len(fila_op) < 14:
-                            continue  # Saltar filas con estructura incompleta
-                        
-                        # Verificar que la primera celda contenga un número (ticket)
-                        try:
-                            ticket = int(fila_op[0].text.strip())
-                        except:
-                            continue  # No es una fila de operación válida
-                        
-                        # Verificar que la segunda celda contenga una fecha
-                        try:
-                            open_time = datetime.strptime(fila_op[1].text.strip(), "%Y.%m.%d %H:%M:%S")
-                        except:
-                            continue  # No es una fila de operación válida
-                        
-                        # Buscar la fila EA correspondiente (siguiente fila)
-                        ea_raw = ""
-                        if i + 1 < len(rows):
-                            fila_ea = rows[i+1].find_all('td')
-                            if len(fila_ea) > 0:
-                                ea_raw = fila_ea[-1].text.strip()
+                        soup = BeautifulSoup(archivo, 'html.parser')
+                        rows = soup.find_all('tr', align='right')
 
-                        if "cancelled" in ea_raw.lower():
-                            continue
-
-                        tipo = fila_op[2].text.strip().lower()
-                        size = float(fila_op[3].text.replace(' ', ''))
-                        symbol = fila_op[4].text.strip().lower()
+                        for i in range(len(rows)):
+                            try:
+                                fila_op = rows[i].find_all('td')
                         
-                        # Extraer SL y TP
-                        sl_str = fila_op[6].text.strip()
-                        tp_str = fila_op[7].text.strip()
+                                # Verificar que la fila tenga suficientes columnas para ser una operación
+                                if len(fila_op) < 14:
+                                    continue  # Saltar filas con estructura incompleta
                         
-                        close_time = datetime.strptime(fila_op[8].text.strip(), "%Y.%m.%d %H:%M:%S")
-                        profit = float(fila_op[13].text.replace(' ', ''))
+                                # Verificar que la primera celda contenga un número (ticket)
+                                try:
+                                    ticket = int(fila_op[0].text.strip())
+                                except:
+                                    continue  # No es una fila de operación válida
+                                
+                                # Verificar que la segunda celda contenga una fecha
+                                try:
+                                    open_time = datetime.strptime(fila_op[1].text.strip(), "%Y.%m.%d %H:%M:%S")
+                                except:
+                                    continue  # No es una fila de operación válida
+                        
+                                # Buscar la fila EA correspondiente (siguiente fila)
+                                ea_raw = ""
+                                if i + 1 < len(rows):
+                                    fila_ea = rows[i+1].find_all('td')
+                                    if len(fila_ea) > 0:
+                                        ea_raw = fila_ea[-1].text.strip()
 
-                        # Limpiar el nombre de la EA eliminando números adicionales
-                        ea_name = limpiar_nombre_ea(ea_raw)
-                        total_operaciones += 1
+                                if "cancelled" in ea_raw.lower():
+                                    continue
 
-                        # Si no hay nombre de EA válido, asignar un nombre genérico
-                        if not es_ea_valida(ea_name):
-                            if ea_name.strip() == "":
-                                ea_name = "Sin EA"  # Operaciones sin nombre de EA
-                            else:
-                                eas_filtradas += 1
+                                tipo = fila_op[2].text.strip().lower()
+                                size = float(fila_op[3].text.replace(' ', ''))
+                                symbol = fila_op[4].text.strip().lower()
+                                
+                                # Extraer SL y TP
+                                sl_str = fila_op[6].text.strip()
+                                tp_str = fila_op[7].text.strip()
+                                
+                                close_time = datetime.strptime(fila_op[8].text.strip(), "%Y.%m.%d %H:%M:%S")
+                                profit = float(fila_op[13].text.replace(' ', ''))
+
+                                # Limpiar el nombre de la EA eliminando números adicionales
+                                ea_name = limpiar_nombre_ea(ea_raw)
+                                total_operaciones += 1
+
+                                # Si no hay nombre de EA válido, asignar un nombre genérico
+                                if not es_ea_valida(ea_name):
+                                    if ea_name.strip() == "":
+                                        ea_name = "Sin EA"  # Operaciones sin nombre de EA
+                                    else:
+                                        eas_filtradas += 1
+                                        continue
+
+                                datos.append({
+                                    "EA": ea_name,
+                                    "Símbolo": symbol,
+                                    "Tipo": tipo,
+                                    "Beneficio": profit,
+                                    "Open": open_time,
+                                    "Close": close_time,
+                                    "SL": sl_str,
+                                    "TP": tp_str,
+                                    "Duración": (close_time - open_time).total_seconds() / 60  # en minutos
+                                })
+                            except Exception as e:
+                                # Log del error para debugging (opcional)
+                                # print(f"Error procesando fila {i}: {e}")
                                 continue
-
-                        datos.append({
-                            "EA": ea_name,
-                            "Símbolo": symbol,
-                            "Tipo": tipo,
-                            "Beneficio": profit,
-                            "Open": open_time,
-                            "Close": close_time,
-                            "SL": sl_str,
-                            "TP": tp_str,
-                            "Duración": (close_time - open_time).total_seconds() / 60  # en minutos
-                        })
+                        
+                        archivos_procesados += 1
                     except Exception as e:
-                        # Log del error para debugging (opcional)
-                        # print(f"Error procesando fila {i}: {e}")
+                        st.error(f"Error procesando archivo {archivo.name}: {str(e)}")
                         continue
 
                 if datos:
                     df = pd.DataFrame(datos)
                     
-                    # Mostrar información sobre el filtrado
+                    # Mostrar información sobre el procesamiento
+                    info_mensaje = f"ℹ️ Se procesaron {archivos_procesados} archivo(s). Total de {total_operaciones} operaciones encontradas."
                     if eas_filtradas > 0:
-                        st.info(f"ℹ️ Se eliminaron {eas_filtradas} operaciones que no pertenecen a ninguna EA de un total de {total_operaciones} operaciones. Se procesaron {len(datos)} operaciones válidas.")
+                        info_mensaje += f" Se eliminaron {eas_filtradas} operaciones que no pertenecen a ninguna EA. Se procesaron {len(datos)} operaciones válidas."
+                    st.info(info_mensaje)
 
                 
                     # Filtrar "Sin EA" para el resto del análisis
@@ -2707,110 +2718,110 @@ with tab1:
                             return 0
                         
                         # Análisis de riesgo por EA y SL directo vs trailing stop
-                        st.markdown("""
+                    st.markdown("""
                         <div style="margin-top: 2rem;">
                             <h3>📊 Resumen de Estrategias</h3>
                         </div>
-                        """, unsafe_allow_html=True)
-                        
-                        analisis_data = []
-                        for (ea, simbolo), grupo in df.groupby(["EA", "Símbolo"]):
-                            ordenado = grupo.sort_values(by='Open')
+                    """, unsafe_allow_html=True)
+                    
+                    analisis_data = []
+                    for (ea, simbolo), grupo in df.groupby(["EA", "Símbolo"]):
+                        ordenado = grupo.sort_values(by='Open')
                             
-                            # Detectar el riesgo típico (SL) de la EA
-                            # Analizamos la distribución de pérdidas para encontrar el valor más común
-                            perdidas = ordenado[ordenado['Beneficio'] < 0]['Beneficio'].abs()
+                        # Detectar el riesgo típico (SL) de la EA
+                        # Analizamos la distribución de pérdidas para encontrar el valor más común
+                        perdidas = ordenado[ordenado['Beneficio'] < 0]['Beneficio'].abs()
                             
-                            if len(perdidas) > 0:
-                                # Agrupar pérdidas con tolerancia del 10% para encontrar el SL más común
-                                # Primero, tomamos la pérdida máxima como candidato inicial
-                                perdida_maxima = perdidas.max()
+                        if len(perdidas) > 0:
+                            # Agrupar pérdidas con tolerancia del 10% para encontrar el SL más común
+                            # Primero, tomamos la pérdida máxima como candidato inicial
+                            perdida_maxima = perdidas.max()
                                 
-                                # Buscamos pérdidas cercanas al máximo (dentro del 10%)
-                                margen_busqueda = perdida_maxima * 0.10
-                                sl_detected = perdidas[perdidas >= (perdida_maxima - margen_busqueda)].mode()
+                            # Buscamos pérdidas cercanas al máximo (dentro del 10%)
+                            margen_busqueda = perdida_maxima * 0.10
+                            sl_detected = perdidas[perdidas >= (perdida_maxima - margen_busqueda)].mode()
                                 
-                                if len(sl_detected) > 0:
-                                    riesgo_ea = sl_detected.iloc[0]  # Tomamos el valor más común
-                                else:
-                                    riesgo_ea = perdida_maxima
-                                
-                                # Analizar SL directo vs trailing stop
-                                sl_directos = 0
-                                sl_trailing = 0
-                                perdidas_nulas = 0
-                                
-                                # Margen de tolerancia (10% del riesgo detectado)
-                                margen_tolerancia = riesgo_ea * 0.10
-                                
-                                for _, trade in ordenado.iterrows():
-                                    perdida = trade['Beneficio']
-                                    
-                                    if perdida < 0:  # Es una pérdida
-                                        perdida_abs = abs(perdida)
-                                        if perdida_abs >= (riesgo_ea - margen_tolerancia):
-                                            # Se considera SL directo si la pérdida está cerca del SL detectado
-                                            sl_directos += 1
-                                        elif perdida_abs > 0:
-                                            # Trailing stop - pérdida menor que el SL detectado
-                                            sl_trailing += 1
-                                        else:
-                                            # Pérdida nula
-                                            perdidas_nulas += 1
+                            if len(sl_detected) > 0:
+                                riesgo_ea = sl_detected.iloc[0]  # Tomamos el valor más común
                             else:
-                                # No hay pérdidas, no podemos calcular el riesgo
-                                riesgo_ea = 0
-                                sl_directos = 0
-                                sl_trailing = 0
-                                perdidas_nulas = 0
+                                riesgo_ea = perdida_maxima
                             
-                            # Calcular métricas completas
-                            net_profit = ordenado['Beneficio'].sum()
-                            ganancias_totales = ordenado[ordenado['Beneficio'] > 0]['Beneficio'].sum()
-                            perdidas_totales = abs(ordenado[ordenado['Beneficio'] < 0]['Beneficio'].sum())
+                            # Analizar SL directo vs trailing stop
+                            sl_directos = 0
+                            sl_trailing = 0
+                            perdidas_nulas = 0
                             
-                            # Profit Factor
-                            profit_factor = ganancias_totales / perdidas_totales if perdidas_totales > 0 else float('inf')
+                            # Margen de tolerancia (10% del riesgo detectado)
+                            margen_tolerancia = riesgo_ea * 0.10
                             
-                            # Max Drawdown
-                            max_dd = calcular_max_drawdown(ordenado['Beneficio'])
+                            for _, trade in ordenado.iterrows():
+                                perdida = trade['Beneficio']
+                                
+                                if perdida < 0:  # Es una pérdida
+                                    perdida_abs = abs(perdida)
+                                    if perdida_abs >= (riesgo_ea - margen_tolerancia):
+                                        # Se conserva SL directo si la pérdida está cerca del SL detectado
+                                        sl_directos += 1
+                                    elif perdida_abs > 0:
+                                        # Trailing stop - pérdida menor que el SL detectado
+                                        sl_trailing += 1
+                                    else:
+                                        # Pérdida nula
+                                        perdidas_nulas += 1
+                        else:
+                            # No hay pérdidas, no podemos calcular el riesgo
+                            riesgo_ea = 0
+                            sl_directos = 0
+                            sl_trailing = 0
+                            perdidas_nulas = 0
                             
-                            # Return on Drawdown (ratio, no porcentaje)
-                            ret_dd = net_profit / abs(max_dd) if max_dd != 0 else 0
+                        # Calcular métricas completas
+                        net_profit = ordenado['Beneficio'].sum()
+                        ganancias_totales = ordenado[ordenado['Beneficio'] > 0]['Beneficio'].sum()
+                        perdidas_totales = abs(ordenado[ordenado['Beneficio'] < 0]['Beneficio'].sum())
                             
-                            # Max Consecutive Loss
-                            max_consec_loss = calcular_max_consecutive_loss(ordenado['Beneficio'])
+                        # Profit Factor
+                        profit_factor = ganancias_totales / perdidas_totales if perdidas_totales > 0 else float('inf')
                             
-                            # Avg Trades per Month
-                            avg_trades_mes = calcular_avg_trades_por_mes(ordenado)
+                        # Max Drawdown
+                        max_dd = calcular_max_drawdown(ordenado['Beneficio'])
                             
-                            # Contar TP (trades ganadores)
-                            tp_trades = len(ordenado[ordenado['Beneficio'] > 0])
+                        # Return on Drawdown (ratio, no porcentaje)
+                        ret_dd = net_profit / abs(max_dd) if max_dd != 0 else 0
                             
-                            analisis_data.append({
-                                "Nombre": ea,
-                                "retDD": f"{ret_dd:.2f}",
-                                "Net Profit": f"${net_profit:.2f}",
-                                "maxDD": f"${max_dd:.2f}",
-                                "PF": f"{profit_factor:.2f}" if profit_factor != float('inf') else "∞",
-                                "SL": int(sl_directos),
-                                "TP": int(tp_trades),
-                                "TS": int(sl_trailing),
-                                "Max Consec Loss": int(max_consec_loss),
-                                "Avg Trade Mensual": round(avg_trades_mes, 1)
-                            })
-                        
-                        # Crear DataFrame del análisis
-                        df_analisis = pd.DataFrame(analisis_data)
-                        
-                        # Ordenar por retDD de forma descendente
-                        df_analisis['retDD_num'] = df_analisis['retDD'].str.replace('∞', '999999').astype(float)
-                        df_analisis = df_analisis.sort_values(by='retDD_num', ascending=False)
-                        df_analisis = df_analisis.drop(columns=['retDD_num'])
-                        
-                        # Mostrar tabla de análisis
-                        column_config_analisis = {
-                            "Nombre": st.column_config.TextColumn(
+                        # Max Consecutive Loss
+                        max_consec_loss = calcular_max_consecutive_loss(ordenado['Beneficio'])
+                            
+                        # Avg Trades per Month
+                        avg_trades_mes = calcular_avg_trades_por_mes(ordenado)
+                            
+                        # Contar TP (trades ganadores)
+                        tp_trades = len(ordenado[ordenado['Beneficio'] > 0])
+                            
+                        analisis_data.append({
+                            "Nombre": ea,
+                            "retDD": f"{ret_dd:.2f}",
+                            "Net Profit": f"${net_profit:.2f}",
+                            "maxDD": f"${max_dd:.2f}",
+                            "PF": f"{profit_factor:.2f}" if profit_factor != float('inf') else "∞",
+                            "SL": int(sl_directos),
+                            "TP": int(tp_trades),
+                            "TS": int(sl_trailing),
+                            "Max Consec Loss": int(max_consec_loss),
+                            "Avg Trade Mensual": round(avg_trades_mes, 1)
+                        })
+                    
+                    # Crear DataFrame del análisis
+                    df_analisis = pd.DataFrame(analisis_data)
+                    
+                    # Ordenar por retDD de forma descendente
+                    df_analisis['retDD_num'] = df_analisis['retDD'].str.replace('∞', '999999').astype(float)
+                    df_analisis = df_analisis.sort_values(by='retDD_num', ascending=False)
+                    df_analisis = df_analisis.drop(columns=['retDD_num'])
+                    
+                    # Mostrar tabla de análisis
+                    column_config_analisis = {
+                        "Nombre": st.column_config.TextColumn(
                                 "Nombre",
                                 help="Nombre del Expert Advisor y símbolo"
                             ),
@@ -2855,68 +2866,217 @@ with tab1:
                                 help="Promedio de trades por mes",
                                 format="%.1f"
                             )
-                        }
+                    }
+                    
+                    st.dataframe(
+                        df_analisis,
+                        use_container_width=True,
+                        column_config=column_config_analisis,
+                        hide_index=True
+                    )
                         
-                        st.dataframe(
-                            df_analisis,
-                            use_container_width=True,
-                            column_config=column_config_analisis,
-                            hide_index=True
-                        )
+                    # Selector de estrategias para combinar
+                    st.markdown("""
+                    <div style="margin-top: 1rem; margin-bottom: 1rem;">
+                        <h4>🔀 Combinar Estrategias</h4>
+                    </div>
+                    """, unsafe_allow_html=True)
                         
-                        # Crear gráfico de beneficio acumulado
-                        st.markdown("""
-                        <div style="margin-top: 2rem;">
-                            <h3 style="margin-bottom: 1rem;">📈 Evolución de Beneficios Acumulados</h3>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        df_grafico = df.copy()
-                        df_grafico['Fecha'] = df_grafico['Close'].dt.date
-                        beneficios_diarios = df_grafico.groupby(['EA', 'Fecha'])['Beneficio'].sum().reset_index()
-                    beneficios_diarios['Beneficio_acumulado'] = beneficios_diarios.groupby('EA')['Beneficio'].cumsum()
-
-                    if len(beneficios_diarios) > 0:
-                        fig = px.line(
-                            beneficios_diarios,
-                            x="Fecha",
-                            y="Beneficio_acumulado",
-                            color="EA",
-                            markers=True,
-                            labels={"Beneficio_acumulado": "Beneficio acumulado", "Fecha": "Fecha"}
-                        )
-
-                        fig.update_traces(
-                            hovertemplate=
-                            "<b>Estrategia:</b> %{fullData.name}<br>" +
-                            "<b>Fecha:</b> %{x|%d-%m-%Y}<br>" +
-                            "<b>Beneficio acumulado:</b> $%{y:.2f}<extra></extra>"
-                        )
-
-                        fig.update_layout(
-                            height=400, 
-                            margin=dict(l=20, r=20, t=40, b=20),
-                            template="plotly_white",
-                            plot_bgcolor='white',
-                            paper_bgcolor='white',
-                            font=dict(color='#495057'),
-                            xaxis=dict(
-                                gridcolor='#e9ecef',
-                                linecolor='#e9ecef',
-                                tickcolor='#495057',
-                                tickfont=dict(color='#495057')
-                            ),
-                            yaxis=dict(
-                                gridcolor='#e9ecef',
-                                linecolor='#e9ecef',
-                                tickcolor='#495057',
-                                tickfont=dict(color='#495057')
+                    # Lista de nombres de estrategias para el multiselect
+                    nombres_estrategias = df_analisis['Nombre'].tolist()
+                    
+                    estrategias_seleccionadas = st.multiselect(
+                        "Selecciona las estrategias que deseas combinar:",
+                        options=nombres_estrategias,
+                        default=[],
+                        help="Selecciona una o más estrategias para ver sus estadísticas combinadas"
+                    )
+                    
+                    if estrategias_seleccionadas:
+                        if st.button("📊 Ver Estadísticas Combinadas", use_container_width=True):
+                            # Filtrar el dataframe original por las estrategias seleccionadas
+                            df_combinado = df[df['EA'].isin(estrategias_seleccionadas)].copy()
+                            df_combinado = df_combinado.sort_values(by='Open')
+                            
+                            # Calcular métricas combinadas
+                            # Detectar riesgo típico (promedio de los riesgos de las estrategias seleccionadas)
+                            riesgo_combinado = 0
+                            sl_directos_combinado = 0
+                            sl_trailing_combinado = 0
+                            
+                            # Calcular el riesgo promedio de las estrategias seleccionadas
+                            riesgos_por_ea = []
+                            for ea in estrategias_seleccionadas:
+                                grupo_ea = df_combinado[df_combinado['EA'] == ea]
+                                perdidas_ea = grupo_ea[grupo_ea['Beneficio'] < 0]['Beneficio'].abs()
+                                if len(perdidas_ea) > 0:
+                                    perdida_max = perdidas_ea.max()
+                                    margen = perdida_max * 0.10
+                                    sl_detected = perdidas_ea[perdidas_ea >= (perdida_max - margen)].mode()
+                                    if len(sl_detected) > 0:
+                                        riesgos_por_ea.append(sl_detected.iloc[0])
+                                    else:
+                                        riesgos_por_ea.append(perdida_max)
+                            
+                            if riesgos_por_ea:
+                                riesgo_combinado = sum(riesgos_por_ea) / len(riesgos_por_ea)
+                                
+                            # Calcular SL directos y trailing stops para el conjunto combinado
+                            margen_tolerancia_comb = riesgo_combinado * 0.10 if riesgo_combinado > 0 else 0
+                                
+                            for _, trade in df_combinado.iterrows():
+                                perdida = trade['Beneficio']
+                                if perdida < 0:
+                                    perdida_abs = abs(perdida)
+                                    if riesgo_combinado > 0 and perdida_abs >= (riesgo_combinado - margen_tolerancia_comb):
+                                        sl_directos_combinado += 1
+                                    elif perdida_abs > 0:
+                                        sl_trailing_combinado += 1
+                                
+                            # Calcular métricas combinadas
+                            net_profit_comb = df_combinado['Beneficio'].sum()
+                            ganancias_totales_comb = df_combinado[df_combinado['Beneficio'] > 0]['Beneficio'].sum()
+                            perdidas_totales_comb = abs(df_combinado[df_combinado['Beneficio'] < 0]['Beneficio'].sum())
+                                
+                            profit_factor_comb = ganancias_totales_comb / perdidas_totales_comb if perdidas_totales_comb > 0 else float('inf')
+                            max_dd_comb = calcular_max_drawdown(df_combinado['Beneficio'])
+                            ret_dd_comb = net_profit_comb / abs(max_dd_comb) if max_dd_comb != 0 else 0
+                            max_consec_loss_comb = calcular_max_consecutive_loss(df_combinado['Beneficio'])
+                            avg_trades_mes_comb = calcular_avg_trades_por_mes(df_combinado)
+                            tp_trades_comb = len(df_combinado[df_combinado['Beneficio'] > 0])
+                                
+                            # Mostrar estadísticas combinadas
+                            st.markdown("""
+                            <div style="margin-top: 2rem; margin-bottom: 1rem;">
+                                <h4>📊 Estadísticas Combinadas de las Estrategias Seleccionadas</h4>
+                                <p><strong>Estrategias:</strong> {}</p>
+                            </div>
+                            """.format(", ".join(estrategias_seleccionadas)), unsafe_allow_html=True)
+                                
+                            stats_combinadas = {
+                                    "retDD": f"{ret_dd_comb:.2f}",
+                                    "Net Profit": f"${net_profit_comb:.2f}",
+                                    "maxDD": f"${max_dd_comb:.2f}",
+                                    "PF": f"{profit_factor_comb:.2f}" if profit_factor_comb != float('inf') else "∞",
+                                    "SL": int(sl_directos_combinado),
+                                    "TP": int(tp_trades_comb),
+                                    "TS": int(sl_trailing_combinado),
+                                    "Max Consec Loss": int(max_consec_loss_comb),
+                                    "Avg Trade Mensual": round(avg_trades_mes_comb, 1)
+                            }
+                                
+                            df_stats_comb = pd.DataFrame([stats_combinadas])
+                            
+                            # Configurar columnas sin "Nombre"
+                            column_config_comb = {
+                                "retDD": st.column_config.TextColumn(
+                                    "retDD",
+                                    help="Return on Drawdown - Ratio: Net Profit / maxDD. Ej: 20 = beneficio es 20x el drawdown"
+                                ),
+                                "Net Profit": st.column_config.TextColumn(
+                                    "Net Profit",
+                                    help="Beneficio neto total"
+                                ),
+                                "maxDD": st.column_config.TextColumn(
+                                    "maxDD",
+                                    help="Máximo drawdown (desde el pico más alto)"
+                                ),
+                                "PF": st.column_config.TextColumn(
+                                    "PF",
+                                    help="Profit Factor - Ratio ganancias totales / pérdidas totales"
+                                ),
+                                "SL": st.column_config.NumberColumn(
+                                    "SL",
+                                    help="Trades con SL directo",
+                                    format="%d"
+                                ),
+                                "TP": st.column_config.NumberColumn(
+                                    "TP",
+                                    help="Trades con TP (Take Profit)",
+                                    format="%d"
+                                ),
+                                "TS": st.column_config.NumberColumn(
+                                    "TS",
+                                    help="Trades con Trailing Stop",
+                                    format="%d"
+                                ),
+                                "Max Consec Loss": st.column_config.NumberColumn(
+                                    "Max Consec Loss",
+                                    help="Máxima racha de pérdidas consecutivas",
+                                    format="%d"
+                                ),
+                                "Avg Trade Mensual": st.column_config.NumberColumn(
+                                    "Avg Trade Mensual",
+                                    help="Promedio de trades por mes",
+                                    format="%.1f"
                             )
-                        )
-
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        st.info("No hay datos suficientes para mostrar el gráfico")
+                            }
+                            
+                            st.dataframe(
+                                df_stats_comb,
+                                use_container_width=True,
+                                column_config=column_config_comb,
+                                hide_index=True
+                            )
+                            
+                            # Mostrar gráfico combinado con líneas individuales y combinada
+                            st.markdown("""
+                            <div style="margin-top: 2rem;">
+                                <h4>📈 Evolución de Beneficios Acumulados (Individual y Combinado)</h4>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            # Preparar datos de cada estrategia individual
+                            df_combinado['Fecha'] = df_combinado['Close'].dt.date
+                            
+                            fig_comb = go.Figure()
+                            
+                            # Agregar línea para cada estrategia individual
+                            for ea in estrategias_seleccionadas:
+                                df_ea = df_combinado[df_combinado['EA'] == ea].copy()
+                                df_ea = df_ea.sort_values('Fecha')
+                                beneficios_ea = df_ea.groupby('Fecha')['Beneficio'].sum().reset_index()
+                                beneficios_ea = beneficios_ea.sort_values('Fecha')
+                                beneficios_ea['Beneficio_acumulado'] = beneficios_ea['Beneficio'].cumsum()
+                                
+                                fig_comb.add_trace(go.Scatter(
+                                    x=beneficios_ea['Fecha'],
+                                    y=beneficios_ea['Beneficio_acumulado'],
+                                    mode='lines+markers',
+                                    name=ea,
+                                    line=dict(width=2),
+                                    marker=dict(size=4)
+                                ))
+                            
+                            # Calcular y agregar línea del conjunto combinado
+                            beneficios_combinados = df_combinado.groupby('Fecha')['Beneficio'].sum().reset_index()
+                            beneficios_combinados = beneficios_combinados.sort_values('Fecha')
+                            beneficios_combinados['Beneficio_acumulado'] = beneficios_combinados['Beneficio'].cumsum()
+                            
+                            fig_comb.add_trace(go.Scatter(
+                                x=beneficios_combinados['Fecha'],
+                                y=beneficios_combinados['Beneficio_acumulado'],
+                                mode='lines+markers',
+                                name='📊 Combinado',
+                                line=dict(width=3, color='#FF6B6B', dash='dash'),
+                                marker=dict(size=5)
+                            ))
+                            
+                            fig_comb.update_layout(
+                                xaxis_title="Fecha",
+                                yaxis_title="Beneficio Acumulado ($)",
+                                hovermode='x unified',
+                                showlegend=True,
+                                legend=dict(
+                                    orientation="h",
+                                    yanchor="bottom",
+                                    y=1.02,
+                                    xanchor="right",
+                                    x=1
+                                )
+                            )
+                            
+                            st.plotly_chart(fig_comb, use_container_width=True)
                 
                     # Resumen mensual por EA
                     st.markdown("""
@@ -2989,7 +3149,7 @@ with tab1:
                         
                         # Guardar datos para mostrar después con expandables
                         resumen_mensual_data.append({
-                            'EA': ea,
+                                'EA': ea,
                             'Simbolo': simbolo,
                             'Data': resumen_mensual
                         })
@@ -3036,8 +3196,61 @@ with tab1:
                             with st.expander(f"📌 {ea}"):
                                 st.dataframe(styled_df, use_container_width=True, column_config=column_config_mes, hide_index=True)
                     
+                    # Crear gráfico de beneficio acumulado
+                    st.markdown("""
+                    <div style="margin-top: 2rem;">
+                        <h3 style="margin-bottom: 1rem;">📈 Evolución de Beneficios Acumulados</h3>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    df_grafico = df.copy()
+                    df_grafico['Fecha'] = df_grafico['Close'].dt.date
+                    beneficios_diarios = df_grafico.groupby(['EA', 'Fecha'])['Beneficio'].sum().reset_index()
+                    beneficios_diarios['Beneficio_acumulado'] = beneficios_diarios.groupby('EA')['Beneficio'].cumsum()
+
+                    if len(beneficios_diarios) > 0:
+                        fig = px.line(
+                            beneficios_diarios,
+                            x="Fecha",
+                            y="Beneficio_acumulado",
+                            color="EA",
+                            markers=True,
+                            labels={"Beneficio_acumulado": "Beneficio acumulado", "Fecha": "Fecha"}
+                        )
+
+                        fig.update_traces(
+                            hovertemplate=
+                            "<b>Estrategia:</b> %{fullData.name}<br>" +
+                            "<b>Fecha:</b> %{x|%d-%m-%Y}<br>" +
+                            "<b>Beneficio acumulado:</b> $%{y:.2f}<extra></extra>"
+                        )
+
+                        fig.update_layout(
+                            height=400,
+                            margin=dict(l=20, r=20, t=40, b=20),
+                            template="plotly_white",
+                            plot_bgcolor='white',
+                            paper_bgcolor='white',
+                            font=dict(color='#495057'),
+                            xaxis=dict(
+                                gridcolor='#e9ecef',
+                                linecolor='#e9ecef',
+                                tickcolor='#495057',
+                                tickfont=dict(color='#495057')
+                            ),
+                            yaxis=dict(
+                                gridcolor='#e9ecef',
+                                linecolor='#e9ecef',
+                                tickcolor='#495057',
+                                tickfont=dict(color='#495057')
+                            )
+                        )
+                        
+                        st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        st.info("No hay datos suficientes para mostrar el gráfico")
+                    
                     # Separador visual
-                    st.markdown("<br>", unsafe_allow_html=True)
                     st.markdown("""
                     <div style="margin-top: 2rem;">
                         <h3>📋 Trades por Estrategia</h3>
@@ -3086,24 +3299,24 @@ with tab1:
                     </div>
                     """, unsafe_allow_html=True)
                     st.markdown('</div>', unsafe_allow_html=True)
-            
+                    
             except Exception as e:
                 st.markdown(f"""
                 <div class="status-error">
                     ❌ Error al procesar el archivo<br>
                     Verifica que sea un archivo HTML válido de MT4.<br>
                     Error: {str(e)}
-                </div>
-                """, unsafe_allow_html=True)
+            </div>
+            """, unsafe_allow_html=True)
                 st.markdown('</div>', unsafe_allow_html=True)
-
+        
         else:
             st.markdown("""
             <div class="status-error">
                 ⚠️ Selecciona un archivo para comenzar el análisis
             </div>
             """, unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
     
     with sub_tab2:
         # Tarjeta de análisis de Prop Firm
