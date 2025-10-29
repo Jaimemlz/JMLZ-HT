@@ -2144,6 +2144,10 @@ st.markdown("""
         color: #495057 !important;
     }
     
+    .st-dv {
+        background-color: white !important;
+    }
+    
     .stDataFrame table {
         background-color: white !important;
         color: #495057 !important;
@@ -2951,7 +2955,7 @@ with tab1:
                                 <h4>📊 Estadísticas Combinadas de las Estrategias Seleccionadas</h4>
                                 <p><strong>Estrategias:</strong> {}</p>
                             </div>
-                            """.format(", ".join(estrategias_seleccionadas)), unsafe_allow_html=True)
+                            """.format(" | ".join(estrategias_seleccionadas)), unsafe_allow_html=True)
                                 
                             stats_combinadas = {
                                     "retDD": f"{ret_dd_comb:.2f}",
@@ -3019,12 +3023,67 @@ with tab1:
                                 hide_index=True
                             )
                             
-                            # Mostrar gráfico combinado con líneas individuales y combinada
-                            st.markdown("""
-                            <div style="margin-top: 2rem;">
-                                <h4>📈 Evolución de Beneficios Acumulados (Individual y Combinado)</h4>
-                            </div>
-                            """, unsafe_allow_html=True)
+                            # Calcular resumen mensual combinado
+                            df_combinado['Mes'] = df_combinado['Open'].dt.to_period('M')
+                            resumen_mensual_comb = []
+                            
+                            # Agrupar por mes y ordenar cronológicamente
+                            grupos_mensuales = list(df_combinado.groupby('Mes'))
+                            grupos_mensuales.sort(key=lambda x: x[0])  # Ordenar por período
+                            
+                            for mes, grupo_mes in grupos_mensuales:
+                                ano = mes.year
+                                mes_num = mes.month
+                                meses_es = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                                          'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+                                mes_nombre = meses_es[mes_num - 1]
+                                
+                                # Calcular métricas del mes
+                                beneficio_mes = grupo_mes['Beneficio'].sum()
+                                total_trades = len(grupo_mes)
+                                
+                                # Contar SL, TS, TP
+                                sl_mes = 0
+                                ts_mes = 0
+                                tp_mes = 0
+                                
+                                for _, trade in grupo_mes.iterrows():
+                                    beneficio = trade['Beneficio']
+                                    if beneficio < 0:  # Es pérdida
+                                        perdida_abs = abs(beneficio)
+                                        if riesgo_combinado > 0 and perdida_abs >= (riesgo_combinado - margen_tolerancia_comb):
+                                            sl_mes += 1
+                                        elif perdida_abs > 0:
+                                            ts_mes += 1
+                                    else:  # Es ganancia
+                                        tp_mes += 1
+                                
+                                resumen_mensual_comb.append({
+                                    "Año - Mes": f"{ano} - {mes_nombre}",
+                                    "Beneficio": f"${beneficio_mes:.2f}",
+                                    "Trades": total_trades,
+                                    "SL": sl_mes,
+                                    "TS": ts_mes,
+                                    "TP": tp_mes
+                                })
+                            
+                            # Crear DataFrame (ya ordenado por el sort anterior)
+                            df_resumen_mes_comb = pd.DataFrame(resumen_mensual_comb)
+                            if not df_resumen_mes_comb.empty:
+                                
+                                # Función para estilizar el beneficio
+                                def estilizar_beneficio_comb(valor):
+                                    if isinstance(valor, str) and valor.startswith('$'):
+                                        num = float(valor.replace('$', '').replace(',', ''))
+                                        color = '#90EE90' if num >= 0 else '#FFB6C1'  # Verde claro si es ganancia, rojo claro si es pérdida
+                                        return f'background-color: {color}'
+                                    return ''
+                                
+                                st.dataframe(
+                                    df_resumen_mes_comb.style.applymap(estilizar_beneficio_comb, subset=['Beneficio']),
+                                    use_container_width=True,
+                                    hide_index=True
+                                )
                             
                             # Preparar datos de cada estrategia individual
                             df_combinado['Fecha'] = df_combinado['Close'].dt.date
@@ -3057,7 +3116,7 @@ with tab1:
                                 x=beneficios_combinados['Fecha'],
                                 y=beneficios_combinados['Beneficio_acumulado'],
                                 mode='lines+markers',
-                                name='📊 Combinado',
+                                name='Combinado',
                                 line=dict(width=3, color='#FF6B6B', dash='dash'),
                                 marker=dict(size=5)
                             ))
