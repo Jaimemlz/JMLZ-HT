@@ -2614,11 +2614,19 @@ with tab1:
                                 size = float(fila_op[3].text.replace(' ', ''))
                                 symbol = fila_op[4].text.strip().lower()
                                 
-                                # Extraer SL y TP
+                                # Extraer precios, SL y TP
+                                try:
+                                    open_price = float(fila_op[5].text.strip().replace(' ', ''))
+                                except:
+                                    open_price = None
                                 sl_str = fila_op[6].text.strip()
                                 tp_str = fila_op[7].text.strip()
                                 
                                 close_time = datetime.strptime(fila_op[8].text.strip(), "%Y.%m.%d %H:%M:%S")
+                                try:
+                                    close_price = float(fila_op[9].text.strip().replace(' ', ''))
+                                except:
+                                    close_price = None
                                 profit = float(fila_op[13].text.replace(' ', ''))
 
                                 # Limpiar el nombre de la EA eliminando números adicionales
@@ -2633,6 +2641,19 @@ with tab1:
                                         eas_filtradas += 1
                                         continue
 
+                                # Parsear TP numérico si es válido
+                                tp_val = None
+                                tp_decimals = None
+                                try:
+                                    tp_val = float(tp_str)
+                                    if "." in tp_str:
+                                        tp_decimals = len(tp_str.split(".")[-1])
+                                    else:
+                                        tp_decimals = 0
+                                except:
+                                    tp_val = None
+                                    tp_decimals = None
+
                                 datos.append({
                                     "EA": ea_name,
                                     "Símbolo": symbol,
@@ -2640,8 +2661,12 @@ with tab1:
                                     "Beneficio": profit,
                                     "Open": open_time,
                                     "Close": close_time,
+                                    "PrecioOpen": open_price,
+                                    "PrecioClose": close_price,
                                     "SL": sl_str,
                                     "TP": tp_str,
+                                    "TP_val": tp_val,
+                                    "TP_decimales": tp_decimals,
                                     "Duración": (close_time - open_time).total_seconds() / 60  # en minutos
                                 })
                             except Exception as e:
@@ -2691,6 +2716,22 @@ with tab1:
                                     consecutivo = 0
                             return max_consecutivo
                         
+                        # Detectar TP real comparando precio de cierre con el TP configurado
+                        def es_tp_real(fila):
+                            try:
+                                if pd.isna(fila.get('Beneficio')) or fila['Beneficio'] <= 0:
+                                    return False
+                                tp_val = fila.get('TP_val')
+                                close_price = fila.get('PrecioClose')
+                                if tp_val is None or close_price is None:
+                                    return False
+                                decs = fila.get('TP_decimales') if fila.get('TP_decimales') is not None else 0
+                                # Tolerancia basada en decimales del TP (2 unidades del último decimal)
+                                tol = max(10 ** (-(decs)), 1e-6)
+                                return abs(close_price - tp_val) <= 2 * tol
+                            except Exception:
+                                return False
+
                         def contar_sl_tp(grupo):
                             """Cuenta cuántos trades tienen SL y cuántos tienen TP"""
                             cantidad_sl = 0
@@ -2703,12 +2744,10 @@ with tab1:
                                 except (ValueError, TypeError):
                                     pass
                             
-                            for tp in grupo['TP']:
-                                try:
-                                    if tp and str(tp).strip() != '' and float(tp) != 0.0:
-                                        cantidad_tp += 1
-                                except (ValueError, TypeError):
-                                    pass
+                            # TP reales: TP definido y cierre en el TP (no TS positivo)
+                            for _, fila in grupo.iterrows():
+                                if es_tp_real(fila):
+                                    cantidad_tp += 1
                             
                             return cantidad_sl, cantidad_tp
                         
@@ -2759,19 +2798,23 @@ with tab1:
                             margen_tolerancia = riesgo_ea * 0.10
                             
                             for _, trade in ordenado.iterrows():
-                                perdida = trade['Beneficio']
-                                
-                                if perdida < 0:  # Es una pérdida
-                                    perdida_abs = abs(perdida)
+                                beneficio = trade['Beneficio']
+                                if beneficio < 0:  # Pérdida
+                                    perdida_abs = abs(beneficio)
                                     if perdida_abs >= (riesgo_ea - margen_tolerancia):
-                                        # Se conserva SL directo si la pérdida está cerca del SL detectado
                                         sl_directos += 1
-                                    elif perdida_abs > 0:
-                                        # Trailing stop - pérdida menor que el SL detectado
-                                        sl_trailing += 1
                                     else:
-                                        # Pérdida nula
-                                        perdidas_nulas += 1
+                                        sl_trailing += 1
+                                elif beneficio > 0:  # Ganancia
+                                    if es_tp_real(trade):
+                                        # TP real (tocó el TP)
+                                        pass  # se contará abajo para mantener claridad
+                                    else:
+                                        # TS positivo (o cierre manual en ganancia que no tocó TP)
+                                        sl_trailing += 1
+                                else:
+                                    # Break-even -> lo consideramos TS
+                                    sl_trailing += 1
                         else:
                             # No hay pérdidas, no podemos calcular el riesgo
                             riesgo_ea = 0
@@ -2799,8 +2842,8 @@ with tab1:
                         # Avg Trades per Month
                         avg_trades_mes = calcular_avg_trades_por_mes(ordenado)
                             
-                        # Contar TP (trades ganadores)
-                        tp_trades = len(ordenado[ordenado['Beneficio'] > 0])
+                        # Contar TP reales (cierre exactamente en TP, no TS positivo)
+                        tp_trades = int(ordenado.apply(es_tp_real, axis=1).sum())
                             
                         analisis_data.append({
                             "Nombre": ea,
@@ -2929,13 +2972,20 @@ with tab1:
                             margen_tolerancia_comb = riesgo_combinado * 0.10 if riesgo_combinado > 0 else 0
                                 
                             for _, trade in df_combinado.iterrows():
-                                perdida = trade['Beneficio']
-                                if perdida < 0:
-                                    perdida_abs = abs(perdida)
+                                beneficio = trade['Beneficio']
+                                if beneficio < 0:
+                                    perdida_abs = abs(beneficio)
                                     if riesgo_combinado > 0 and perdida_abs >= (riesgo_combinado - margen_tolerancia_comb):
                                         sl_directos_combinado += 1
-                                    elif perdida_abs > 0:
+                                    else:
                                         sl_trailing_combinado += 1
+                                elif beneficio > 0:
+                                    if es_tp_real(trade):
+                                        pass  # TP real se contabiliza aparte
+                                    else:
+                                        sl_trailing_combinado += 1
+                                else:
+                                    sl_trailing_combinado += 1
                                 
                             # Calcular métricas combinadas
                             net_profit_comb = df_combinado['Beneficio'].sum()
@@ -2947,7 +2997,8 @@ with tab1:
                             ret_dd_comb = net_profit_comb / abs(max_dd_comb) if max_dd_comb != 0 else 0
                             max_consec_loss_comb = calcular_max_consecutive_loss(df_combinado['Beneficio'])
                             avg_trades_mes_comb = calcular_avg_trades_por_mes(df_combinado)
-                            tp_trades_comb = len(df_combinado[df_combinado['Beneficio'] > 0])
+                            # TP reales combinados
+                            tp_trades_comb = int(df_combinado.apply(es_tp_real, axis=1).sum())
                                 
                             # Mostrar estadísticas combinadas
                             st.markdown("""
@@ -3056,7 +3107,10 @@ with tab1:
                                         elif perdida_abs > 0:
                                             ts_mes += 1
                                     else:  # Es ganancia
-                                        tp_mes += 1
+                                        if es_tp_real(trade):
+                                            tp_mes += 1
+                                        else:
+                                            ts_mes += 1
                                 
                                 resumen_mensual_comb.append({
                                     "Año - Mes": f"{ano} - {mes_nombre}",
@@ -3195,7 +3249,8 @@ with tab1:
                                     else:
                                         ts_mes += 1
                                 else:  # Es ganancia
-                                    tp_mes += 1
+                                    if es_tp_real(trade):
+                                        tp_mes += 1
                             
                             resumen_mensual.append({
                                 "Año - Mes": f"{ano} - {mes_nombre}",
