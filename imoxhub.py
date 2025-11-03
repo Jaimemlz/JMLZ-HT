@@ -279,41 +279,66 @@ def crear_ranking_ea(df):
 # FUNCIONES PARA CONECTAR CON LA API DEL BACKEND
 # =============================================================================
 
+@st.cache_data(ttl=60, show_spinner=False)  # Cache por 60 segundos
 def get_payouts_from_api():
     """
     Obtiene todos los payouts desde la API del backend
     """
     try:
-        response = requests.get(f"{API_BASE_URL}/payouts/")
+        response = requests.get(f"{API_BASE_URL}/payouts/", timeout=10)
         if response.status_code == 200:
             return response.json()
         else:
-            st.error(f"Error al obtener payouts: {response.status_code}")
             return []
+    except requests.exceptions.Timeout:
+        return []
     except requests.exceptions.ConnectionError:
-        st.error(f"No se puede conectar con el backend. Asegúrate de que esté ejecutándose en {API_BASE_URL}")
         return []
     except Exception as e:
-        st.error(f"Error inesperado: {str(e)}")
         return []
 
+@st.cache_data(ttl=60, show_spinner=False)  # Cache por 60 segundos
 def get_users_from_api():
     """
     Obtiene todos los usuarios desde la API del backend
     """
     try:
-        response = requests.get(f"{API_BASE_URL}/users/")
+        response = requests.get(f"{API_BASE_URL}/users/", timeout=10)
         if response.status_code == 200:
             return response.json()
         else:
-            st.error(f"Error al obtener usuarios: {response.status_code}")
             return []
+    except requests.exceptions.Timeout:
+        return []
     except requests.exceptions.ConnectionError:
-        st.error(f"No se puede conectar con el backend. Asegúrate de que esté ejecutándose en {API_BASE_URL}")
         return []
     except Exception as e:
-        st.error(f"Error inesperado: {str(e)}")
         return []
+
+def create_user_api(nick: str, name: str, correo: str, rank: str = "silver"):
+    """
+    Crea un nuevo usuario en el backend
+    """
+    try:
+        user_data = {
+            "nick": nick,
+            "name": name,
+            "correo": correo,
+            "rank": rank
+        }
+        response = requests.post(f"{API_BASE_URL}/users/", json=user_data, timeout=10)
+        if response.status_code == 201:
+            return True, "Usuario creado exitosamente"
+        else:
+            try:
+                error_detail = response.json().get("detail", f"Error {response.status_code}")
+            except:
+                error_detail = f"Error {response.status_code}: {response.text}"
+            return False, error_detail
+    except requests.exceptions.ConnectionError:
+        return False, f"No se puede conectar con el backend. Asegúrate de que esté ejecutándose en {API_BASE_URL}"
+    except Exception as e:
+        return False, f"Error inesperado: {str(e)}"
 
 def create_monthly_payout_ranking(payouts_data, users_data, selected_month_offset=0, user_rank=None):
     """
@@ -328,15 +353,31 @@ def create_monthly_payout_ranking(payouts_data, users_data, selected_month_offse
     Returns:
         DataFrame con el ranking mensual
     """
-    if not payouts_data:
+    # Validar datos de entrada
+    if not payouts_data or not isinstance(payouts_data, list):
+        return pd.DataFrame()
+    
+    if not users_data or not isinstance(users_data, list):
         return pd.DataFrame()
     
     # Convertir a DataFrame
-    df_payouts = pd.DataFrame(payouts_data)
+    try:
+        df_payouts = pd.DataFrame(payouts_data)
+        if df_payouts.empty:
+            return pd.DataFrame()
+    except Exception:
+        return pd.DataFrame()
+    
+    # Verificar que las columnas necesarias existan
+    required_payout_cols = ['nick', 'payout', 'fecha_payout']
+    missing_cols = [col for col in required_payout_cols if col not in df_payouts.columns]
+    if missing_cols:
+        return pd.DataFrame()
     
     # Convertir fechas
     df_payouts['fecha_payout'] = pd.to_datetime(df_payouts['fecha_payout'], errors='coerce')
-    df_payouts['fecha_creacion'] = pd.to_datetime(df_payouts['fecha_creacion'], errors='coerce')
+    if 'fecha_creacion' in df_payouts.columns:
+        df_payouts['fecha_creacion'] = pd.to_datetime(df_payouts['fecha_creacion'], errors='coerce')
     
     # Calcular el mes objetivo
     target_date = datetime.now() + timedelta(days=30 * selected_month_offset)
@@ -353,7 +394,16 @@ def create_monthly_payout_ranking(payouts_data, users_data, selected_month_offse
         return pd.DataFrame()
     
     # Crear diccionario de usuarios para obtener nombres y rangos
-    users_dict = {user['nick']: {'name': user['name'], 'rank': user['rank']} for user in users_data}
+    try:
+        users_dict = {}
+        for user in users_data:
+            if isinstance(user, dict) and 'nick' in user:
+                users_dict[user['nick']] = {
+                    'name': user.get('name', user.get('nick', '')),
+                    'rank': user.get('rank', 'silver')
+                }
+    except Exception:
+        users_dict = {}
     
     # Filtrar por rango de usuario si se especifica
     if user_rank:
@@ -2613,8 +2663,14 @@ with col3:
         st.session_state.logged_in = False
         st.rerun()
 
-# Usar tabs de Streamlit para el contenido
-tab1, tab2, tab3, tab4 = st.tabs(["📊 Análisis", "% Descuentos", "🏆 Ranking", "⚙️ Herramientas"])
+# Verificar si el usuario es admin
+is_admin = st.session_state.username == "admin"
+
+# Crear tabs según si es admin o no
+if is_admin:
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Análisis", "% Descuentos", "🏆 Ranking", "⚙️ Herramientas", "⚙️ Administración"])
+else:
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 Análisis", "% Descuentos", "🏆 Ranking", "⚙️ Herramientas"])
 
 # Contenedor principal
 st.markdown('<div class="main-container">', unsafe_allow_html=True)
@@ -3834,9 +3890,19 @@ with tab3:
                 st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
         
-        # Obtener datos del backend
-        payouts_data = get_payouts_from_api()
-        users_data = get_users_from_api()
+        # Obtener datos del backend con indicador de carga
+        with st.spinner("Cargando datos del ranking..."):
+            payouts_data = get_payouts_from_api()
+            users_data = get_users_from_api()
+        
+        # Validar que los datos estén disponibles
+        if not payouts_data or not isinstance(payouts_data, list):
+            st.warning("⚠️ No se pudieron cargar los datos de payouts. Por favor, verifica la conexión con el backend.")
+            st.stop()
+        
+        if not users_data or not isinstance(users_data, list):
+            st.warning("⚠️ No se pudieron cargar los datos de usuarios. Por favor, verifica la conexión con el backend.")
+            st.stop()
         
         # Crear rankings separados por rango
         global_ranking = create_monthly_payout_ranking(payouts_data, users_data, st.session_state.selected_month)
@@ -3860,12 +3926,13 @@ with tab3:
             with share_col:
                 # Preparar datos del ranking
                 ranking_data = []
-                for _, row in global_ranking.head(10).iterrows():
-                    ranking_data.append((
-                        row['position'],
-                        row['name'],
-                        row['total_payout_formatted']
-                    ))
+                if not global_ranking.empty:
+                    for _, row in global_ranking.head(10).iterrows():
+                        ranking_data.append((
+                            row['position'],
+                            row['name'],
+                            row['total_payout_formatted']
+                        ))
                 
                 # Función para generar imagen
                 def generate_ranking_image(ranking_data):
@@ -3955,9 +4022,10 @@ with tab3:
                         draw.text((width-100, y_pos), score_formatted, fill='#28a745', font=score_font, anchor='rm')
                     
                     # Total generado al final con $ al final y sin centavos, usando punto como separador de miles
-                    total_amount = sum([float(row['total_payout']) for _, row in global_ranking.head(10).iterrows()])
-                    total_text = f"Total: {total_amount:,.0f}$".replace(',', '.')
-                    draw.text((width//2, height-150), total_text, fill='#1a1a1a', font=total_font, anchor='mm')
+                    if not global_ranking.empty:
+                        total_amount = sum([float(row['total_payout']) for _, row in global_ranking.head(10).iterrows()])
+                        total_text = f"Total: {total_amount:,.0f}$".replace(',', '.')
+                        draw.text((width//2, height-150), total_text, fill='#1a1a1a', font=total_font, anchor='mm')
                     
                     # Marca de agua
                     draw.text((width//2, height-50), "@imoxtrading", fill='#999999', font=subtitle_font, anchor='mm')
@@ -4095,12 +4163,13 @@ with tab3:
             with share_col:
                 # Preparar datos del ranking Gold
                 gold_ranking_data = []
-                for _, row in gold_ranking.head(10).iterrows():
-                    gold_ranking_data.append((
-                        row['position'],
-                        row['name'],
-                        row['total_payout_formatted']
-                    ))
+                if not gold_ranking.empty:
+                    for _, row in gold_ranking.head(10).iterrows():
+                        gold_ranking_data.append((
+                            row['position'],
+                            row['name'],
+                            row['total_payout_formatted']
+                        ))
                 
                 # Función para generar imagen Gold
                 def generate_gold_ranking_image(ranking_data):
@@ -4174,9 +4243,10 @@ with tab3:
                         draw.line([(200, y_pos+30), (width-150, y_pos+30)], fill='#ffc107', width=1)
                     
                     # Total Gold
-                    total_amount = sum([float(row['total_payout']) for _, row in gold_ranking.head(10).iterrows()])
-                    total_text = f"Total Gold: ${total_amount:,.2f}"
-                    draw.text((width//2, height-200), total_text, fill='#1a1a1a', font=total_font, anchor='mm')
+                    if not gold_ranking.empty:
+                        total_amount = sum([float(row['total_payout']) for _, row in gold_ranking.head(10).iterrows()])
+                        total_text = f"Total Gold: ${total_amount:,.2f}"
+                        draw.text((width//2, height-200), total_text, fill='#1a1a1a', font=total_font, anchor='mm')
                     
                     draw.text((width//2, height-100), "@imoxhub", fill='#999999', font=subtitle_font, anchor='mm')
                     
@@ -4309,12 +4379,13 @@ with tab3:
             with share_col:
                 # Preparar datos del ranking Silver
                 silver_ranking_data = []
-                for _, row in silver_ranking.head(10).iterrows():
-                    silver_ranking_data.append((
-                        row['position'],
-                        row['name'],
-                        row['total_payout_formatted']
-                    ))
+                if not silver_ranking.empty:
+                    for _, row in silver_ranking.head(10).iterrows():
+                        silver_ranking_data.append((
+                            row['position'],
+                            row['name'],
+                            row['total_payout_formatted']
+                        ))
                 
                 # Función para generar imagen Silver
                 def generate_silver_ranking_image(ranking_data):
@@ -4388,9 +4459,10 @@ with tab3:
                         draw.line([(200, y_pos+30), (width-150, y_pos+30)], fill='#6c757d', width=1)
                     
                     # Total Silver
-                    total_amount = sum([float(row['total_payout']) for _, row in silver_ranking.head(10).iterrows()])
-                    total_text = f"Total Silver: ${total_amount:,.2f}"
-                    draw.text((width//2, height-200), total_text, fill='#1a1a1a', font=total_font, anchor='mm')
+                    if not silver_ranking.empty:
+                        total_amount = sum([float(row['total_payout']) for _, row in silver_ranking.head(10).iterrows()])
+                        total_text = f"Total Silver: ${total_amount:,.2f}"
+                        draw.text((width//2, height-200), total_text, fill='#1a1a1a', font=total_font, anchor='mm')
                     
                     draw.text((width//2, height-100), "@imoxhub", fill='#999999', font=subtitle_font, anchor='mm')
                     
@@ -4516,162 +4588,172 @@ with tab3:
     """, unsafe_allow_html=True)
     
     # Preparar datos para el gráfico mensual de payouts
-    df_payouts = pd.DataFrame(payouts_data)
-    df_payouts['fecha_payout'] = pd.to_datetime(df_payouts['fecha_payout'], errors='coerce')
-    
-    # Filtrar solo payouts válidos
-    df_payouts_valid = df_payouts.dropna(subset=['fecha_payout']).copy()
-    
-    if not df_payouts_valid.empty:
-        # Convertir payout a float
-        df_payouts_valid['payout_amount'] = pd.to_numeric(df_payouts_valid['payout'], errors='coerce')
-        df_payouts_valid = df_payouts_valid.dropna(subset=['payout_amount'])
-        
-        # Crear diccionario de usuarios para obtener rangos
-        users_dict = {user['nick']: {'name': user['name'], 'rank': user['rank']} for user in users_data}
-        
-        # Agregar información de usuario
-        df_payouts_valid['rank'] = df_payouts_valid['nick'].map(lambda x: users_dict.get(x, {}).get('rank', 'unknown'))
-        
-        # Agrupar por mes y categoría
-        df_payouts_valid['year_month'] = df_payouts_valid['fecha_payout'].dt.to_period('M')
-        
-        # Calcular totales mensuales por categoría
-        datos_mensuales = []
-        
-        for mes in df_payouts_valid['year_month'].unique():
-            df_mes = df_payouts_valid[df_payouts_valid['year_month'] == mes]
-            
-            # Global (todos los datos)
-            total_global = df_mes['payout_amount'].sum()
-            
-            # Gold (usuarios con rank 'gold')
-            df_gold = df_mes[df_mes['rank'] == 'gold']
-            total_gold = df_gold['payout_amount'].sum()
-            
-            # Silver (usuarios con rank 'silver')
-            df_silver = df_mes[df_mes['rank'] == 'silver']
-            total_silver = df_silver['payout_amount'].sum()
-            
-            datos_mensuales.append({
-                'Mes': mes,
-                'Global': total_global,
-                'Gold': total_gold,
-                'Silver': total_silver
-            })
-        
-        # Crear DataFrame para el gráfico
-        df_mensual = pd.DataFrame(datos_mensuales)
-        df_mensual = df_mensual.sort_values('Mes')
-        df_mensual['Mes_Str'] = df_mensual['Mes'].astype(str)
-        
-        # Crear gráfico de líneas
-        import plotly.graph_objects as go
-        
-        fig_mensual = go.Figure()
-        
-        # Línea Global
-        fig_mensual.add_trace(go.Scatter(
-            x=df_mensual['Mes_Str'],
-            y=df_mensual['Global'],
-            mode='lines+markers',
-            name='Global',
-            line=dict(color='#1f77b4', width=3),
-            marker=dict(size=8),
-            hovertemplate='<b>Global</b><br>Mes: %{x}<br>Total: $%{y:,.2f}<extra></extra>'
-        ))
-        
-        # Línea Gold
-        fig_mensual.add_trace(go.Scatter(
-            x=df_mensual['Mes_Str'],
-            y=df_mensual['Gold'],
-            mode='lines+markers',
-            name='Gold',
-            line=dict(color='#ffd700', width=3),
-            marker=dict(size=8),
-            hovertemplate='<b>Gold</b><br>Mes: %{x}<br>Total: $%{y:,.2f}<extra></extra>'
-        ))
-        
-        # Línea Silver
-        fig_mensual.add_trace(go.Scatter(
-            x=df_mensual['Mes_Str'],
-            y=df_mensual['Silver'],
-            mode='lines+markers',
-            name='Silver',
-            line=dict(color='#c0c0c0', width=3),
-            marker=dict(size=8),
-            hovertemplate='<b>Silver</b><br>Mes: %{x}<br>Total: $%{y:,.2f}<extra></extra>'
-        ))
-        
-        # Configurar layout
-        fig_mensual.update_layout(
-            title="Evolución Mensual de Payouts por Categoría",
-            xaxis_title="Mes",
-            yaxis_title="Payout Total ($)",
-            template="plotly_white",
-            height=500,
-            margin=dict(l=20, r=20, t=40, b=20),
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            font=dict(color='#495057'),
-            xaxis=dict(
-                gridcolor='#e9ecef',
-                linecolor='#e9ecef',
-                tickcolor='#495057',
-                tickfont=dict(color='#495057')
-            ),
-            yaxis=dict(
-                gridcolor='#e9ecef',
-                linecolor='#e9ecef',
-                tickcolor='#495057',
-                tickfont=dict(color='#495057'),
-                tickformat='$,.0f'
-            ),
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1
-            )
-        )
-        
-        st.plotly_chart(fig_mensual, use_container_width=True)
-        
-        # Mostrar estadísticas del gráfico
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            total_global_periodo = df_mensual['Global'].sum()
-            st.metric(
-                "Total Global",
-                f"${total_global_periodo:,.2f}",
-                help="Suma total de todos los payouts en el período"
-            )
-        
-        with col2:
-            total_gold_periodo = df_mensual['Gold'].sum()
-            porcentaje_gold = (total_gold_periodo / total_global_periodo * 100) if total_global_periodo > 0 else 0
-            st.metric(
-                "Total Gold",
-                f"${total_gold_periodo:,.2f}",
-                f"{porcentaje_gold:.1f}% del total",
-                help="Suma de usuarios Gold"
-            )
-        
-        with col3:
-            total_silver_periodo = df_mensual['Silver'].sum()
-            porcentaje_silver = (total_silver_periodo / total_global_periodo * 100) if total_global_periodo > 0 else 0
-            st.metric(
-                "Total Silver",
-                f"${total_silver_periodo:,.2f}",
-                f"{porcentaje_silver:.1f}% del total",
-                help="Suma de usuarios Silver"
-            )
+    if not payouts_data:
+        st.info("No hay datos de payouts para mostrar")
+        st.markdown('</div>', unsafe_allow_html=True)
     else:
-        st.info("No hay datos de payouts suficientes para generar el gráfico")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+        df_payouts = pd.DataFrame(payouts_data)
+        
+        # Verificar que la columna fecha_payout existe antes de usarla
+        if 'fecha_payout' not in df_payouts.columns:
+            st.info("No hay datos de fechas de payout disponibles")
+            st.markdown('</div>', unsafe_allow_html=True)
+        else:
+            df_payouts['fecha_payout'] = pd.to_datetime(df_payouts['fecha_payout'], errors='coerce')
+            
+            # Filtrar solo payouts válidos
+            df_payouts_valid = df_payouts.dropna(subset=['fecha_payout']).copy()
+            
+            if not df_payouts_valid.empty:
+                # Convertir payout a float
+                df_payouts_valid['payout_amount'] = pd.to_numeric(df_payouts_valid['payout'], errors='coerce')
+                df_payouts_valid = df_payouts_valid.dropna(subset=['payout_amount'])
+                
+                # Crear diccionario de usuarios para obtener rangos
+                users_dict = {user['nick']: {'name': user['name'], 'rank': user['rank']} for user in users_data}
+                
+                # Agregar información de usuario
+                df_payouts_valid['rank'] = df_payouts_valid['nick'].map(lambda x: users_dict.get(x, {}).get('rank', 'unknown'))
+                
+                # Agrupar por mes y categoría
+                df_payouts_valid['year_month'] = df_payouts_valid['fecha_payout'].dt.to_period('M')
+                
+                # Calcular totales mensuales por categoría
+                datos_mensuales = []
+                
+                for mes in df_payouts_valid['year_month'].unique():
+                    df_mes = df_payouts_valid[df_payouts_valid['year_month'] == mes]
+                    
+                    # Global (todos los datos)
+                    total_global = df_mes['payout_amount'].sum()
+                    
+                    # Gold (usuarios con rank 'gold')
+                    df_gold = df_mes[df_mes['rank'] == 'gold']
+                    total_gold = df_gold['payout_amount'].sum()
+                    
+                    # Silver (usuarios con rank 'silver')
+                    df_silver = df_mes[df_mes['rank'] == 'silver']
+                    total_silver = df_silver['payout_amount'].sum()
+                    
+                    datos_mensuales.append({
+                        'Mes': mes,
+                        'Global': total_global,
+                        'Gold': total_gold,
+                        'Silver': total_silver
+                    })
+                
+                # Crear DataFrame para el gráfico
+                df_mensual = pd.DataFrame(datos_mensuales)
+                df_mensual = df_mensual.sort_values('Mes')
+                df_mensual['Mes_Str'] = df_mensual['Mes'].astype(str)
+                
+                # Crear gráfico de líneas
+                import plotly.graph_objects as go
+                
+                fig_mensual = go.Figure()
+                
+                # Línea Global
+                fig_mensual.add_trace(go.Scatter(
+                    x=df_mensual['Mes_Str'],
+                    y=df_mensual['Global'],
+                    mode='lines+markers',
+                    name='Global',
+                    line=dict(color='#1f77b4', width=3),
+                    marker=dict(size=8),
+                    hovertemplate='<b>Global</b><br>Mes: %{x}<br>Total: $%{y:,.2f}<extra></extra>'
+                ))
+                
+                # Línea Gold
+                fig_mensual.add_trace(go.Scatter(
+                    x=df_mensual['Mes_Str'],
+                    y=df_mensual['Gold'],
+                    mode='lines+markers',
+                    name='Gold',
+                    line=dict(color='#ffd700', width=3),
+                    marker=dict(size=8),
+                    hovertemplate='<b>Gold</b><br>Mes: %{x}<br>Total: $%{y:,.2f}<extra></extra>'
+                ))
+                
+                # Línea Silver
+                fig_mensual.add_trace(go.Scatter(
+                    x=df_mensual['Mes_Str'],
+                    y=df_mensual['Silver'],
+                    mode='lines+markers',
+                    name='Silver',
+                    line=dict(color='#c0c0c0', width=3),
+                    marker=dict(size=8),
+                    hovertemplate='<b>Silver</b><br>Mes: %{x}<br>Total: $%{y:,.2f}<extra></extra>'
+                ))
+                
+                # Configurar layout
+                fig_mensual.update_layout(
+                    title="Evolución Mensual de Payouts por Categoría",
+                    xaxis_title="Mes",
+                    yaxis_title="Payout Total ($)",
+                    template="plotly_white",
+                    height=500,
+                    margin=dict(l=20, r=20, t=40, b=20),
+                    plot_bgcolor='white',
+                    paper_bgcolor='white',
+                    font=dict(color='#495057'),
+                    xaxis=dict(
+                        gridcolor='#e9ecef',
+                        linecolor='#e9ecef',
+                        tickcolor='#495057',
+                        tickfont=dict(color='#495057')
+                    ),
+                    yaxis=dict(
+                        gridcolor='#e9ecef',
+                        linecolor='#e9ecef',
+                        tickcolor='#495057',
+                        tickfont=dict(color='#495057'),
+                        tickformat='$,.0f'
+                    ),
+                    legend=dict(
+                        orientation="h",
+                        yanchor="bottom",
+                        y=1.02,
+                        xanchor="right",
+                        x=1
+                    )
+                )
+                
+                st.plotly_chart(fig_mensual, use_container_width=True)
+                
+                # Mostrar estadísticas del gráfico
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    total_global_periodo = df_mensual['Global'].sum()
+                    st.metric(
+                        "Total Global",
+                        f"${total_global_periodo:,.2f}",
+                        help="Suma total de todos los payouts en el período"
+                    )
+                
+                with col2:
+                    total_gold_periodo = df_mensual['Gold'].sum()
+                    porcentaje_gold = (total_gold_periodo / total_global_periodo * 100) if total_global_periodo > 0 else 0
+                    st.metric(
+                        "Total Gold",
+                        f"${total_gold_periodo:,.2f}",
+                        f"{porcentaje_gold:.1f}% del total",
+                        help="Suma de usuarios Gold"
+                    )
+                
+                with col3:
+                    total_silver_periodo = df_mensual['Silver'].sum()
+                    porcentaje_silver = (total_silver_periodo / total_global_periodo * 100) if total_global_periodo > 0 else 0
+                    st.metric(
+                        "Total Silver",
+                        f"${total_silver_periodo:,.2f}",
+                        f"{porcentaje_silver:.1f}% del total",
+                        help="Suma de usuarios Silver"
+                    )
+            else:
+                st.info("No hay datos de payouts suficientes para generar el gráfico")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
     
     with ranking_sub_tab2:
         st.markdown("""
@@ -4707,6 +4789,79 @@ with tab4:
         </div>
     </div>
     """, unsafe_allow_html=True)
+
+# Tab de Administración (solo para admin)
+if is_admin:
+    with tab5:
+        st.markdown("""
+        <div class="card">
+            <div class="card-title">🔧 Administración de Usuarios</div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("### Crear Nuevo Usuario")
+        
+        with st.form("create_user_form"):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                nick = st.text_input("Nick de Usuario *", placeholder="ejemplo: usuario123", help="Nombre de usuario único")
+                name = st.text_input("Nombre Completo *", placeholder="ejemplo: Juan Pérez", help="Nombre completo del usuario")
+            
+            with col2:
+                correo = st.text_input("Correo Electrónico *", placeholder="ejemplo: usuario@email.com", help="Correo electrónico válido")
+                rank = st.selectbox(
+                    "Rango *",
+                    options=["silver", "gold", "admin"],
+                    index=0,
+                    help="Rango del usuario: Silver (por defecto), Gold o Admin"
+                )
+            
+            st.markdown("<small>* Campos obligatorios</small>", unsafe_allow_html=True)
+            
+            submitted = st.form_submit_button("Crear Usuario", use_container_width=True)
+            
+            if submitted:
+                if not nick or not name or not correo:
+                    st.error("Por favor completa todos los campos obligatorios")
+                else:
+                    success, message = create_user_api(nick, name, correo, rank)
+                    if success:
+                        st.success(message)
+                        # Invalidar caché para refrescar los datos
+                        get_users_from_api.clear()
+                        # Limpiar el formulario recargando la página
+                        st.rerun()
+                    else:
+                        st.error(f"Error al crear usuario: {message}")
+        
+        st.markdown("---")
+        st.markdown("### Usuarios Existentes")
+        
+        # Mostrar lista de usuarios con indicador de carga
+        with st.spinner("Cargando lista de usuarios..."):
+            users_data = get_users_from_api()
+        
+        if users_data and isinstance(users_data, list) and len(users_data) > 0:
+            try:
+                df_users = pd.DataFrame(users_data)
+                # Verificar que las columnas necesarias existan
+                required_cols = ['nick', 'name', 'correo', 'rank']
+                missing_cols = [col for col in required_cols if col not in df_users.columns]
+                
+                if missing_cols:
+                    st.warning(f"⚠️ Faltan columnas en los datos: {', '.join(missing_cols)}")
+                elif not df_users.empty:
+                    df_users_display = df_users[required_cols].copy()
+                    df_users_display.columns = ['Nick', 'Nombre', 'Correo', 'Rango']
+                    st.dataframe(df_users_display, use_container_width=True, hide_index=True)
+                else:
+                    st.info("No hay usuarios registrados")
+            except Exception as e:
+                st.error(f"Error al procesar los datos de usuarios: {str(e)}")
+        else:
+            st.warning("⚠️ No se pudieron cargar los usuarios. Por favor, verifica la conexión con el backend.")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
 
 # Cerrar contenedor principal
 st.markdown('</div>', unsafe_allow_html=True)
