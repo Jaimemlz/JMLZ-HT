@@ -1305,6 +1305,14 @@ st.set_page_config(
 # Inicializar estado de sesión para el login
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
+if 'username' not in st.session_state:
+    st.session_state.username = None
+
+def validate_credentials(username: str, password: str) -> bool:
+    """Valida contra credenciales fijas: admin/1234 y prueba/1234."""
+    username = str(username).strip()
+    password = str(password)
+    return (username == "admin" and password == "1234") or (username == "prueba" and password == "1234")
 
 # Función para mostrar la página de login
 def show_login_page():
@@ -1324,6 +1332,31 @@ def show_login_page():
     }
     .login-title {
         color: #495057;
+    }
+    .login-error {
+        background: #fff5f5;
+        border: 1px solid #f5c2c7;
+        color: #842029;
+        padding: 0.75rem 1rem;
+        border-radius: 0.5rem;
+        margin: 0 auto 1rem auto;
+        max-width: 400px;
+        text-align: center;
+        font-weight: 500;
+    }
+    /* Animación de vibración */
+    @keyframes shake {
+        10%, 90% { transform: translateX(-1px); }
+        20%, 80% { transform: translateX(2px); }
+        30%, 50%, 70% { transform: translateX(-4px); }
+        40%, 60% { transform: translateX(4px); }
+    }
+    #login-panel.shake {
+        animation: shake 0.6s ease;
+    }
+    #login-panel.error-flash {
+        border-color: #de3a3a !important;
+        box-shadow: 0 0 0 3px rgba(222, 58, 58, 0.15);
     }
     /* Ocultar el contenido principal de Streamlit cuando se muestra el login */
     .main .block-container {
@@ -1395,7 +1428,7 @@ def show_login_page():
     """, unsafe_allow_html=True)
     
     with st.form("login_form"):
-        st.markdown('<div class="login-form">', unsafe_allow_html=True)
+        st.markdown('<div id="login-panel" class="login-form">', unsafe_allow_html=True)
         
         usuario = st.text_input("Usuario", placeholder="Ingresa tu usuario")
         contraseña = st.text_input("Contraseña", type="password", placeholder="Ingresa tu contraseña")
@@ -1407,17 +1440,51 @@ def show_login_page():
             login_button = st.form_submit_button("Entrar", use_container_width=True)
         
         if login_button:
-            if usuario and contraseña:
-                st.session_state.logged_in = True
-                st.session_state.username = usuario
-                st.rerun()
-            else:
+            if not usuario or not contraseña:
                 st.error("Por favor ingresa usuario y contraseña")
+            else:
+                if validate_credentials(usuario, contraseña):
+                    st.session_state.logged_in = True
+                    st.session_state.username = usuario
+                    st.rerun()
+                else:
+                    # Marcar error y animar el panel
+                    st.session_state.login_error = True
+                    st.markdown("""
+                    <script>
+                    setTimeout(() => {
+                        const panel = document.getElementById('login-panel');
+                        if (panel) {
+                            panel.classList.remove('shake', 'error-flash');
+                            void panel.offsetWidth; // reflow
+                            panel.classList.add('error-flash', 'shake');
+                            setTimeout(() => {
+                                panel.classList.remove('shake', 'error-flash');
+                            }, 900);
+                        }
+                    }, 100);
+                    </script>
+                    """, unsafe_allow_html=True)
+                    st.rerun()
 
+    # Mostrar error fuera del panel si existe
+    if 'login_error' in st.session_state and st.session_state.login_error:
+        st.markdown('<div class="login-error">Credenciales inválidas</div>', unsafe_allow_html=True)
+        st.session_state.login_error = False  # Resetear después de mostrar
 # Verificar si el usuario está logueado
 if not st.session_state.logged_in:
     show_login_page()
     st.stop()
+
+# Botón de logout en la barra lateral
+with st.sidebar:
+    if st.session_state.logged_in:
+        st.markdown(f"**Usuario:** {st.session_state.username}")
+        if st.button("Cerrar sesión", use_container_width=True):
+            for key in ["logged_in", "username"]:
+                if key in st.session_state:
+                    del st.session_state[key]
+            st.rerun()
 
 # Estilos para las tarjetas y componentes
 st.markdown("""
