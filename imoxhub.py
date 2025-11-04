@@ -18,7 +18,9 @@ import os
 pio.templates.default = "plotly_white"
 
 # Configuración de la URL del backend
-API_BASE_URL = os.getenv("API_URL", "https://imoxhub-backend.onrender.com")
+# Por defecto usa localhost, pero puedes cambiar con variable de entorno API_URL
+# Para producción: export API_URL=https://imoxhub-backend.onrender.com
+API_BASE_URL = os.getenv("API_URL", "http://localhost:8000")
 
 # Asegurar que la URL tenga esquema (https://) y dominio completo
 if not API_BASE_URL.startswith(("http://", "https://")):
@@ -279,13 +281,21 @@ def crear_ranking_ea(df):
 # FUNCIONES PARA CONECTAR CON LA API DEL BACKEND
 # =============================================================================
 
+def get_headers():
+    """Obtiene los headers con autenticación"""
+    headers = {}
+    if st.session_state.get('token'):
+        headers['Authorization'] = f"Bearer {st.session_state.token}"
+    return headers
+
 @st.cache_data(ttl=60, show_spinner=False)  # Cache por 60 segundos
 def get_payouts_from_api():
     """
     Obtiene todos los payouts desde la API del backend
     """
     try:
-        response = requests.get(f"{API_BASE_URL}/payouts/", timeout=10)
+        headers = get_headers()
+        response = requests.get(f"{API_BASE_URL}/payouts/", headers=headers, timeout=10)
         if response.status_code == 200:
             return response.json()
         else:
@@ -303,7 +313,8 @@ def get_users_from_api():
     Obtiene todos los usuarios desde la API del backend
     """
     try:
-        response = requests.get(f"{API_BASE_URL}/users/", timeout=10)
+        headers = get_headers()
+        response = requests.get(f"{API_BASE_URL}/users/", headers=headers, timeout=10)
         if response.status_code == 200:
             return response.json()
         else:
@@ -326,7 +337,8 @@ def create_user_api(nick: str, name: str, correo: str, rank: str = "silver"):
             "correo": correo,
             "rank": rank
         }
-        response = requests.post(f"{API_BASE_URL}/users/", json=user_data, timeout=10)
+        headers = get_headers()
+        response = requests.post(f"{API_BASE_URL}/users/", json=user_data, headers=headers, timeout=10)
         if response.status_code == 201:
             return True, "Usuario creado exitosamente"
         else:
@@ -1357,12 +1369,142 @@ if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 if 'username' not in st.session_state:
     st.session_state.username = None
+if 'token' not in st.session_state:
+    st.session_state.token = None
+if 'user_rank' not in st.session_state:
+    st.session_state.user_rank = None
+if 'first_login' not in st.session_state:
+    st.session_state.first_login = False
 
-def validate_credentials(username: str, password: str) -> bool:
-    """Valida contra credenciales fijas: admin/1234 y prueba/1234."""
-    username = str(username).strip()
-    password = str(password)
-    return (username == "admin" and password == "1234") or (username == "prueba" and password == "1234")
+def login_user(nick: str, password: str):
+    """
+    Autentica al usuario contra el backend
+    Returns: (success, message, data)
+    """
+    try:
+        # Normalizar el nick a minúsculas para hacer login case-insensitive
+        login_data = {
+            "nick": nick.strip(),
+            "password": password
+        }
+        response = requests.post(f"{API_BASE_URL}/auth/login", json=login_data, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            return True, "Login exitoso", data
+        elif response.status_code == 429:
+            return False, "Demasiados intentos fallidos. Por favor espera unos minutos.", None
+        else:
+            # Intentar obtener el mensaje de error
+            try:
+                error_detail = response.json().get("detail", f"Error {response.status_code}")
+            except:
+                error_detail = f"Error {response.status_code}: {response.text}"
+            return False, error_detail, None
+    except requests.exceptions.ConnectionError:
+        return False, f"No se puede conectar con el backend. Asegúrate de que esté ejecutándose en {API_BASE_URL}", None
+    except requests.exceptions.Timeout:
+        return False, "Tiempo de espera agotado. Por favor intenta de nuevo.", None
+    except Exception as e:
+        return False, f"Error inesperado: {str(e)}", None
+
+def reset_password_api(target_nick: str, token: str):
+    """
+    Resetea la contraseña de un usuario (solo admin)
+    Returns: (success, message)
+    """
+    try:
+        reset_data = {
+            "target_nick": target_nick
+        }
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+        response = requests.post(f"{API_BASE_URL}/auth/reset-password", json=reset_data, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            return True, data.get("message", "Contraseña reseteada correctamente")
+        elif response.status_code == 403:
+            return False, "No tienes permisos para realizar esta acción. Solo los administradores pueden resetear contraseñas."
+        elif response.status_code == 404:
+            return False, "Usuario no encontrado"
+        elif response.status_code == 500:
+            # Internal Server Error - intentar obtener el detalle
+            try:
+                error_response = response.json()
+                error_detail = error_response.get("detail", "Error interno del servidor")
+            except:
+                error_detail = f"Error interno del servidor (500). {response.text[:200] if response.text else ''}"
+            return False, error_detail
+        else:
+            # Intentar obtener el mensaje de error del JSON
+            try:
+                error_response = response.json()
+                error_detail = error_response.get("detail", f"Error {response.status_code}")
+            except ValueError:
+                error_detail = response.text.strip() if response.text.strip() else f"Error {response.status_code}: Respuesta no válida del servidor"
+            except Exception as json_error:
+                error_detail = f"Error {response.status_code}: No se pudo procesar la respuesta del servidor ({str(json_error)})"
+            return False, error_detail
+    except requests.exceptions.ConnectionError:
+        return False, f"No se puede conectar con el backend. Asegúrate de que esté ejecutándose en {API_BASE_URL}"
+    except requests.exceptions.Timeout:
+        return False, "Tiempo de espera agotado. Por favor intenta de nuevo."
+    except Exception as e:
+        return False, f"Error inesperado: {str(e)}"
+
+def set_password_api(password: str, confirm_password: str, token: str):
+    """
+    Establece la contraseña en el primer login
+    Returns: (success, message)
+    """
+    try:
+        password_data = {
+            "password": password,
+            "confirm_password": confirm_password
+        }
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+        response = requests.post(f"{API_BASE_URL}/auth/set-password", json=password_data, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            return True, "Contraseña establecida correctamente"
+        elif response.status_code == 401:
+            # Token inválido o expirado
+            try:
+                error_detail = response.json().get("detail", "Token inválido o expirado")
+            except:
+                error_detail = "Token inválido o expirado. Por favor, cierra sesión y vuelve a iniciar sesión."
+            return False, error_detail
+        elif response.status_code == 500:
+            # Internal Server Error - intentar obtener el detalle
+            try:
+                error_response = response.json()
+                error_detail = error_response.get("detail", "Error interno del servidor")
+            except:
+                error_detail = f"Error interno del servidor (500). {response.text[:200] if response.text else ''}"
+            return False, error_detail
+        else:
+            # Intentar obtener el mensaje de error del JSON
+            try:
+                error_response = response.json()
+                error_detail = error_response.get("detail", f"Error {response.status_code}")
+            except ValueError:
+                # Si no es JSON válido (respuesta vacía o HTML), usar el texto de la respuesta
+                error_detail = response.text.strip() if response.text.strip() else f"Error {response.status_code}: Respuesta no válida del servidor"
+            except Exception as json_error:
+                error_detail = f"Error {response.status_code}: No se pudo procesar la respuesta del servidor ({str(json_error)})"
+            return False, error_detail
+    except requests.exceptions.ConnectionError:
+        return False, f"No se puede conectar con el backend. Asegúrate de que esté ejecutándose en {API_BASE_URL}"
+    except requests.exceptions.Timeout:
+        return False, "Tiempo de espera agotado. Por favor intenta de nuevo."
+    except Exception as e:
+        return False, f"Error inesperado: {str(e)}"
 
 # Función para mostrar la página de login
 def show_login_page():
@@ -1480,8 +1622,9 @@ def show_login_page():
     with st.form("login_form"):
         st.markdown('<div id="login-panel" class="login-form">', unsafe_allow_html=True)
         
-        usuario = st.text_input("Usuario", placeholder="Ingresa tu usuario")
-        contraseña = st.text_input("Contraseña", type="password", placeholder="Ingresa tu contraseña")
+        usuario = st.text_input("Usuario (Nick)", placeholder="Ingresa tu nick de usuario")
+        contraseña = st.text_input("Contraseña", type="password", placeholder="Deja vacío si es tu primer acceso")
+        st.caption("💡 Si es tu primer acceso, puedes dejar la contraseña vacía")
         
         st.markdown('</div>', unsafe_allow_html=True)
         
@@ -1490,14 +1633,26 @@ def show_login_page():
             login_button = st.form_submit_button("Entrar", use_container_width=True)
         
         if login_button:
-            if not usuario or not contraseña:
-                st.error("Por favor ingresa usuario y contraseña")
+            if not usuario:
+                st.error("Por favor ingresa tu usuario (nick)")
             else:
-                if validate_credentials(usuario, contraseña):
+                # Para primer login, la contraseña puede estar vacía
+                password = contraseña if contraseña else ""
+                
+                with st.spinner("Autenticando..."):
+                    success, message, data = login_user(usuario, password)
+                
+                if success:
+                    # Guardar datos de sesión
                     st.session_state.logged_in = True
-                    st.session_state.username = usuario
+                    st.session_state.username = data['user']['nick']
+                    st.session_state.token = data['access_token']
+                    st.session_state.user_rank = data['user']['rank']
+                    st.session_state.first_login = data['first_login']
                     st.rerun()
                 else:
+                    # Mostrar error
+                    st.error(message)
                     # Marcar error y animar el panel
                     st.session_state.login_error = True
                     st.markdown("""
@@ -1515,15 +1670,78 @@ def show_login_page():
                     }, 100);
                     </script>
                     """, unsafe_allow_html=True)
-                    st.rerun()
 
     # Mostrar error fuera del panel si existe
     if 'login_error' in st.session_state and st.session_state.login_error:
         st.markdown('<div class="login-error">Credenciales inválidas</div>', unsafe_allow_html=True)
         st.session_state.login_error = False  # Resetear después de mostrar
+
 # Verificar si el usuario está logueado
 if not st.session_state.logged_in:
     show_login_page()
+    st.stop()
+
+# Si es primer login, mostrar formulario para establecer contraseña
+if st.session_state.first_login:
+    st.markdown("""
+    <style>
+    .password-setup-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 2rem;
+        min-height: 400px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div class="password-setup-container">
+    """, unsafe_allow_html=True)
+    
+    st.warning("⚠️ **Primer acceso detectado** - Por favor establece tu contraseña para continuar")
+    
+    with st.form("set_password_form"):
+        st.markdown("### Establecer Contraseña")
+        
+        password1 = st.text_input("Nueva Contraseña", type="password", placeholder="Mínimo 6 caracteres")
+        password2 = st.text_input("Confirmar Contraseña", type="password", placeholder="Repite la contraseña")
+        
+        submit_password = st.form_submit_button("Establecer Contraseña", use_container_width=True)
+        
+        if submit_password:
+            if not password1 or not password2:
+                st.error("Por favor completa ambos campos")
+            elif password1 != password2:
+                st.error("Las contraseñas no coinciden")
+            elif len(password1) < 6:
+                st.error("La contraseña debe tener al menos 6 caracteres")
+            else:
+                # Verificar que tenemos un token
+                if not st.session_state.get('token'):
+                    st.error("❌ Error: No se encontró el token de autenticación. Por favor, cierra sesión y vuelve a iniciar sesión.")
+                else:
+                    token = st.session_state.token
+                    # Verificar que el token no esté vacío
+                    if not token or not token.strip():
+                        st.error("❌ Error: El token de autenticación está vacío. Por favor, cierra sesión y vuelve a iniciar sesión.")
+                    else:
+                        with st.spinner("Estableciendo contraseña..."):
+                            success, message = set_password_api(password1, password2, token)
+                        
+                        if success:
+                            st.success(message)
+                            # Invalidar caché de usuarios
+                            get_users_from_api.clear()
+                            st.session_state.first_login = False
+                            st.rerun()
+                        else:
+                            st.error(f"❌ {message}")
+                            # Si el error es de autenticación, sugerir cerrar sesión
+                            if "401" in str(message) or "token" in str(message).lower() or "autorizado" in str(message).lower():
+                                st.warning("💡 Tu sesión podría haber expirado. Por favor, cierra sesión y vuelve a iniciar sesión.")
+    
+    st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
 # Botón de logout en la barra lateral
@@ -1531,7 +1749,8 @@ with st.sidebar:
     if st.session_state.logged_in:
         st.markdown(f"**Usuario:** {st.session_state.username}")
         if st.button("Cerrar sesión", use_container_width=True):
-            for key in ["logged_in", "username"]:
+            # Limpiar toda la sesión
+            for key in ["logged_in", "username", "token", "user_rank", "first_login"]:
                 if key in st.session_state:
                     del st.session_state[key]
             st.rerun()
@@ -2660,11 +2879,14 @@ with col1:
 
 with col3:
     if st.button("Cerrar Sesión", key="logout"):
-        st.session_state.logged_in = False
+        # Limpiar toda la sesión
+        for key in ["logged_in", "username", "token", "user_rank", "first_login"]:
+            if key in st.session_state:
+                del st.session_state[key]
         st.rerun()
 
 # Verificar si el usuario es admin
-is_admin = st.session_state.username == "admin"
+is_admin = st.session_state.user_rank == "admin"
 
 # Crear tabs según si es admin o no
 if is_admin:
@@ -4833,6 +5055,32 @@ if is_admin:
                         st.rerun()
                     else:
                         st.error(f"Error al crear usuario: {message}")
+        
+        st.markdown("---")
+        st.markdown("### Resetear Contraseña de Usuario")
+        
+        with st.form("reset_password_form"):
+            st.markdown("**Resetear contraseña de un usuario**")
+            st.caption("💡 Al resetear la contraseña, el usuario deberá establecer una nueva en su próximo login")
+            
+            reset_nick = st.text_input("Nick del Usuario", placeholder="ejemplo: usuario123", help="Nick del usuario cuya contraseña quieres resetear")
+            
+            reset_submitted = st.form_submit_button("Resetear Contraseña", use_container_width=True)
+            
+            if reset_submitted:
+                if not reset_nick or not reset_nick.strip():
+                    st.error("Por favor ingresa el nick del usuario")
+                else:
+                    with st.spinner("Reseteando contraseña..."):
+                        success, message = reset_password_api(reset_nick.strip(), st.session_state.token)
+                    
+                    if success:
+                        st.success(message)
+                        # Invalidar caché de usuarios
+                        get_users_from_api.clear()
+                        st.rerun()
+                    else:
+                        st.error(f"❌ {message}")
         
         st.markdown("---")
         st.markdown("### Usuarios Existentes")
