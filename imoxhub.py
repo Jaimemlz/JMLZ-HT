@@ -3143,9 +3143,11 @@ with tab1:
                             else:
                                 riesgo_ea = perdida_maxima
                             
-                            # Analizar SL directo vs trailing stop
+                            # Analizar SL directo vs trailing stop (positivo y loss)
                             sl_directos = 0
                             sl_trailing = 0
+                            tsp = 0  # Trailing Stop Positivo
+                            tsl = 0  # Trailing Stop Loss
                             perdidas_nulas = 0
                             
                             # Margen de tolerancia (10% del riesgo detectado)
@@ -3169,6 +3171,7 @@ with tab1:
                                             sl_directos += 1
                                         else:
                                             sl_trailing += 1
+                                            tsl += 1  # Trailing Stop Loss
                                     elif beneficio > 0:  # Ganancia
                                         if es_tp_real(trade):
                                             # TP real (tocó el TP)
@@ -3176,14 +3179,18 @@ with tab1:
                                         else:
                                             # TS positivo (o cierre manual en ganancia que no tocó TP)
                                             sl_trailing += 1
+                                            tsp += 1  # Trailing Stop Positivo
                                     else:
-                                        # Break-even -> lo consideramos TS
+                                        # Break-even -> lo consideramos TS (sin ganancia ni pérdida, lo contamos como TSL)
                                         sl_trailing += 1
+                                        tsl += 1
                         else:
                             # No hay pérdidas, no podemos calcular el riesgo
                             riesgo_ea = 0
                             sl_directos = 0
                             sl_trailing = 0
+                            tsp = 0
+                            tsl = 0
                             perdidas_nulas = 0
                             
                         # Calcular métricas completas
@@ -3217,6 +3224,9 @@ with tab1:
                         else:
                             tp_trades = int(ordenado.apply(es_tp_real, axis=1).sum())
                             
+                        # Calcular total de trades
+                        total_trades = len(ordenado)
+                        
                         analisis_data.append({
                             "Nombre": ea,
                             "Activo": simbolo.upper(),  # Agregar columna de activo
@@ -3224,9 +3234,12 @@ with tab1:
                             "Net Profit": f"${net_profit:.2f}",
                             "maxDD": f"${max_dd:.2f}",
                             "PF": f"{profit_factor:.2f}" if profit_factor != float('inf') else "∞",
+                            "Total Trades": int(total_trades),
                             "SL": int(sl_directos),
                             "TP": int(tp_trades),
                             "TS": int(sl_trailing),
+                            "TSP": int(tsp),  # Trailing Stop Positivo
+                            "TSL": int(tsl),  # Trailing Stop Loss
                             "Max Consec Loss": int(max_consec_loss),
                             "Avg Trade Mensual": round(avg_trades_mes, 1)
                         })
@@ -3265,6 +3278,11 @@ with tab1:
                                 "PF",
                                 help="Profit Factor - Ratio ganancias totales / pérdidas totales"
                             ),
+                            "Total Trades": st.column_config.NumberColumn(
+                                "Total Trades",
+                                help="Total de trades realizados",
+                                format="%d"
+                            ),
                             "SL": st.column_config.NumberColumn(
                                 "SL",
                                 help="Trades con SL directo",
@@ -3278,6 +3296,16 @@ with tab1:
                             "TS": st.column_config.NumberColumn(
                                 "TS",
                                 help="Trades con Trailing Stop",
+                                format="%d"
+                            ),
+                            "TSP": st.column_config.NumberColumn(
+                                "TSP",
+                                help="Trailing Stop Positivo (trades con ganancia cerrados antes del TP)",
+                                format="%d"
+                            ),
+                            "TSL": st.column_config.NumberColumn(
+                                "TSL",
+                                help="Trailing Stop Loss (trades con pérdida menor al SL directo)",
                                 format="%d"
                             ),
                             "Max Consec Loss": st.column_config.NumberColumn(
@@ -3363,6 +3391,8 @@ with tab1:
                                 
                             # Calcular SL directos y trailing stops para el conjunto combinado
                             margen_tolerancia_comb = riesgo_combinado * 0.10 if riesgo_combinado > 0 else 0
+                            tsp_combinado = 0  # Trailing Stop Positivo
+                            tsl_combinado = 0  # Trailing Stop Loss
                                 
                             for _, trade in df_combinado.iterrows():
                                 beneficio = trade['Beneficio']
@@ -3372,13 +3402,16 @@ with tab1:
                                         sl_directos_combinado += 1
                                     else:
                                         sl_trailing_combinado += 1
+                                        tsl_combinado += 1  # Trailing Stop Loss
                                 elif beneficio > 0:
                                     if es_tp_real(trade):
                                         pass  # TP real se contabiliza aparte
                                     else:
                                         sl_trailing_combinado += 1
+                                        tsp_combinado += 1  # Trailing Stop Positivo
                                 else:
                                     sl_trailing_combinado += 1
+                                    tsl_combinado += 1  # Break-even como TSL
                                 
                             # Calcular métricas combinadas
                             net_profit_comb = df_combinado['Beneficio'].sum()
@@ -3409,6 +3442,8 @@ with tab1:
                                     "SL": int(sl_directos_combinado),
                                     "TP": int(tp_trades_comb),
                                     "TS": int(sl_trailing_combinado),
+                                    "TSP": int(tsp_combinado),  # Trailing Stop Positivo
+                                    "TSL": int(tsl_combinado),  # Trailing Stop Loss
                                     "Max Consec Loss": int(max_consec_loss_comb),
                                     "Avg Trade Mensual": round(avg_trades_mes_comb, 1)
                             }
@@ -3446,6 +3481,16 @@ with tab1:
                                 "TS": st.column_config.NumberColumn(
                                     "TS",
                                     help="Trades con Trailing Stop",
+                                    format="%d"
+                                ),
+                                "TSP": st.column_config.NumberColumn(
+                                    "TSP",
+                                    help="Trailing Stop Positivo (trades con ganancia cerrados antes del TP)",
+                                    format="%d"
+                                ),
+                                "TSL": st.column_config.NumberColumn(
+                                    "TSL",
+                                    help="Trailing Stop Loss (trades con pérdida menor al SL directo)",
                                     format="%d"
                                 ),
                                 "Max Consec Loss": st.column_config.NumberColumn(
@@ -3486,10 +3531,12 @@ with tab1:
                                 beneficio_mes = grupo_mes['Beneficio'].sum()
                                 total_trades = len(grupo_mes)
                                 
-                                # Contar SL, TS, TP
+                                # Contar SL, TS, TP, TSP, TSL
                                 sl_mes = 0
                                 ts_mes = 0
                                 tp_mes = 0
+                                tsp_mes = 0  # Trailing Stop Positivo
+                                tsl_mes = 0  # Trailing Stop Loss
                                 
                                 for _, trade in grupo_mes.iterrows():
                                     beneficio = trade['Beneficio']
@@ -3508,22 +3555,27 @@ with tab1:
                                                 sl_mes += 1
                                             elif perdida_abs > 0:
                                                 ts_mes += 1
+                                                tsl_mes += 1  # Trailing Stop Loss
                                             else:
                                                 # Beneficio == 0 pero es pérdida (break-even)
                                                 ts_mes += 1
+                                                tsl_mes += 1
                                         else:  # Es ganancia o break-even positivo
                                             if es_tp_real(trade):
                                                 tp_mes += 1
                                             else:
                                                 ts_mes += 1
+                                                tsp_mes += 1  # Trailing Stop Positivo
                                 
                                 resumen_mensual_comb.append({
                                     "Año - Mes": f"{ano} - {mes_nombre}",
                                     "Beneficio": f"${beneficio_mes:.2f}",
                                     "Trades": total_trades,
                                     "SL": sl_mes,
+                                    "TP": tp_mes,
                                     "TS": ts_mes,
-                                    "TP": tp_mes
+                                    "TSP": tsp_mes,
+                                    "TSL": tsl_mes
                                 })
                             
                             # Crear DataFrame (ya ordenado por el sort anterior)
@@ -3643,10 +3695,12 @@ with tab1:
                             beneficio_mes = grupo_mes['Beneficio'].sum()
                             total_trades = len(grupo_mes)
                             
-                            # Contar SL, TS, TP
+                            # Contar SL, TS, TP, TSP, TSL
                             sl_mes = 0
                             ts_mes = 0
                             tp_mes = 0
+                            tsp_mes = 0  # Trailing Stop Positivo
+                            tsl_mes = 0  # Trailing Stop Loss
                             
                             for _, trade in grupo_mes.iterrows():
                                 beneficio = trade['Beneficio']
@@ -3665,22 +3719,27 @@ with tab1:
                                             sl_mes += 1
                                         elif perdida_abs > 0:
                                             ts_mes += 1
+                                            tsl_mes += 1  # Trailing Stop Loss
                                         else:
                                             # Beneficio == 0 pero es pérdida (break-even)
                                             ts_mes += 1
+                                            tsl_mes += 1
                                     else:  # Es ganancia o break-even positivo
                                         if es_tp_real(trade):
                                             tp_mes += 1
                                         else:
                                             ts_mes += 1
+                                            tsp_mes += 1  # Trailing Stop Positivo
                             
                             resumen_mensual.append({
                                 "Año - Mes": f"{ano} - {mes_nombre}",
                                 "Beneficio": f"${beneficio_mes:.2f}",
                                 "Trades": total_trades,
                                 "SL": sl_mes,
+                                "TP": tp_mes,
                                 "TS": ts_mes,
-                                "TP": tp_mes
+                                "TSP": tsp_mes,
+                                "TSL": tsl_mes
                             })
                         
                         # Guardar datos para mostrar después con expandables
@@ -3725,11 +3784,13 @@ with tab1:
                                 "Beneficio": st.column_config.TextColumn("Beneficio", help="Beneficio del mes"),
                                 "Trades": st.column_config.NumberColumn("Trades", help="Total de operaciones", format="%d"),
                                 "SL": st.column_config.NumberColumn("SL", help="Trades con SL directo", format="%d"),
+                                "TP": st.column_config.NumberColumn("TP", help="Trades con TP", format="%d"),
                                 "TS": st.column_config.NumberColumn("TS", help="Trades con trailing stop", format="%d"),
-                                "TP": st.column_config.NumberColumn("TP", help="Trades con TP", format="%d")
+                                "TSP": st.column_config.NumberColumn("TSP", help="Trailing Stop Positivo (trades con ganancia cerrados antes del TP)", format="%d"),
+                                "TSL": st.column_config.NumberColumn("TSL", help="Trailing Stop Loss (trades con pérdida menor al SL directo)", format="%d")
                             }
                             
-                            with st.expander(f"📌 {ea}"):
+                            with st.expander(f"📌 {ea} - {symbol.upper()}"):
                                 st.dataframe(styled_df, use_container_width=True, column_config=column_config_mes, hide_index=True)
                     
                     # Crear gráfico de beneficio acumulado
