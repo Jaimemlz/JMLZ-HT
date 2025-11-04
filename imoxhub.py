@@ -2620,13 +2620,8 @@ st.markdown("""
     
     /* Forzar alineación del botón derecho al centro */
     .st-emotion-cache-wfksaw:last-child {
-        align-items: center !important;
+        align-items: end !important;
         justify-content: center !important;
-    }
-
-    .st-emotion-cache-wfksaw:last-child {
-        align-items: center !important;
-        justify-content: normal !important;
     }
 
     .stElementContainer:has(.ranking-total) {
@@ -2867,7 +2862,7 @@ if 'active_tab' not in st.session_state:
 logo_base64 = get_base64_encoded_image("logo.png")
 
 # Header con logo y botón de logout
-col1, col2, col3 = st.columns([3, 1, 1])
+col1, col2 = st.columns([4, 1])
 with col1:
     st.markdown(f"""
     <div style="display: flex; align-items: center; margin-bottom: 0.5rem; margin-left: 0.5rem;">
@@ -2877,7 +2872,7 @@ with col1:
     </div>
     """, unsafe_allow_html=True)
 
-with col3:
+with col2:
     if st.button("Cerrar Sesión", key="logout"):
         # Limpiar toda la sesión
         for key in ["logged_in", "username", "token", "user_rank", "first_login"]:
@@ -2890,9 +2885,9 @@ is_admin = st.session_state.user_rank == "admin"
 
 # Crear tabs según si es admin o no
 if is_admin:
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Análisis", "% Descuentos", "🏆 Ranking", "⚙️ Herramientas", "⚙️ Administración"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 Análisis", "% Descuentos", "🏆 Ranking", "⚙️ Administración"])
 else:
-    tab1, tab2, tab3, tab4 = st.tabs(["📊 Análisis", "% Descuentos", "🏆 Ranking", "⚙️ Herramientas"])
+    tab1, tab2, tab3 = st.tabs(["📊 Análisis", "% Descuentos", "🏆 Ranking"])
 
 # Contenedor principal
 st.markdown('<div class="main-container">', unsafe_allow_html=True)
@@ -2938,6 +2933,19 @@ with tab1:
                                     ticket = int(fila_op[0].text.strip())
                                 except:
                                     continue  # No es una fila de operación válida
+                                
+                                # Extraer información del atributo title para detectar [sl] o [tp]
+                                tipo_cierre = None
+                                try:
+                                    title_attr = fila_op[0].get('title', '')
+                                    if title_attr:
+                                        title_lower = title_attr.lower()
+                                        if '[sl]' in title_lower:
+                                            tipo_cierre = 'SL'
+                                        elif '[tp]' in title_lower:
+                                            tipo_cierre = 'TP'
+                                except:
+                                    tipo_cierre = None
                                 
                                 # Verificar que la segunda celda contenga una fecha
                                 try:
@@ -3012,6 +3020,7 @@ with tab1:
                                     "TP": tp_str,
                                     "TP_val": tp_val,
                                     "TP_decimales": tp_decimals,
+                                    "TipoCierre": tipo_cierre,  # 'SL', 'TP', o None
                                     "Duración": (close_time - open_time).total_seconds() / 60  # en minutos
                                 })
                             except Exception as e:
@@ -3144,22 +3153,32 @@ with tab1:
                             
                             for _, trade in ordenado.iterrows():
                                 beneficio = trade['Beneficio']
-                                if beneficio < 0:  # Pérdida
-                                    perdida_abs = abs(beneficio)
-                                    if perdida_abs >= (riesgo_ea - margen_tolerancia):
-                                        sl_directos += 1
-                                    else:
-                                        sl_trailing += 1
-                                elif beneficio > 0:  # Ganancia
-                                    if es_tp_real(trade):
-                                        # TP real (tocó el TP)
-                                        pass  # se contará abajo para mantener claridad
-                                    else:
-                                        # TS positivo (o cierre manual en ganancia que no tocó TP)
-                                        sl_trailing += 1
+                                tipo_cierre = trade.get('TipoCierre')
+                                
+                                # Si el HTML tiene información explícita de [sl] o [tp], usarla
+                                if tipo_cierre == 'SL':
+                                    sl_directos += 1
+                                elif tipo_cierre == 'TP':
+                                    # TP real (tocó el TP) - se contará abajo para mantener claridad
+                                    pass
                                 else:
-                                    # Break-even -> lo consideramos TS
-                                    sl_trailing += 1
+                                    # Si no hay información explícita, usar la lógica de cálculo
+                                    if beneficio < 0:  # Pérdida
+                                        perdida_abs = abs(beneficio)
+                                        if perdida_abs >= (riesgo_ea - margen_tolerancia):
+                                            sl_directos += 1
+                                        else:
+                                            sl_trailing += 1
+                                    elif beneficio > 0:  # Ganancia
+                                        if es_tp_real(trade):
+                                            # TP real (tocó el TP)
+                                            pass  # se contará abajo para mantener claridad
+                                        else:
+                                            # TS positivo (o cierre manual en ganancia que no tocó TP)
+                                            sl_trailing += 1
+                                    else:
+                                        # Break-even -> lo consideramos TS
+                                        sl_trailing += 1
                         else:
                             # No hay pérdidas, no podemos calcular el riesgo
                             riesgo_ea = 0
@@ -3188,10 +3207,19 @@ with tab1:
                         avg_trades_mes = calcular_avg_trades_por_mes(ordenado)
                             
                         # Contar TP reales (cierre exactamente en TP, no TS positivo)
-                        tp_trades = int(ordenado.apply(es_tp_real, axis=1).sum())
+                        # Usar TipoCierre si está disponible, sino usar es_tp_real
+                        if 'TipoCierre' in ordenado.columns:
+                            tp_explicitos = int((ordenado['TipoCierre'] == 'TP').sum())
+                            # Para los que no tienen TipoCierre explícito, usar es_tp_real
+                            sin_tipo_explicito = ordenado[ordenado['TipoCierre'] != 'TP']
+                            tp_por_calculo = int(sin_tipo_explicito.apply(es_tp_real, axis=1).sum()) if len(sin_tipo_explicito) > 0 else 0
+                            tp_trades = tp_explicitos + tp_por_calculo
+                        else:
+                            tp_trades = int(ordenado.apply(es_tp_real, axis=1).sum())
                             
                         analisis_data.append({
                             "Nombre": ea,
+                            "Activo": simbolo.upper(),  # Agregar columna de activo
                             "retDD": f"{ret_dd:.2f}",
                             "Net Profit": f"${net_profit:.2f}",
                             "maxDD": f"${max_dd:.2f}",
@@ -3215,7 +3243,11 @@ with tab1:
                     column_config_analisis = {
                         "Nombre": st.column_config.TextColumn(
                                 "Nombre",
-                                help="Nombre del Expert Advisor y símbolo"
+                                help="Nombre del Expert Advisor"
+                            ),
+                        "Activo": st.column_config.TextColumn(
+                                "Activo",
+                                help="Símbolo del activo que opera la estrategia (ej: NAS100.FS, XAUUSD.PRO)"
                             ),
                             "retDD": st.column_config.TextColumn(
                                 "retDD",
@@ -3274,8 +3306,9 @@ with tab1:
                     </div>
                     """, unsafe_allow_html=True)
                         
-                    # Lista de nombres de estrategias para el multiselect
-                    nombres_estrategias = df_analisis['Nombre'].tolist()
+                    # Lista de estrategias con formato "Nombre - Activo" para el multiselect
+                    df_analisis['Estrategia_Completa'] = df_analisis['Nombre'] + ' - ' + df_analisis['Activo']
+                    nombres_estrategias = df_analisis['Estrategia_Completa'].tolist()
                     
                     estrategias_seleccionadas = st.multiselect(
                         "Selecciona las estrategias que deseas combinar:",
@@ -3287,7 +3320,22 @@ with tab1:
                     if estrategias_seleccionadas:
                         if st.button("📊 Ver Estadísticas Combinadas", use_container_width=True):
                             # Filtrar el dataframe original por las estrategias seleccionadas
-                            df_combinado = df[df['EA'].isin(estrategias_seleccionadas)].copy()
+                            # Extraer EA y Símbolo de las estrategias seleccionadas
+                            estrategias_filtradas = []
+                            for estrategia_sel in estrategias_seleccionadas:
+                                # Formato: "Nombre - Activo"
+                                partes = estrategia_sel.split(' - ')
+                                if len(partes) == 2:
+                                    ea_nombre = partes[0]
+                                    activo = partes[1].lower()
+                                    estrategias_filtradas.append((ea_nombre, activo))
+                            
+                            # Filtrar el dataframe
+                            mask = pd.Series([False] * len(df))
+                            for ea_nombre, activo in estrategias_filtradas:
+                                mask |= ((df['EA'] == ea_nombre) & (df['Símbolo'] == activo))
+                            
+                            df_combinado = df[mask].copy()
                             df_combinado = df_combinado.sort_values(by='Open')
                             
                             # Calcular métricas combinadas
@@ -3298,8 +3346,8 @@ with tab1:
                             
                             # Calcular el riesgo promedio de las estrategias seleccionadas
                             riesgos_por_ea = []
-                            for ea in estrategias_seleccionadas:
-                                grupo_ea = df_combinado[df_combinado['EA'] == ea]
+                            for ea_nombre, activo in estrategias_filtradas:
+                                grupo_ea = df_combinado[(df_combinado['EA'] == ea_nombre) & (df_combinado['Símbolo'] == activo)]
                                 perdidas_ea = grupo_ea[grupo_ea['Beneficio'] < 0]['Beneficio'].abs()
                                 if len(perdidas_ea) > 0:
                                     perdida_max = perdidas_ea.max()
@@ -3445,17 +3493,29 @@ with tab1:
                                 
                                 for _, trade in grupo_mes.iterrows():
                                     beneficio = trade['Beneficio']
-                                    if beneficio < 0:  # Es pérdida
-                                        perdida_abs = abs(beneficio)
-                                        if riesgo_combinado > 0 and perdida_abs >= (riesgo_combinado - margen_tolerancia_comb):
-                                            sl_mes += 1
-                                        elif perdida_abs > 0:
-                                            ts_mes += 1
-                                    else:  # Es ganancia
-                                        if es_tp_real(trade):
-                                            tp_mes += 1
-                                        else:
-                                            ts_mes += 1
+                                    tipo_cierre = trade.get('TipoCierre')
+                                    
+                                    # Si el HTML tiene información explícita de [sl] o [tp], usarla
+                                    if tipo_cierre == 'SL':
+                                        sl_mes += 1
+                                    elif tipo_cierre == 'TP':
+                                        tp_mes += 1
+                                    else:
+                                        # Si no hay información explícita, usar la lógica de cálculo
+                                        if beneficio < 0:  # Es pérdida
+                                            perdida_abs = abs(beneficio)
+                                            if riesgo_combinado > 0 and perdida_abs >= (riesgo_combinado - margen_tolerancia_comb):
+                                                sl_mes += 1
+                                            elif perdida_abs > 0:
+                                                ts_mes += 1
+                                            else:
+                                                # Beneficio == 0 pero es pérdida (break-even)
+                                                ts_mes += 1
+                                        else:  # Es ganancia o break-even positivo
+                                            if es_tp_real(trade):
+                                                tp_mes += 1
+                                            else:
+                                                ts_mes += 1
                                 
                                 resumen_mensual_comb.append({
                                     "Año - Mes": f"{ano} - {mes_nombre}",
@@ -3489,22 +3549,25 @@ with tab1:
                             
                             fig_comb = go.Figure()
                             
-                            # Agregar línea para cada estrategia individual
-                            for ea in estrategias_seleccionadas:
-                                df_ea = df_combinado[df_combinado['EA'] == ea].copy()
-                                df_ea = df_ea.sort_values('Fecha')
-                                beneficios_ea = df_ea.groupby('Fecha')['Beneficio'].sum().reset_index()
-                                beneficios_ea = beneficios_ea.sort_values('Fecha')
-                                beneficios_ea['Beneficio_acumulado'] = beneficios_ea['Beneficio'].cumsum()
-                                
-                                fig_comb.add_trace(go.Scatter(
-                                    x=beneficios_ea['Fecha'],
-                                    y=beneficios_ea['Beneficio_acumulado'],
-                                    mode='lines+markers',
-                                    name=ea,
-                                    line=dict(width=2),
-                                    marker=dict(size=4)
-                                ))
+                            # Agregar línea para cada estrategia individual (EA + Símbolo)
+                            for ea_nombre, activo in estrategias_filtradas:
+                                df_ea = df_combinado[(df_combinado['EA'] == ea_nombre) & (df_combinado['Símbolo'] == activo)].copy()
+                                if len(df_ea) > 0:
+                                    df_ea['Fecha'] = df_ea['Close'].dt.date
+                                    df_ea = df_ea.sort_values('Fecha')
+                                    beneficios_ea = df_ea.groupby('Fecha')['Beneficio'].sum().reset_index()
+                                    beneficios_ea = beneficios_ea.sort_values('Fecha')
+                                    beneficios_ea['Beneficio_acumulado'] = beneficios_ea['Beneficio'].cumsum()
+                                    
+                                    nombre_leyenda = f"{ea_nombre} - {activo.upper()}"
+                                    fig_comb.add_trace(go.Scatter(
+                                        x=beneficios_ea['Fecha'],
+                                        y=beneficios_ea['Beneficio_acumulado'],
+                                        mode='lines+markers',
+                                        name=nombre_leyenda,
+                                        line=dict(width=2),
+                                        marker=dict(size=4)
+                                    ))
                             
                             # Calcular y agregar línea del conjunto combinado
                             beneficios_combinados = df_combinado.groupby('Fecha')['Beneficio'].sum().reset_index()
@@ -3587,15 +3650,29 @@ with tab1:
                             
                             for _, trade in grupo_mes.iterrows():
                                 beneficio = trade['Beneficio']
-                                if beneficio < 0:  # Es pérdida
-                                    perdida_abs = abs(beneficio)
-                                    if perdida_abs >= (riesgo_ea - margen_tolerancia):
-                                        sl_mes += 1
-                                    else:
-                                        ts_mes += 1
-                                else:  # Es ganancia
-                                    if es_tp_real(trade):
-                                        tp_mes += 1
+                                tipo_cierre = trade.get('TipoCierre')
+                                
+                                # Si el HTML tiene información explícita de [sl] o [tp], usarla
+                                if tipo_cierre == 'SL':
+                                    sl_mes += 1
+                                elif tipo_cierre == 'TP':
+                                    tp_mes += 1
+                                else:
+                                    # Si no hay información explícita, usar la lógica de cálculo
+                                    if beneficio < 0:  # Es pérdida
+                                        perdida_abs = abs(beneficio)
+                                        if perdida_abs >= (riesgo_ea - margen_tolerancia):
+                                            sl_mes += 1
+                                        elif perdida_abs > 0:
+                                            ts_mes += 1
+                                        else:
+                                            # Beneficio == 0 pero es pérdida (break-even)
+                                            ts_mes += 1
+                                    else:  # Es ganancia o break-even positivo
+                                        if es_tp_real(trade):
+                                            tp_mes += 1
+                                        else:
+                                            ts_mes += 1
                             
                             resumen_mensual.append({
                                 "Año - Mes": f"{ano} - {mes_nombre}",
@@ -3664,17 +3741,19 @@ with tab1:
                     
                     df_grafico = df.copy()
                     df_grafico['Fecha'] = df_grafico['Close'].dt.date
-                    beneficios_diarios = df_grafico.groupby(['EA', 'Fecha'])['Beneficio'].sum().reset_index()
-                    beneficios_diarios['Beneficio_acumulado'] = beneficios_diarios.groupby('EA')['Beneficio'].cumsum()
+                    # Crear columna combinada EA + Símbolo para distinguir estrategias con mismo nombre
+                    df_grafico['EA_Completa'] = df_grafico['EA'] + ' - ' + df_grafico['Símbolo'].str.upper()
+                    beneficios_diarios = df_grafico.groupby(['EA_Completa', 'Fecha'])['Beneficio'].sum().reset_index()
+                    beneficios_diarios['Beneficio_acumulado'] = beneficios_diarios.groupby('EA_Completa')['Beneficio'].cumsum()
 
                     if len(beneficios_diarios) > 0:
                         fig = px.line(
                             beneficios_diarios,
                             x="Fecha",
                             y="Beneficio_acumulado",
-                            color="EA",
+                            color="EA_Completa",
                             markers=True,
-                            labels={"Beneficio_acumulado": "Beneficio acumulado", "Fecha": "Fecha"}
+                            labels={"Beneficio_acumulado": "Beneficio acumulado", "Fecha": "Fecha", "EA_Completa": "Estrategia"}
                         )
 
                         fig.update_traces(
@@ -4991,33 +5070,12 @@ with tab3:
         </div>
         """, unsafe_allow_html=True)
 
-# Tab de Herramientas
-with tab4:
-    st.markdown("""
-    <div class="card">
-        <div class="card-title">⚙️ Herramientas</div>
-        <div style="text-align: center; padding: 2rem;">
-            <div style="font-size: 4rem; margin-bottom: 1rem;" class="construction-icon">⚡</div>
-            <h2 style="color: #6c757d; margin-bottom: 1rem;">¡En Desarrollo!</h2>
-            <p style="color: #6c757d; font-size: 1.1rem; margin-bottom: 2rem;">
-                Próximamente disponible.
-            </p>
-            <div style="display: flex; justify-content: center; align-items: center; gap: 0.5rem; color: #6c757d;">
-                <div class="loading-spinner">
-                    <div></div>
-                </div>
-                <span style="margin-left: 1rem;">Desarrollando...</span>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
 # Tab de Administración (solo para admin)
 if is_admin:
-    with tab5:
+    with tab4:
         st.markdown("""
         <div class="card">
-            <div class="card-title">🔧 Administración de Usuarios</div>
+            <div class="card-title">⚙️ Administración de Usuarios</div>
         """, unsafe_allow_html=True)
         
         st.markdown("### Crear Nuevo Usuario")
