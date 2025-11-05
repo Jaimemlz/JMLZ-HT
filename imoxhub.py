@@ -3123,134 +3123,156 @@ with tab1:
                     
                     analisis_data = []
                     for (ea, simbolo), grupo in df.groupby(["EA", "Símbolo"]):
-                        ordenado = grupo.sort_values(by='Open')
+                        try:
+                            ordenado = grupo.sort_values(by='Open')
                             
-                        # Detectar el riesgo típico (SL) de la EA
-                        # Analizamos la distribución de pérdidas para encontrar el valor más común
-                        perdidas = ordenado[ordenado['Beneficio'] < 0]['Beneficio'].abs()
+                            # Detectar el riesgo típico (SL) de la EA
+                            # Analizamos la distribución de pérdidas para encontrar el valor más común
+                            perdidas = ordenado[ordenado['Beneficio'] < 0]['Beneficio'].abs()
                             
-                        if len(perdidas) > 0:
-                            # Agrupar pérdidas con tolerancia del 10% para encontrar el SL más común
-                            # Primero, tomamos la pérdida máxima como candidato inicial
-                            perdida_maxima = perdidas.max()
-                                
-                            # Buscamos pérdidas cercanas al máximo (dentro del 10%)
-                            margen_busqueda = perdida_maxima * 0.10
-                            sl_detected = perdidas[perdidas >= (perdida_maxima - margen_busqueda)].mode()
-                                
-                            if len(sl_detected) > 0:
-                                riesgo_ea = sl_detected.iloc[0]  # Tomamos el valor más común
-                            else:
-                                riesgo_ea = perdida_maxima
-                            
-                            # Analizar SL directo vs trailing stop (positivo y loss)
-                            sl_directos = 0
-                            sl_trailing = 0
-                            tsp = 0  # Trailing Stop Positivo
-                            tsl = 0  # Trailing Stop Loss
-                            perdidas_nulas = 0
-                            
-                            # Margen de tolerancia (10% del riesgo detectado)
-                            margen_tolerancia = riesgo_ea * 0.10
-                            
-                            for _, trade in ordenado.iterrows():
-                                beneficio = trade['Beneficio']
-                                tipo_cierre = trade.get('TipoCierre')
-                                
-                                # Si el HTML tiene información explícita de [sl] o [tp], usarla
-                                if tipo_cierre == 'SL':
-                                    sl_directos += 1
-                                elif tipo_cierre == 'TP':
-                                    # TP real (tocó el TP) - se contará abajo para mantener claridad
-                                    pass
+                            if len(perdidas) > 0:
+                                # Agrupar pérdidas con tolerancia del 10% para encontrar el SL más común
+                                # Primero, tomamos la pérdida máxima como candidato inicial
+                                perdida_maxima = perdidas.max()
+                                    
+                                # Buscamos pérdidas cercanas al máximo (dentro del 10%)
+                                margen_busqueda = perdida_maxima * 0.10
+                                sl_detected = perdidas[perdidas >= (perdida_maxima - margen_busqueda)].mode()
+                                    
+                                if len(sl_detected) > 0:
+                                    riesgo_ea = sl_detected.iloc[0]  # Tomamos el valor más común
                                 else:
-                                    # Si no hay información explícita, usar la lógica de cálculo
-                                    if beneficio < 0:  # Pérdida
-                                        perdida_abs = abs(beneficio)
-                                        if perdida_abs >= (riesgo_ea - margen_tolerancia):
+                                    riesgo_ea = perdida_maxima
+                                
+                                # Analizar SL directo vs trailing stop (positivo y loss)
+                                sl_directos = 0
+                                sl_trailing = 0
+                                tsp = 0  # Trailing Stop Positivo
+                                tsl = 0  # Trailing Stop Loss
+                                perdidas_nulas = 0
+                                
+                                # Margen de tolerancia (10% del riesgo detectado)
+                                margen_tolerancia = riesgo_ea * 0.10
+                                
+                                for _, trade in ordenado.iterrows():
+                                    beneficio = trade['Beneficio']
+                                    tipo_cierre = trade.get('TipoCierre')
+                                    
+                                    # Si el HTML tiene información explícita de [sl] o [tp], usarla PERO validar con el beneficio
+                                    if tipo_cierre == 'SL':
+                                        # [sl] en HTML: verificar si es pérdida o ganancia
+                                        if beneficio < 0:
+                                            # SL directo: pérdida que alcanzó el SL
                                             sl_directos += 1
-                                        else:
-                                            sl_trailing += 1
-                                            tsl += 1  # Trailing Stop Loss
-                                    elif beneficio > 0:  # Ganancia
-                                        if es_tp_real(trade):
-                                            # TP real (tocó el TP)
-                                            pass  # se contará abajo para mantener claridad
-                                        else:
-                                            # TS positivo (o cierre manual en ganancia que no tocó TP)
+                                        elif beneficio > 0:
+                                            # [sl] en HTML pero con ganancia: es un Trailing Stop Positivo
                                             sl_trailing += 1
                                             tsp += 1  # Trailing Stop Positivo
+                                        else:
+                                            # Break-even con [sl]: TSL
+                                            sl_trailing += 1
+                                            tsl += 1
+                                    elif tipo_cierre == 'TP':
+                                        # TP real (tocó el TP) - se contará abajo para mantener claridad
+                                        pass
                                     else:
-                                        # Break-even -> lo consideramos TS (sin ganancia ni pérdida, lo contamos como TSL)
-                                        sl_trailing += 1
-                                        tsl += 1
-                        else:
-                            # No hay pérdidas, no podemos calcular el riesgo
-                            riesgo_ea = 0
-                            sl_directos = 0
-                            sl_trailing = 0
-                            tsp = 0
-                            tsl = 0
-                            perdidas_nulas = 0
+                                        # Si no hay información explícita, usar la lógica de cálculo
+                                        if beneficio < 0:  # Pérdida
+                                            perdida_abs = abs(beneficio)
+                                            if perdida_abs >= (riesgo_ea - margen_tolerancia):
+                                                sl_directos += 1
+                                            else:
+                                                sl_trailing += 1
+                                                tsl += 1  # Trailing Stop Loss
+                                        elif beneficio > 0:  # Ganancia
+                                            if es_tp_real(trade):
+                                                # TP real (tocó el TP)
+                                                pass  # se contará abajo para mantener claridad
+                                            else:
+                                                # TS positivo (o cierre manual en ganancia que no tocó TP)
+                                                sl_trailing += 1
+                                                tsp += 1  # Trailing Stop Positivo
+                                        else:
+                                            # Break-even -> lo consideramos TS (sin ganancia ni pérdida, lo contamos como TSL)
+                                            sl_trailing += 1
+                                            tsl += 1
+                            else:
+                                # No hay pérdidas, no podemos calcular el riesgo
+                                riesgo_ea = 0
+                                sl_directos = 0
+                                sl_trailing = 0
+                                tsp = 0
+                                tsl = 0
+                                perdidas_nulas = 0
+                                
+                            # Calcular métricas completas
+                            net_profit = ordenado['Beneficio'].sum()
+                            ganancias_totales = ordenado[ordenado['Beneficio'] > 0]['Beneficio'].sum()
+                            perdidas_totales = abs(ordenado[ordenado['Beneficio'] < 0]['Beneficio'].sum())
+                                
+                            # Profit Factor
+                            profit_factor = ganancias_totales / perdidas_totales if perdidas_totales > 0 else float('inf')
+                                
+                            # Max Drawdown
+                            max_dd = calcular_max_drawdown(ordenado['Beneficio'])
+                                
+                            # Return on Drawdown (ratio, no porcentaje)
+                            ret_dd = net_profit / abs(max_dd) if max_dd != 0 else 0
+                                
+                            # Max Consecutive Loss
+                            max_consec_loss = calcular_max_consecutive_loss(ordenado['Beneficio'])
+                                
+                            # Avg Trades per Month
+                            avg_trades_mes = calcular_avg_trades_por_mes(ordenado)
+                                
+                            # Contar TP reales (cierre exactamente en TP, no TS positivo)
+                            # Usar TipoCierre si está disponible, sino usar es_tp_real
+                            if 'TipoCierre' in ordenado.columns:
+                                tp_explicitos = int((ordenado['TipoCierre'] == 'TP').sum())
+                                # Para los que no tienen TipoCierre explícito, usar es_tp_real
+                                sin_tipo_explicito = ordenado[ordenado['TipoCierre'] != 'TP']
+                                tp_por_calculo = int(sin_tipo_explicito.apply(es_tp_real, axis=1).sum()) if len(sin_tipo_explicito) > 0 else 0
+                                tp_trades = tp_explicitos + tp_por_calculo
+                            else:
+                                tp_trades = int(ordenado.apply(es_tp_real, axis=1).sum())
+                                
+                            # Calcular total de trades
+                            total_trades = len(ordenado)
                             
-                        # Calcular métricas completas
-                        net_profit = ordenado['Beneficio'].sum()
-                        ganancias_totales = ordenado[ordenado['Beneficio'] > 0]['Beneficio'].sum()
-                        perdidas_totales = abs(ordenado[ordenado['Beneficio'] < 0]['Beneficio'].sum())
-                            
-                        # Profit Factor
-                        profit_factor = ganancias_totales / perdidas_totales if perdidas_totales > 0 else float('inf')
-                            
-                        # Max Drawdown
-                        max_dd = calcular_max_drawdown(ordenado['Beneficio'])
-                            
-                        # Return on Drawdown (ratio, no porcentaje)
-                        ret_dd = net_profit / abs(max_dd) if max_dd != 0 else 0
-                            
-                        # Max Consecutive Loss
-                        max_consec_loss = calcular_max_consecutive_loss(ordenado['Beneficio'])
-                            
-                        # Avg Trades per Month
-                        avg_trades_mes = calcular_avg_trades_por_mes(ordenado)
-                            
-                        # Contar TP reales (cierre exactamente en TP, no TS positivo)
-                        # Usar TipoCierre si está disponible, sino usar es_tp_real
-                        if 'TipoCierre' in ordenado.columns:
-                            tp_explicitos = int((ordenado['TipoCierre'] == 'TP').sum())
-                            # Para los que no tienen TipoCierre explícito, usar es_tp_real
-                            sin_tipo_explicito = ordenado[ordenado['TipoCierre'] != 'TP']
-                            tp_por_calculo = int(sin_tipo_explicito.apply(es_tp_real, axis=1).sum()) if len(sin_tipo_explicito) > 0 else 0
-                            tp_trades = tp_explicitos + tp_por_calculo
-                        else:
-                            tp_trades = int(ordenado.apply(es_tp_real, axis=1).sum())
-                            
-                        # Calcular total de trades
-                        total_trades = len(ordenado)
-                        
-                        analisis_data.append({
-                            "Nombre": ea,
-                            "Activo": simbolo.upper(),  # Agregar columna de activo
-                            "retDD": f"{ret_dd:.2f}",
-                            "Net Profit": f"${net_profit:.2f}",
-                            "maxDD": f"${max_dd:.2f}",
-                            "PF": f"{profit_factor:.2f}" if profit_factor != float('inf') else "∞",
-                            "Total Trades": int(total_trades),
-                            "SL": int(sl_directos),
-                            "TP": int(tp_trades),
-                            "TS": int(sl_trailing),
-                            "TSP": int(tsp),  # Trailing Stop Positivo
-                            "TSL": int(tsl),  # Trailing Stop Loss
-                            "Max Consec Loss": int(max_consec_loss),
-                            "Avg Trade Mensual": round(avg_trades_mes, 1)
-                        })
+                            analisis_data.append({
+                                "Nombre": ea,
+                                "Activo": simbolo.upper(),  # Agregar columna de activo
+                                "retDD": f"{ret_dd:.2f}",
+                                "Net Profit": f"${net_profit:.2f}",
+                                "maxDD": f"${max_dd:.2f}",
+                                "PF": f"{profit_factor:.2f}" if profit_factor != float('inf') else "∞",
+                                "Total Trades": int(total_trades),
+                                "TP": int(tp_trades),
+                                "SL": int(sl_directos),
+                                "TS": int(sl_trailing),
+                                "TSP": int(tsp),  # Trailing Stop Positivo
+                                "TSL": int(tsl),  # Trailing Stop Loss
+                                "Max Consec Loss": int(max_consec_loss),
+                                "Avg Trade Mensual": round(avg_trades_mes, 1)
+                            })
+                        except Exception as e:
+                            st.error(f"Error procesando estrategia {ea} - {simbolo}: {str(e)}")
+                            import traceback
+                            st.error(f"Traceback: {traceback.format_exc()}")
+                            continue
                     
                     # Crear DataFrame del análisis
                     df_analisis = pd.DataFrame(analisis_data)
                     
-                    # Ordenar por retDD de forma descendente
-                    df_analisis['retDD_num'] = df_analisis['retDD'].str.replace('∞', '999999').astype(float)
-                    df_analisis = df_analisis.sort_values(by='retDD_num', ascending=False)
-                    df_analisis = df_analisis.drop(columns=['retDD_num'])
+                    # Verificar que hay datos antes de procesar
+                    if df_analisis.empty:
+                        st.warning("⚠️ No se encontraron estrategias válidas en los archivos. Verifica que los archivos HTML contengan trades con nombres de EA válidos.")
+                    else:
+                        # Ordenar por retDD de forma descendente
+                        if 'retDD' in df_analisis.columns:
+                            df_analisis['retDD_num'] = df_analisis['retDD'].str.replace('∞', '999999').astype(float)
+                            df_analisis = df_analisis.sort_values(by='retDD_num', ascending=False)
+                            df_analisis = df_analisis.drop(columns=['retDD_num'])
                     
                     # Mostrar tabla de análisis
                     column_config_analisis = {
@@ -3283,14 +3305,14 @@ with tab1:
                                 help="Total de trades realizados",
                                 format="%d"
                             ),
-                            "SL": st.column_config.NumberColumn(
-                                "SL",
-                                help="Trades con SL directo",
-                                format="%d"
-                            ),
                             "TP": st.column_config.NumberColumn(
                                 "TP",
                                 help="Trades con TP (Take Profit)",
+                                format="%d"
+                            ),
+                            "SL": st.column_config.NumberColumn(
+                                "SL",
+                                help="Trades con SL directo",
                                 format="%d"
                             ),
                             "TS": st.column_config.NumberColumn(
@@ -3320,12 +3342,15 @@ with tab1:
                             )
                     }
                     
-                    st.dataframe(
-                        df_analisis,
-                        use_container_width=True,
-                        column_config=column_config_analisis,
-                        hide_index=True
-                    )
+                    if not df_analisis.empty and 'retDD' in df_analisis.columns:
+                        st.dataframe(
+                            df_analisis,
+                            use_container_width=True,
+                            column_config=column_config_analisis,
+                            hide_index=True
+                        )
+                    else:
+                        st.warning("⚠️ No se pudo generar la tabla de análisis. Verifica que los archivos contengan datos válidos.")
                         
                     # Selector de estrategias para combinar
                     st.markdown("""
@@ -3359,7 +3384,7 @@ with tab1:
                                     estrategias_filtradas.append((ea_nombre, activo))
                             
                             # Filtrar el dataframe
-                            mask = pd.Series([False] * len(df))
+                            mask = pd.Series([False] * len(df), index=df.index)
                             for ea_nombre, activo in estrategias_filtradas:
                                 mask |= ((df['EA'] == ea_nombre) & (df['Símbolo'] == activo))
                             
@@ -3391,6 +3416,8 @@ with tab1:
                                 
                             # Calcular SL directos y trailing stops para el conjunto combinado
                             margen_tolerancia_comb = riesgo_combinado * 0.10 if riesgo_combinado > 0 else 0
+                            sl_directos_combinado = 0  # Inicializar contador de SL directos
+                            sl_trailing_combinado = 0  # Inicializar contador de trailing stops
                             tsp_combinado = 0  # Trailing Stop Positivo
                             tsl_combinado = 0  # Trailing Stop Loss
                                 
@@ -3434,13 +3461,17 @@ with tab1:
                             </div>
                             """.format(" | ".join(estrategias_seleccionadas)), unsafe_allow_html=True)
                                 
+                            # Calcular total de trades
+                            total_trades_comb = len(df_combinado)
+                            
                             stats_combinadas = {
                                     "retDD": f"{ret_dd_comb:.2f}",
                                     "Net Profit": f"${net_profit_comb:.2f}",
                                     "maxDD": f"${max_dd_comb:.2f}",
                                     "PF": f"{profit_factor_comb:.2f}" if profit_factor_comb != float('inf') else "∞",
-                                    "SL": int(sl_directos_combinado),
+                                    "Trades": int(total_trades_comb),
                                     "TP": int(tp_trades_comb),
+                                    "SL": int(sl_directos_combinado),
                                     "TS": int(sl_trailing_combinado),
                                     "TSP": int(tsp_combinado),  # Trailing Stop Positivo
                                     "TSL": int(tsl_combinado),  # Trailing Stop Loss
@@ -3468,14 +3499,19 @@ with tab1:
                                     "PF",
                                     help="Profit Factor - Ratio ganancias totales / pérdidas totales"
                                 ),
-                                "SL": st.column_config.NumberColumn(
-                                    "SL",
-                                    help="Trades con SL directo",
+                                "Trades": st.column_config.NumberColumn(
+                                    "Trades",
+                                    help="Total de trades realizados",
                                     format="%d"
                                 ),
                                 "TP": st.column_config.NumberColumn(
                                     "TP",
                                     help="Trades con TP (Take Profit)",
+                                    format="%d"
+                                ),
+                                "SL": st.column_config.NumberColumn(
+                                    "SL",
+                                    help="Trades con SL directo",
                                     format="%d"
                                 ),
                                 "TS": st.column_config.NumberColumn(
@@ -3531,6 +3567,9 @@ with tab1:
                                 beneficio_mes = grupo_mes['Beneficio'].sum()
                                 total_trades = len(grupo_mes)
                                 
+                                # Calcular máximo drawdown del mes
+                                max_dd_mes = calcular_max_drawdown(grupo_mes['Beneficio'])
+                                
                                 # Contar SL, TS, TP, TSP, TSL
                                 sl_mes = 0
                                 ts_mes = 0
@@ -3542,9 +3581,20 @@ with tab1:
                                     beneficio = trade['Beneficio']
                                     tipo_cierre = trade.get('TipoCierre')
                                     
-                                    # Si el HTML tiene información explícita de [sl] o [tp], usarla
+                                    # Si el HTML tiene información explícita de [sl] o [tp], usarla PERO validar con el beneficio
                                     if tipo_cierre == 'SL':
-                                        sl_mes += 1
+                                        # [sl] en HTML: verificar si es pérdida o ganancia
+                                        if beneficio < 0:
+                                            # SL directo: pérdida que alcanzó el SL
+                                            sl_mes += 1
+                                        elif beneficio > 0:
+                                            # [sl] en HTML pero con ganancia: es un Trailing Stop Positivo
+                                            ts_mes += 1
+                                            tsp_mes += 1  # Trailing Stop Positivo
+                                        else:
+                                            # Break-even con [sl]: TSL
+                                            ts_mes += 1
+                                            tsl_mes += 1
                                     elif tipo_cierre == 'TP':
                                         tp_mes += 1
                                     else:
@@ -3570,9 +3620,10 @@ with tab1:
                                 resumen_mensual_comb.append({
                                     "Año - Mes": f"{ano} - {mes_nombre}",
                                     "Beneficio": f"${beneficio_mes:.2f}",
+                                    "maxDD": f"${max_dd_mes:.2f}",
                                     "Trades": total_trades,
-                                    "SL": sl_mes,
                                     "TP": tp_mes,
+                                    "SL": sl_mes,
                                     "TS": ts_mes,
                                     "TSP": tsp_mes,
                                     "TSL": tsl_mes
@@ -3695,6 +3746,9 @@ with tab1:
                             beneficio_mes = grupo_mes['Beneficio'].sum()
                             total_trades = len(grupo_mes)
                             
+                            # Calcular máximo drawdown del mes
+                            max_dd_mes = calcular_max_drawdown(grupo_mes['Beneficio'])
+                            
                             # Contar SL, TS, TP, TSP, TSL
                             sl_mes = 0
                             ts_mes = 0
@@ -3706,9 +3760,20 @@ with tab1:
                                 beneficio = trade['Beneficio']
                                 tipo_cierre = trade.get('TipoCierre')
                                 
-                                # Si el HTML tiene información explícita de [sl] o [tp], usarla
+                                # Si el HTML tiene información explícita de [sl] o [tp], usarla PERO validar con el beneficio
                                 if tipo_cierre == 'SL':
-                                    sl_mes += 1
+                                    # [sl] en HTML: verificar si es pérdida o ganancia
+                                    if beneficio < 0:
+                                        # SL directo: pérdida que alcanzó el SL
+                                        sl_mes += 1
+                                    elif beneficio > 0:
+                                        # [sl] en HTML pero con ganancia: es un Trailing Stop Positivo
+                                        ts_mes += 1
+                                        tsp_mes += 1  # Trailing Stop Positivo
+                                    else:
+                                        # Break-even con [sl]: TSL
+                                        ts_mes += 1
+                                        tsl_mes += 1
                                 elif tipo_cierre == 'TP':
                                     tp_mes += 1
                                 else:
@@ -3734,9 +3799,10 @@ with tab1:
                             resumen_mensual.append({
                                 "Año - Mes": f"{ano} - {mes_nombre}",
                                 "Beneficio": f"${beneficio_mes:.2f}",
+                                "maxDD": f"${max_dd_mes:.2f}",
                                 "Trades": total_trades,
-                                "SL": sl_mes,
                                 "TP": tp_mes,
+                                "SL": sl_mes,
                                 "TS": ts_mes,
                                 "TSP": tsp_mes,
                                 "TSL": tsl_mes
@@ -3782,9 +3848,10 @@ with tab1:
                             column_config_mes = {
                                 "Año - Mes": st.column_config.TextColumn("Año - Mes", help="Año y mes"),
                                 "Beneficio": st.column_config.TextColumn("Beneficio", help="Beneficio del mes"),
+                                "maxDD": st.column_config.TextColumn("maxDD", help="Máximo drawdown del mes"),
                                 "Trades": st.column_config.NumberColumn("Trades", help="Total de operaciones", format="%d"),
-                                "SL": st.column_config.NumberColumn("SL", help="Trades con SL directo", format="%d"),
                                 "TP": st.column_config.NumberColumn("TP", help="Trades con TP", format="%d"),
+                                "SL": st.column_config.NumberColumn("SL", help="Trades con SL directo", format="%d"),
                                 "TS": st.column_config.NumberColumn("TS", help="Trades con trailing stop", format="%d"),
                                 "TSP": st.column_config.NumberColumn("TSP", help="Trailing Stop Positivo (trades con ganancia cerrados antes del TP)", format="%d"),
                                 "TSL": st.column_config.NumberColumn("TSL", help="Trailing Stop Loss (trades con pérdida menor al SL directo)", format="%d")
@@ -3886,10 +3953,25 @@ with tab1:
                             return f"${beneficio:.2f}"
                         
                         grupo_display['Duración'] = grupo_display['Duración'].apply(formatear_duracion)
+                        # Guardar beneficio original antes de formatear para el estilo
+                        beneficio_original = grupo_display['Beneficio'].copy()
                         grupo_display['Beneficio'] = grupo_display['Beneficio'].apply(formatear_beneficio)
                         
+                        # Función para aplicar estilo a las filas según el beneficio
+                        def estilo_fila(row):
+                            beneficio = beneficio_original[row.name]
+                            if beneficio > 0:
+                                return ['background-color: #90EE90'] * len(row)  # Verde claro
+                            elif beneficio < 0:
+                                return ['background-color: #FFB6C1'] * len(row)  # Rojo claro
+                            else:
+                                return ['background-color: white'] * len(row)  # Blanco
+                        
+                        # Aplicar estilo a las filas
+                        styled_grupo = grupo_display.style.apply(estilo_fila, axis=1)
+                        
                         with st.expander(f"📌 {ea} ({len(grupo)} operaciones)"):
-                            st.dataframe(grupo_display, use_container_width=True)
+                            st.dataframe(styled_grupo, use_container_width=True)
                 
                 else:
                     st.markdown("""
