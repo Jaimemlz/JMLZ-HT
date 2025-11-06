@@ -41,6 +41,7 @@ try:
         name = Column(String(100), nullable=False)
         correo = Column(String(100), unique=True, index=True, nullable=False)
         rank = Column(Enum(UserRank), nullable=False, default=UserRank.SILVER)
+        password_hash = Column(String(255), nullable=True)  # Nullable para usuarios nuevos sin contraseña
         created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
         updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
@@ -79,6 +80,26 @@ try:
     
     print("🔧 Creando tablas en la base de datos...")
     Base.metadata.create_all(bind=engine)
+    
+    # Ejecutar migración para agregar password_hash si no existe (para bases de datos existentes)
+    print("🔧 Verificando migración de password_hash...")
+    try:
+        from sqlalchemy import inspect, text
+        
+        inspector = inspect(engine)
+        columns = [col['name'] for col in inspector.get_columns('users')]
+        
+        if 'password_hash' not in columns:
+            print("📝 Agregando columna password_hash...")
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN password_hash VARCHAR(255)"))
+            print("✅ Columna password_hash agregada correctamente")
+        else:
+            print("✅ Columna password_hash ya existe")
+    except Exception as e:
+        print(f"⚠️  Advertencia al verificar migración: {str(e)}")
+        print("Continuando de todos modos...")
+    
     print("✅ Base de datos inicializada correctamente!")
     
 except Exception as e:

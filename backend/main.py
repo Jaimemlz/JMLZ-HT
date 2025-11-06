@@ -147,7 +147,25 @@ class PayoutUpdate(BaseModel):
     herramienta: Optional[Herramienta] = None
 
 # Crear las tablas
+# Crear tablas si no existen
 Base.metadata.create_all(bind=engine)
+
+# Ejecutar migración para agregar password_hash si no existe
+try:
+    from sqlalchemy import inspect, text
+    inspector = inspect(engine)
+    columns = [col['name'] for col in inspector.get_columns('users')]
+    
+    if 'password_hash' not in columns:
+        print("📝 Ejecutando migración: agregando columna password_hash...")
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE users ADD COLUMN password_hash VARCHAR(255)"))
+        print("✅ Migración completada: columna password_hash agregada")
+    else:
+        print("✅ Columna password_hash ya existe en la base de datos")
+except Exception as e:
+    print(f"⚠️  Advertencia al verificar migración de password_hash: {str(e)}")
+    # Continuar de todos modos, el servidor puede funcionar sin la migración
 
 # FastAPI app
 app = FastAPI(title="IMOXHUB API", version="1.0.0")

@@ -44,21 +44,29 @@ def migrate_sqlite(engine):
 def migrate_postgresql(engine):
     """Migración para PostgreSQL"""
     print("🔍 Detectada base de datos PostgreSQL")
+    
+    # Verificar si la columna ya existe ANTES de abrir la transacción
+    if check_column_exists(engine, 'users', 'password_hash'):
+        print("✅ La columna 'password_hash' ya existe. No se requiere migración.")
+        return True
+    
+    print("📝 Agregando columna 'password_hash' a la tabla 'users'...")
     with engine.begin() as conn:  # begin() hace commit automático
-        # Verificar si la columna ya existe
-        if check_column_exists(engine, 'users', 'password_hash'):
-            print("✅ La columna 'password_hash' ya existe. No se requiere migración.")
-            return True
-        
-        print("📝 Agregando columna 'password_hash' a la tabla 'users'...")
         try:
-            # PostgreSQL soporta IF NOT EXISTS
-            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)"))
+            # PostgreSQL NO soporta IF NOT EXISTS en ALTER TABLE ADD COLUMN
+            # Por eso verificamos antes con check_column_exists
+            conn.execute(text("ALTER TABLE users ADD COLUMN password_hash VARCHAR(255)"))
             print("✅ Columna 'password_hash' agregada exitosamente.")
             return True
         except OperationalError as e:
-            print(f"❌ Error al agregar la columna: {e}")
-            return False
+            error_msg = str(e).lower()
+            # Verificar si el error es porque la columna ya existe (por si acaso)
+            if "already exists" in error_msg or "duplicate" in error_msg:
+                print("✅ La columna 'password_hash' ya existe.")
+                return True
+            else:
+                print(f"❌ Error al agregar la columna: {e}")
+                return False
 
 def main():
     print("🚀 Iniciando migración de base de datos...")
