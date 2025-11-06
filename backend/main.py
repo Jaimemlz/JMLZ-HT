@@ -104,7 +104,7 @@ class UserUpdate(BaseModel):
 # Esquemas para autenticación
 class LoginRequest(BaseModel):
     nick: str
-    password: str
+    password: Optional[str] = ""  # Opcional para permitir primer login sin contraseña
 
 class LoginResponse(BaseModel):
     access_token: str
@@ -238,79 +238,110 @@ def get_current_user(
 
 def get_user_response(user: User) -> UserResponse:
     """Convierte un User a UserResponse"""
-    # Considerar None o cadena vacía como sin contraseña
-    has_password = user.password_hash is not None and (
-        isinstance(user.password_hash, str) and user.password_hash.strip() != ""
-    )
-    return UserResponse(
-        nick=user.nick,
-        name=user.name,
-        correo=user.correo,
-        rank=user.rank,
-        created_at=user.created_at,
-        updated_at=user.updated_at,
-        has_password=has_password
-    )
+    try:
+        # Considerar None o cadena vacía como sin contraseña
+        has_password = user.password_hash is not None and (
+            isinstance(user.password_hash, str) and user.password_hash.strip() != ""
+        )
+        return UserResponse(
+            nick=user.nick,
+            name=user.name,
+            correo=user.correo,
+            rank=user.rank,
+            created_at=user.created_at,
+            updated_at=user.updated_at,
+            has_password=has_password
+        )
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error en get_user_response: {str(e)}")
+        print(f"Traceback: {error_trace}")
+        raise
 
 # Rutas de autenticación
 @app.post("/auth/login", response_model=LoginResponse)
 def login(login_data: LoginRequest, db: Session = Depends(get_db)):
     """Endpoint de login"""
-    # Verificar bloqueo por intentos fallidos
-    if not check_login_attempts(login_data.nick):
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Demasiados intentos fallidos. Intenta de nuevo en {LOCKOUT_DURATION_MINUTES} minutos."
-        )
-    
-    # Buscar usuario (case-insensitive)
-    # Normalizar el nick a minúsculas para la búsqueda
-    nick_normalized = login_data.nick.lower().strip()
-    user = db.query(User).filter(func.lower(User.nick) == nick_normalized).first()
-    if not user:
-        record_failed_login(login_data.nick)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Credenciales inválidas"
-        )
-    
-    # Verificar si es primer login (sin contraseña)
-    # Considerar None o cadena vacía como sin contraseña
-    first_login = user.password_hash is None or (isinstance(user.password_hash, str) and user.password_hash.strip() == "")
-    
-    if first_login:
-        # Si es primer login, permitir acceso sin contraseña
-        # El frontend deberá pedirle que establezca su contraseña
-        clear_login_attempts(login_data.nick)
-    else:
-        # Verificar contraseña solo si tiene contraseña establecida
-        if not login_data.password:
+    try:
+        # Verificar bloqueo por intentos fallidos
+        if not check_login_attempts(login_data.nick):
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Demasiados intentos fallidos. Intenta de nuevo en {LOCKOUT_DURATION_MINUTES} minutos."
+            )
+        
+        # Buscar usuario (case-insensitive)
+        # Normalizar el nick a minúsculas para la búsqueda
+        nick_normalized = login_data.nick.lower().strip()
+        user = db.query(User).filter(func.lower(User.nick) == nick_normalized).first()
+        if not user:
             record_failed_login(login_data.nick)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Credenciales inválidas"
             )
-        if not verify_password(login_data.password, user.password_hash):
-            record_failed_login(login_data.nick)
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Credenciales inválidas"
-            )
-        clear_login_attempts(login_data.nick)
-    
-    # Crear token
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user.nick},
-        expires_delta=access_token_expires
-    )
-    
-    return LoginResponse(
-        access_token=access_token,
-        token_type="bearer",
-        user=get_user_response(user),
-        first_login=first_login
-    )
+        
+        # Verificar si es primer login (sin contraseña)
+        # Considerar None o cadena vacía como sin contraseña
+        first_login = user.password_hash is None or (isinstance(user.password_hash, str) and user.password_hash.strip() == "")
+        
+        if first_login:
+            # Si es primer login, permitir acceso sin contraseña
+            # El frontend deberá pedirle que establezca su contraseña
+            clear_login_attempts(login_data.nick)
+        else:
+            # Verificar contraseña solo si tiene contraseña establecida
+            if not login_data.password:
+                record_failed_login(login_data.nick)
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Credenciales inválidas"
+                )
+            # Asegurarse de que password_hash no sea None antes de verificar
+            if user.password_hash is None:
+                record_failed_login(login_data.nick)
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Credenciales inválidas"
+                )
+            if not verify_password(login_data.password, user.password_hash):
+                record_failed_login(login_data.nick)
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Credenciales inválidas"
+                )
+            clear_login_attempts(login_data.nick)
+        
+        # Crear token
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": user.nick},
+            expires_delta=access_token_expires
+        )
+        
+        # Obtener respuesta del usuario
+        user_response = get_user_response(user)
+        
+        return LoginResponse(
+            access_token=access_token,
+            token_type="bearer",
+            user=user_response,
+            first_login=first_login
+        )
+    except HTTPException:
+        # Re-lanzar excepciones HTTP
+        raise
+    except Exception as e:
+        # Capturar cualquier otro error y devolver 500 con detalles para debugging
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error en login: {str(e)}")
+        print(f"Traceback: {error_trace}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error interno del servidor: {str(e)}"
+        )
 
 @app.post("/auth/set-password")
 def set_password(
