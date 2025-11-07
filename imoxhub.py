@@ -5258,7 +5258,7 @@ if is_admin:
                         st.error(f"Error al crear usuario: {message}")
         
         st.markdown("---")
-        st.markdown("### Resetear Contraseña de Usuario")
+        st.markdown("### Resetear Contraseña de un Usuario Específico")
         
         with st.form("reset_password_form"):
             st.markdown("**Resetear contraseña de un usuario**")
