@@ -7,7 +7,7 @@ from pydantic import BaseModel, EmailStr
 from datetime import datetime, timezone, timedelta
 from enum import Enum as PyEnum
 import os
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from jose import JWTError, jwt
 import bcrypt
 from collections import defaultdict
@@ -203,28 +203,50 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-def check_login_attempts(nick: str) -> bool:
-    """Verifica si el usuario está bloqueado por intentos fallidos"""
+def check_login_attempts(nick: str) -> Tuple[bool, Optional[int]]:
+    """
+    Verifica si el usuario está bloqueado por intentos fallidos.
+    Retorna (is_allowed, remaining_seconds) donde:
+    - is_allowed: True si puede intentar login, False si está bloqueado
+    - remaining_seconds: segundos restantes de bloqueo (None si no está bloqueado)
+    """
+    # Normalizar el nick para consistencia
+    nick_normalized = nick.lower().strip()
+    
     now = dt.now()
-    # Limpiar intentos antiguos
-    login_attempts[nick] = [
-        attempt_time for attempt_time in login_attempts[nick]
-        if (now - attempt_time).total_seconds() < LOCKOUT_DURATION_MINUTES * 60
-    ]
+    lockout_seconds = LOCKOUT_DURATION_MINUTES * 60
+    
+    # Limpiar intentos antiguos (más antiguos que LOCKOUT_DURATION_MINUTES)
+    if nick_normalized in login_attempts:
+        login_attempts[nick_normalized] = [
+            attempt_time for attempt_time in login_attempts[nick_normalized]
+            if (now - attempt_time).total_seconds() < lockout_seconds
+        ]
     
     # Verificar si hay demasiados intentos
-    if len(login_attempts[nick]) >= MAX_LOGIN_ATTEMPTS:
-        return False
-    return True
+    if nick_normalized in login_attempts and len(login_attempts[nick_normalized]) >= MAX_LOGIN_ATTEMPTS:
+        # Calcular tiempo restante basado en el intento más antiguo
+        oldest_attempt = min(login_attempts[nick_normalized])
+        elapsed = (now - oldest_attempt).total_seconds()
+        remaining = max(0, lockout_seconds - elapsed)
+        return (False, int(remaining))
+    
+    return (True, None)
 
 def record_failed_login(nick: str):
     """Registra un intento de login fallido"""
-    login_attempts[nick].append(dt.now())
+    # Normalizar el nick para consistencia
+    nick_normalized = nick.lower().strip()
+    if nick_normalized not in login_attempts:
+        login_attempts[nick_normalized] = []
+    login_attempts[nick_normalized].append(dt.now())
 
 def clear_login_attempts(nick: str):
     """Limpia los intentos de login para un usuario"""
-    if nick in login_attempts:
-        del login_attempts[nick]
+    # Normalizar el nick para consistencia
+    nick_normalized = nick.lower().strip()
+    if nick_normalized in login_attempts:
+        del login_attempts[nick_normalized]
 
 # Security scheme
 security = HTTPBearer()
@@ -282,16 +304,27 @@ def get_user_response(user: User) -> UserResponse:
 def login(login_data: LoginRequest, db: Session = Depends(get_db)):
     """Endpoint de login"""
     try:
+        # Normalizar el nick para consistencia en todo el proceso
+        nick_normalized = login_data.nick.lower().strip()
+        
         # Verificar bloqueo por intentos fallidos
-        if not check_login_attempts(login_data.nick):
+        is_allowed, remaining_seconds = check_login_attempts(login_data.nick)
+        if not is_allowed:
+            if remaining_seconds:
+                minutes = remaining_seconds // 60
+                seconds = remaining_seconds % 60
+                if minutes > 0:
+                    detail_msg = f"Demasiados intentos fallidos. Por favor espera {minutes} minuto{'s' if minutes > 1 else ''} y {seconds} segundo{'s' if seconds != 1 else ''}."
+                else:
+                    detail_msg = f"Demasiados intentos fallidos. Por favor espera {seconds} segundo{'s' if seconds != 1 else ''}."
+            else:
+                detail_msg = f"Demasiados intentos fallidos. Por favor espera unos minutos."
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f"Demasiados intentos fallidos. Intenta de nuevo en {LOCKOUT_DURATION_MINUTES} minutos."
+                detail=detail_msg
             )
         
         # Buscar usuario (case-insensitive)
-        # Normalizar el nick a minúsculas para la búsqueda
-        nick_normalized = login_data.nick.lower().strip()
         user = db.query(User).filter(func.lower(User.nick) == nick_normalized).first()
         if not user:
             record_failed_login(login_data.nick)
