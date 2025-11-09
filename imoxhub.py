@@ -3162,8 +3162,15 @@ with tab1:
                                     if tipo_cierre == 'SL':
                                         # [sl] en HTML: verificar si es pérdida o ganancia
                                         if beneficio < 0:
-                                            # SL directo: pérdida que alcanzó el SL
-                                            sl_directos += 1
+                                            # [sl] con pérdida: verificar si es SL directo o TSL
+                                            perdida_abs = abs(beneficio)
+                                            if perdida_abs >= (riesgo_ea - margen_tolerancia):
+                                                # SL directo: pérdida que alcanzó el SL esperado
+                                                sl_directos += 1
+                                            else:
+                                                # TSL: pérdida menor que el SL esperado (trailing stop activó antes)
+                                                sl_trailing += 1
+                                                tsl += 1  # Trailing Stop Loss
                                         elif beneficio > 0:
                                             # [sl] en HTML pero con ganancia: es un Trailing Stop Positivo
                                             sl_trailing += 1
@@ -3173,7 +3180,8 @@ with tab1:
                                             sl_trailing += 1
                                             tsl += 1
                                     elif tipo_cierre == 'TP':
-                                        # TP real (tocó el TP) - se contará abajo para mantener claridad
+                                        # [tp] en HTML: confiamos en el HTML, es un TP real
+                                        # Se contará abajo para mantener claridad
                                         pass
                                     else:
                                         # Si no hay información explícita, usar la lógica de cálculo
@@ -3226,8 +3234,9 @@ with tab1:
                             avg_trades_mes = calcular_avg_trades_por_mes(ordenado)
                                 
                             # Contar TP reales (cierre exactamente en TP, no TS positivo)
-                            # Usar TipoCierre si está disponible, sino usar es_tp_real
+                            # Si el HTML tiene [tp], confiamos en eso directamente
                             if 'TipoCierre' in ordenado.columns:
+                                # Contar todos los trades con TipoCierre == 'TP' como TP (confiamos en el HTML)
                                 tp_explicitos = int((ordenado['TipoCierre'] == 'TP').sum())
                                 # Para los que no tienen TipoCierre explícito, usar es_tp_real
                                 sin_tipo_explicito = ordenado[ordenado['TipoCierre'] != 'TP']
@@ -3249,7 +3258,6 @@ with tab1:
                                 "Total Trades": int(total_trades),
                                 "TP": int(tp_trades),
                                 "SL": int(sl_directos),
-                                "TS": int(sl_trailing),
                                 "TSP": int(tsp),  # Trailing Stop Positivo
                                 "TSL": int(tsl),  # Trailing Stop Loss
                                 "Max Consec Loss": int(max_consec_loss),
@@ -3313,11 +3321,6 @@ with tab1:
                             "SL": st.column_config.NumberColumn(
                                 "SL",
                                 help="Trades con SL directo",
-                                format="%d"
-                            ),
-                            "TS": st.column_config.NumberColumn(
-                                "TS",
-                                help="Trades con Trailing Stop",
                                 format="%d"
                             ),
                             "TSP": st.column_config.NumberColumn(
@@ -3472,7 +3475,6 @@ with tab1:
                                     "Trades": int(total_trades_comb),
                                     "TP": int(tp_trades_comb),
                                     "SL": int(sl_directos_combinado),
-                                    "TS": int(sl_trailing_combinado),
                                     "TSP": int(tsp_combinado),  # Trailing Stop Positivo
                                     "TSL": int(tsl_combinado),  # Trailing Stop Loss
                                     "Max Consec Loss": int(max_consec_loss_comb),
@@ -3512,11 +3514,6 @@ with tab1:
                                 "SL": st.column_config.NumberColumn(
                                     "SL",
                                     help="Trades con SL directo",
-                                    format="%d"
-                                ),
-                                "TS": st.column_config.NumberColumn(
-                                    "TS",
-                                    help="Trades con Trailing Stop",
                                     format="%d"
                                 ),
                                 "TSP": st.column_config.NumberColumn(
@@ -3585,8 +3582,15 @@ with tab1:
                                     if tipo_cierre == 'SL':
                                         # [sl] en HTML: verificar si es pérdida o ganancia
                                         if beneficio < 0:
-                                            # SL directo: pérdida que alcanzó el SL
-                                            sl_mes += 1
+                                            # [sl] con pérdida: verificar si es SL directo o TSL
+                                            perdida_abs = abs(beneficio)
+                                            if riesgo_combinado > 0 and perdida_abs >= (riesgo_combinado - margen_tolerancia_comb):
+                                                # SL directo: pérdida que alcanzó el SL esperado
+                                                sl_mes += 1
+                                            else:
+                                                # TSL: pérdida menor que el SL esperado (trailing stop activó antes)
+                                                ts_mes += 1
+                                                tsl_mes += 1  # Trailing Stop Loss
                                         elif beneficio > 0:
                                             # [sl] en HTML pero con ganancia: es un Trailing Stop Positivo
                                             ts_mes += 1
@@ -3596,6 +3600,7 @@ with tab1:
                                             ts_mes += 1
                                             tsl_mes += 1
                                     elif tipo_cierre == 'TP':
+                                        # [tp] en HTML: confiamos en el HTML, es un TP real
                                         tp_mes += 1
                                     else:
                                         # Si no hay información explícita, usar la lógica de cálculo
@@ -3624,7 +3629,6 @@ with tab1:
                                     "Trades": total_trades,
                                     "TP": tp_mes,
                                     "SL": sl_mes,
-                                    "TS": ts_mes,
                                     "TSP": tsp_mes,
                                     "TSL": tsl_mes
                                 })
@@ -3764,8 +3768,15 @@ with tab1:
                                 if tipo_cierre == 'SL':
                                     # [sl] en HTML: verificar si es pérdida o ganancia
                                     if beneficio < 0:
-                                        # SL directo: pérdida que alcanzó el SL
-                                        sl_mes += 1
+                                        # [sl] con pérdida: verificar si es SL directo o TSL
+                                        perdida_abs = abs(beneficio)
+                                        if perdida_abs >= (riesgo_ea - margen_tolerancia):
+                                            # SL directo: pérdida que alcanzó el SL esperado
+                                            sl_mes += 1
+                                        else:
+                                            # TSL: pérdida menor que el SL esperado (trailing stop activó antes)
+                                            ts_mes += 1
+                                            tsl_mes += 1  # Trailing Stop Loss
                                     elif beneficio > 0:
                                         # [sl] en HTML pero con ganancia: es un Trailing Stop Positivo
                                         ts_mes += 1
@@ -3775,7 +3786,13 @@ with tab1:
                                         ts_mes += 1
                                         tsl_mes += 1
                                 elif tipo_cierre == 'TP':
-                                    tp_mes += 1
+                                    # [tp] en HTML: verificar si realmente tocó el TP
+                                    if es_tp_real(trade):
+                                        tp_mes += 1
+                                    else:
+                                        # [tp] en HTML pero no tocó exactamente el TP: es un TSP
+                                        ts_mes += 1
+                                        tsp_mes += 1  # Trailing Stop Positivo
                                 else:
                                     # Si no hay información explícita, usar la lógica de cálculo
                                     if beneficio < 0:  # Es pérdida
@@ -3803,7 +3820,6 @@ with tab1:
                                 "Trades": total_trades,
                                 "TP": tp_mes,
                                 "SL": sl_mes,
-                                "TS": ts_mes,
                                 "TSP": tsp_mes,
                                 "TSL": tsl_mes
                             })
@@ -3852,7 +3868,6 @@ with tab1:
                                 "Trades": st.column_config.NumberColumn("Trades", help="Total de operaciones", format="%d"),
                                 "TP": st.column_config.NumberColumn("TP", help="Trades con TP", format="%d"),
                                 "SL": st.column_config.NumberColumn("SL", help="Trades con SL directo", format="%d"),
-                                "TS": st.column_config.NumberColumn("TS", help="Trades con trailing stop", format="%d"),
                                 "TSP": st.column_config.NumberColumn("TSP", help="Trailing Stop Positivo (trades con ganancia cerrados antes del TP)", format="%d"),
                                 "TSL": st.column_config.NumberColumn("TSL", help="Trailing Stop Loss (trades con pérdida menor al SL directo)", format="%d")
                             }
@@ -3953,9 +3968,101 @@ with tab1:
                             return f"${beneficio:.2f}"
                         
                         grupo_display['Duración'] = grupo_display['Duración'].apply(formatear_duracion)
-                        # Guardar beneficio original antes de formatear para el estilo
+                        # Guardar beneficio original antes de formatear para el estilo y clasificación
                         beneficio_original = grupo_display['Beneficio'].copy()
+                        
+                        # Calcular riesgo_ea para clasificar correctamente los trades (antes de formatear)
+                        perdidas = grupo_display[grupo_display['Beneficio'] < 0]['Beneficio'].abs()
+                        if len(perdidas) > 0:
+                            perdida_maxima = perdidas.max()
+                            margen_busqueda = perdida_maxima * 0.10
+                            sl_detected = perdidas[perdidas >= (perdida_maxima - margen_busqueda)].mode()
+                            if len(sl_detected) > 0:
+                                riesgo_ea = sl_detected.iloc[0]
+                            else:
+                                riesgo_ea = perdida_maxima
+                            margen_tolerancia = riesgo_ea * 0.10
+                        else:
+                            riesgo_ea = 0
+                            margen_tolerancia = 0
+                        
+                        # Función para clasificar cada trade (usar beneficio original)
+                        def clasificar_trade(row):
+                            # Usar el índice para obtener el beneficio original
+                            idx = row.name
+                            beneficio = beneficio_original.loc[idx]
+                            tipo_cierre_html = row['TipoCierre'] if 'TipoCierre' in row.index and pd.notna(row['TipoCierre']) else None
+                            
+                            # Si el HTML tiene información explícita de [sl] o [tp], usarla PERO validar con el beneficio
+                            if tipo_cierre_html == 'SL':
+                                if beneficio < 0:
+                                    # [sl] con pérdida: verificar si es SL directo o TSL
+                                    perdida_abs = abs(beneficio)
+                                    if riesgo_ea > 0 and perdida_abs >= (riesgo_ea - margen_tolerancia):
+                                        return 'SL'  # SL directo
+                                    else:
+                                        return 'TSL'  # Trailing Stop Loss
+                                elif beneficio > 0:
+                                    return 'TSP'  # Trailing Stop Positivo
+                                else:
+                                    return 'TSL'  # Break-even con [sl]
+                            elif tipo_cierre_html == 'TP':
+                                return 'TP'  # TP real (confiamos en el HTML)
+                            else:
+                                # Si no hay información explícita, usar la lógica de cálculo
+                                if beneficio < 0:
+                                    perdida_abs = abs(beneficio)
+                                    if riesgo_ea > 0 and perdida_abs >= (riesgo_ea - margen_tolerancia):
+                                        return 'SL'  # SL directo
+                                    else:
+                                        return 'TSL'  # Trailing Stop Loss
+                                elif beneficio > 0:
+                                    # Verificar si es TP real
+                                    try:
+                                        tp_val = row['TP_val'] if 'TP_val' in row.index and pd.notna(row['TP_val']) else None
+                                        close_price = row['PrecioClose'] if 'PrecioClose' in row.index and pd.notna(row['PrecioClose']) else None
+                                        if tp_val is not None and close_price is not None:
+                                            decs = row['TP_decimales'] if 'TP_decimales' in row.index and pd.notna(row['TP_decimales']) else 0
+                                            tol = max(10 ** (-(decs)), 1e-6)
+                                            if abs(close_price - tp_val) <= 2 * tol:
+                                                return 'TP'  # TP real
+                                    except:
+                                        pass
+                                    return 'TSP'  # Trailing Stop Positivo
+                                else:
+                                    return 'TSL'  # Break-even
+                        
+                        # Aplicar clasificación a TipoCierre (antes de formatear el beneficio)
+                        if 'TipoCierre' in grupo_display.columns:
+                            grupo_display['TipoCierre'] = grupo_display.apply(clasificar_trade, axis=1)
+                        else:
+                            grupo_display['TipoCierre'] = grupo_display.apply(clasificar_trade, axis=1)
+                        
+                        # Ahora formatear el beneficio después de la clasificación
                         grupo_display['Beneficio'] = grupo_display['Beneficio'].apply(formatear_beneficio)
+                        
+                        # Seleccionar todas las columnas excepto EA, TP_decimales y Símbolo
+                        # Reordenar: Tipo, TipoCierre, Beneficio, y el resto
+                        columnas_a_eliminar = ['EA', 'TP_decimales', 'Símbolo']
+                        columnas_disponibles = [col for col in grupo_display.columns if col not in columnas_a_eliminar]
+                        
+                        # Reordenar: Tipo, TipoCierre, Beneficio, y el resto
+                        columnas_ordenadas = []
+                        # Primero: Tipo
+                        if 'Tipo' in columnas_disponibles:
+                            columnas_ordenadas.append('Tipo')
+                        # Segundo: TipoCierre
+                        if 'TipoCierre' in columnas_disponibles:
+                            columnas_ordenadas.append('TipoCierre')
+                        # Tercero: Beneficio
+                        if 'Beneficio' in columnas_disponibles:
+                            columnas_ordenadas.append('Beneficio')
+                        # Resto de columnas en su orden original (excepto las ya agregadas)
+                        for col in columnas_disponibles:
+                            if col not in columnas_ordenadas:
+                                columnas_ordenadas.append(col)
+                        
+                        grupo_display = grupo_display[columnas_ordenadas].copy()
                         
                         # Función para aplicar estilo a las filas según el beneficio
                         def estilo_fila(row):
@@ -3970,7 +4077,7 @@ with tab1:
                         # Aplicar estilo a las filas
                         styled_grupo = grupo_display.style.apply(estilo_fila, axis=1)
                         
-                        with st.expander(f"📌 {ea} ({len(grupo)} operaciones)"):
+                        with st.expander(f"📌 {ea} ({len(grupo)} operaciones) - {symbol.upper()}"):
                             st.dataframe(styled_grupo, use_container_width=True)
                 
                 else:
