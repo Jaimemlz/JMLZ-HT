@@ -3011,6 +3011,7 @@ with tab1:
                                     "EA": ea_name,
                                     "Símbolo": symbol,
                                     "Tipo": tipo,
+                                    "Volumen": size,  # Volumen de la operación
                                     "Beneficio": profit,
                                     "Open": open_time,
                                     "Close": close_time,
@@ -3121,28 +3122,159 @@ with tab1:
                         </div>
                     """, unsafe_allow_html=True)
                     
+                    # Función helper para detectar múltiples niveles de SL (normal y alta volatilidad)
+                    def detectar_niveles_sl(perdidas_serie, min_trades_por_nivel=2, tolerancia_agrupacion=0.15, umbral_min_sl=100):
+                        """
+                        Detecta múltiples niveles de SL agrupando pérdidas similares.
+                        Identifica tanto SL normales como SL de alta volatilidad.
+                        Si no hay alta volatilidad clara, usa un umbral más alto (P90) como SL único.
+                        Retorna una lista de niveles de SL válidos ordenados de mayor a menor.
+                        """
+                        if len(perdidas_serie) == 0:
+                            return []
+                        
+                        perdidas_sorted = perdidas_serie.sort_values(ascending=False)
+                        candidatos_niveles = []
+                        perdidas_usadas = set()
+                        
+                        # Agrupar pérdidas similares para detectar niveles de SL
+                        for perdida in perdidas_sorted.values:
+                            if perdida in perdidas_usadas:
+                                continue
+                            
+                            # Buscar todas las pérdidas dentro del rango de tolerancia
+                            rango_min = perdida * (1 - tolerancia_agrupacion)
+                            rango_max = perdida * (1 + tolerancia_agrupacion)
+                            perdidas_en_rango = perdidas_serie[
+                                (perdidas_serie >= rango_min) & 
+                                (perdidas_serie <= rango_max)
+                            ]
+                            
+                            # Si hay suficientes trades en este rango, es un candidato
+                            if len(perdidas_en_rango) >= min_trades_por_nivel:
+                                # Usar la mediana del rango como nivel representativo
+                                nivel = perdidas_en_rango.median()
+                                
+                                candidatos_niveles.append({
+                                    'nivel': nivel,
+                                    'count': len(perdidas_en_rango),
+                                    'perdidas': perdidas_en_rango.values
+                                })
+                                # Marcar estas pérdidas como usadas
+                                perdidas_usadas.update(perdidas_en_rango.values)
+                        
+                        if len(candidatos_niveles) == 0:
+                            # Si no hay candidatos agrupados, usar percentil 90 como fallback
+                            p90 = perdidas_serie.quantile(0.90)
+                            return [round(p90 / 10) * 10]
+                        
+                        # Ordenar candidatos por cantidad de trades (más común primero)
+                        candidatos_niveles.sort(key=lambda x: x['count'], reverse=True)
+                        
+                        nivel_principal = candidatos_niveles[0]['nivel']
+                        p90 = perdidas_serie.quantile(0.90)
+                        
+                        # Verificar si hay alta volatilidad:
+                        # 1. El nivel principal no debe ser demasiado bajo comparado con P90 (< 80% de P90)
+                        # 2. Necesita pérdidas significativamente mayores (> 1.3x el nivel principal) 
+                        # 3. Y que estén agrupadas (formen un nivel claro con al menos 3 trades)
+                        nivel_principal_es_bajo = nivel_principal < p90 * 0.80
+                        
+                        perdidas_alta_volatilidad = perdidas_serie[perdidas_serie > nivel_principal * 1.3]
+                        # Verificar si las pérdidas de alta volatilidad están agrupadas (forman un nivel)
+                        hay_alta_volatilidad = False
+                        if not nivel_principal_es_bajo and len(perdidas_alta_volatilidad) >= 3:
+                            # Verificar si están agrupadas (dentro de una tolerancia del 15%)
+                            for perdida_alta in perdidas_alta_volatilidad.sort_values(ascending=False).head(5).values:
+                                rango_min = perdida_alta * (1 - tolerancia_agrupacion)
+                                rango_max = perdida_alta * (1 + tolerancia_agrupacion)
+                                perdidas_en_rango_alta = perdidas_alta_volatilidad[
+                                    (perdidas_alta_volatilidad >= rango_min) & 
+                                    (perdidas_alta_volatilidad <= rango_max)
+                                ]
+                                if len(perdidas_en_rango_alta) >= 3:
+                                    hay_alta_volatilidad = True
+                                    break
+                        
+                        niveles_sl = []
+                        
+                        if hay_alta_volatilidad:
+                            # Hay alta volatilidad: usar múltiples niveles
+                            # Agregar el nivel principal si es válido
+                            if nivel_principal >= max(umbral_min_sl, 80):
+                                niveles_sl.append(nivel_principal)
+                            
+                            # Agregar otros niveles si:
+                            # - Tienen al menos el 30% de los trades del nivel principal
+                            # - Están dentro de un rango razonable (no más de 3x el nivel principal)
+                            # - Son >= umbral_min_sl (o al menos 80)
+                            umbral_min_trades = max(min_trades_por_nivel, candidatos_niveles[0]['count'] * 0.3)
+                            max_nivel_aceptable = nivel_principal * 3.0
+                            
+                            for candidato in candidatos_niveles[1:]:
+                                nivel = candidato['nivel']
+                                count = candidato['count']
+                                
+                                if (count >= umbral_min_trades and 
+                                    nivel <= max_nivel_aceptable and 
+                                    nivel >= max(umbral_min_sl, 80)):
+                                    niveles_sl.append(nivel)
+                            
+                            # Si no hay niveles válidos, usar el nivel principal aunque sea bajo
+                            if len(niveles_sl) == 0 and nivel_principal >= 80:
+                                niveles_sl.append(nivel_principal)
+                        else:
+                            # NO hay alta volatilidad: usar un umbral más alto (P90) como SL único
+                            # Esto asegura que solo las pérdidas más grandes se consideren SL directo
+                            p90 = perdidas_serie.quantile(0.90)
+                            p85 = perdidas_serie.quantile(0.85)
+                            
+                            # Usar P90 si es razonable, sino P85, sino el nivel principal
+                            if p90 >= max(umbral_min_sl, 80):
+                                umbral_final = p90
+                            elif p85 >= max(umbral_min_sl, 80):
+                                umbral_final = p85
+                            elif nivel_principal >= 80:
+                                umbral_final = nivel_principal
+                            else:
+                                # Fallback: usar la pérdida máxima
+                                umbral_final = perdidas_serie.max()
+                            
+                            niveles_sl.append(umbral_final)
+                        
+                        # Ordenar niveles de mayor a menor
+                        niveles_sl.sort(reverse=True)
+                        
+                        # Redondear a múltiplos de 10 (solo para visualización)
+                        # Mantener precisión en los cálculos usando los valores originales
+                        niveles_sl_redondeados = [round(n / 10) * 10 for n in niveles_sl]
+                        
+                        return niveles_sl_redondeados
+                    
                     analisis_data = []
                     for (ea, simbolo), grupo in df.groupby(["EA", "Símbolo"]):
                         try:
                             ordenado = grupo.sort_values(by='Open')
                             
-                            # Detectar el riesgo típico (SL) de la EA
-                            # Analizamos la distribución de pérdidas para encontrar el valor más común
+                            # Detectar múltiples niveles de SL (para manejar días de alta volatilidad)
                             perdidas = ordenado[ordenado['Beneficio'] < 0]['Beneficio'].abs()
                             
                             if len(perdidas) > 0:
-                                # Agrupar pérdidas con tolerancia del 10% para encontrar el SL más común
-                                # Primero, tomamos la pérdida máxima como candidato inicial
-                                perdida_maxima = perdidas.max()
-                                    
-                                # Buscamos pérdidas cercanas al máximo (dentro del 10%)
-                                margen_busqueda = perdida_maxima * 0.10
-                                sl_detected = perdidas[perdidas >= (perdida_maxima - margen_busqueda)].mode()
-                                    
-                                if len(sl_detected) > 0:
-                                    riesgo_ea = sl_detected.iloc[0]  # Tomamos el valor más común
-                                else:
-                                    riesgo_ea = perdida_maxima
+                                # Detectar múltiples niveles de SL
+                                niveles_sl = detectar_niveles_sl(perdidas, min_trades_por_nivel=2, tolerancia_agrupacion=0.15, umbral_min_sl=100)
+                                
+                                # Si no encontramos niveles claros, usar el método anterior como fallback
+                                if len(niveles_sl) == 0:
+                                    perdida_maxima = perdidas.max()
+                                    margen_busqueda = perdida_maxima * 0.10
+                                    sl_detected = perdidas[perdidas >= (perdida_maxima - margen_busqueda)].mode()
+                                    if len(sl_detected) > 0:
+                                        niveles_sl = [sl_detected.iloc[0]]
+                                    else:
+                                        niveles_sl = [perdida_maxima]
+                                
+                                # Usar el nivel más común como riesgo_ea para compatibilidad (pero usaremos todos los niveles)
+                                riesgo_ea = niveles_sl[0] if len(niveles_sl) > 0 else perdidas.max()
                                 
                                 # Analizar SL directo vs trailing stop (positivo y loss)
                                 sl_directos = 0
@@ -3151,8 +3283,47 @@ with tab1:
                                 tsl = 0  # Trailing Stop Loss
                                 perdidas_nulas = 0
                                 
-                                # Margen de tolerancia (10% del riesgo detectado)
-                                margen_tolerancia = riesgo_ea * 0.10
+                                # Margen de tolerancia (15% para considerar múltiples niveles)
+                                margen_tolerancia = riesgo_ea * 0.15
+                                
+                                # Función helper para verificar si una pérdida es un SL directo
+                                def es_sl_directo(perdida_abs):
+                                    """
+                                    Verifica si una pérdida es un SL directo:
+                                    - Si es mayor o igual al nivel principal (si solo hay un nivel, con pequeño margen hacia abajo)
+                                    - Si hay múltiples niveles (alta volatilidad), también verifica si está cerca de alguno
+                                    """
+                                    if len(niveles_sl) == 0:
+                                        return False
+                                    
+                                    # Nivel principal es el primero (el más común y alto)
+                                    nivel_principal = niveles_sl[0]
+                                    
+                                    # Si solo hay un nivel (no hay alta volatilidad), usar umbral con pequeño margen
+                                    if len(niveles_sl) == 1:
+                                        # Aplicar un pequeño margen hacia abajo (2.5% o mínimo $5 menos)
+                                        umbral_ajustado = max(nivel_principal * 0.975, nivel_principal - 5)
+                                        # Si la pérdida es muy cercana al umbral (dentro de $5), también considerarla SL
+                                        # Esto evita que pérdidas como $191 se clasifiquen como TSL cuando el umbral es $190
+                                        if perdida_abs >= umbral_ajustado:
+                                            return True
+                                        # Si está muy cerca del umbral principal (dentro de $5), también es SL
+                                        if abs(perdida_abs - nivel_principal) <= 5:
+                                            return True
+                                        return False
+                                    
+                                    # Si hay múltiples niveles (alta volatilidad):
+                                    # 1. Si es mayor o igual al nivel principal, es SL directo
+                                    if perdida_abs >= nivel_principal:
+                                        return True
+                                    
+                                    # 2. Si está cerca de alguno de los niveles detectados (dentro de tolerancia)
+                                    for nivel in niveles_sl:
+                                        tolerancia_nivel = nivel * 0.15
+                                        if abs(perdida_abs - nivel) <= tolerancia_nivel:
+                                            return True
+                                    
+                                    return False
                                 
                                 for _, trade in ordenado.iterrows():
                                     beneficio = trade['Beneficio']
@@ -3164,11 +3335,11 @@ with tab1:
                                         if beneficio < 0:
                                             # [sl] con pérdida: verificar si es SL directo o TSL
                                             perdida_abs = abs(beneficio)
-                                            if perdida_abs >= (riesgo_ea - margen_tolerancia):
-                                                # SL directo: pérdida que alcanzó el SL esperado
+                                            if es_sl_directo(perdida_abs):
+                                                # SL directo: pérdida que alcanzó alguno de los SL esperados
                                                 sl_directos += 1
                                             else:
-                                                # TSL: pérdida menor que el SL esperado (trailing stop activó antes)
+                                                # TSL: pérdida menor que los SL esperados (trailing stop activó antes)
                                                 sl_trailing += 1
                                                 tsl += 1  # Trailing Stop Loss
                                         elif beneficio > 0:
@@ -3187,7 +3358,7 @@ with tab1:
                                         # Si no hay información explícita, usar la lógica de cálculo
                                         if beneficio < 0:  # Pérdida
                                             perdida_abs = abs(beneficio)
-                                            if perdida_abs >= (riesgo_ea - margen_tolerancia):
+                                            if es_sl_directo(perdida_abs):
                                                 sl_directos += 1
                                             else:
                                                 sl_trailing += 1
@@ -3252,8 +3423,8 @@ with tab1:
                                 "Nombre": ea,
                                 "Activo": simbolo.upper(),  # Agregar columna de activo
                                 "retDD": f"{ret_dd:.2f}",
-                                "Net Profit": f"${net_profit:.2f}",
-                                "maxDD": f"${max_dd:.2f}",
+                                "Net Profit": net_profit,  # Mantener numérico para ordenamiento correcto
+                                "maxDD": max_dd,  # Mantener numérico para ordenamiento correcto
                                 "PF": f"{profit_factor:.2f}" if profit_factor != float('inf') else "∞",
                                 "Total Trades": int(total_trades),
                                 "TP": int(tp_trades),
@@ -3296,13 +3467,15 @@ with tab1:
                                 "retDD",
                                 help="Return on Drawdown - Ratio: Net Profit / maxDD. Ej: 20 = beneficio es 20x el drawdown"
                             ),
-                            "Net Profit": st.column_config.TextColumn(
+                            "Net Profit": st.column_config.NumberColumn(
                                 "Net Profit",
-                                help="Beneficio neto total"
+                                help="Beneficio neto total",
+                                format="$%.2f"
                             ),
-                            "maxDD": st.column_config.TextColumn(
+                            "maxDD": st.column_config.NumberColumn(
                                 "maxDD",
-                                help="Máximo drawdown (desde el pico más alto)"
+                                help="Máximo drawdown (desde el pico más alto)",
+                                format="$%.2f"
                             ),
                             "PF": st.column_config.TextColumn(
                                 "PF",
@@ -3400,25 +3573,65 @@ with tab1:
                             sl_directos_combinado = 0
                             sl_trailing_combinado = 0
                             
-                            # Calcular el riesgo promedio de las estrategias seleccionadas
-                            riesgos_por_ea = []
-                            for ea_nombre, activo in estrategias_filtradas:
-                                grupo_ea = df_combinado[(df_combinado['EA'] == ea_nombre) & (df_combinado['Símbolo'] == activo)]
-                                perdidas_ea = grupo_ea[grupo_ea['Beneficio'] < 0]['Beneficio'].abs()
-                                if len(perdidas_ea) > 0:
-                                    perdida_max = perdidas_ea.max()
+                            # Detectar todos los niveles de SL de todas las EAs combinadas
+                            todas_perdidas = df_combinado[df_combinado['Beneficio'] < 0]['Beneficio'].abs()
+                            if len(todas_perdidas) > 0:
+                                niveles_sl_combinados = detectar_niveles_sl(todas_perdidas, min_trades_por_nivel=2, tolerancia_agrupacion=0.15, umbral_min_sl=100)
+                                if len(niveles_sl_combinados) == 0:
+                                    perdida_max = todas_perdidas.max()
                                     margen = perdida_max * 0.10
-                                    sl_detected = perdidas_ea[perdidas_ea >= (perdida_max - margen)].mode()
+                                    sl_detected = todas_perdidas[todas_perdidas >= (perdida_max - margen)].mode()
                                     if len(sl_detected) > 0:
-                                        riesgos_por_ea.append(sl_detected.iloc[0])
+                                        niveles_sl_combinados = [sl_detected.iloc[0]]
                                     else:
-                                        riesgos_por_ea.append(perdida_max)
-                            
-                            if riesgos_por_ea:
-                                riesgo_combinado = sum(riesgos_por_ea) / len(riesgos_por_ea)
+                                        niveles_sl_combinados = [perdida_max]
+                                riesgo_combinado = niveles_sl_combinados[0] if len(niveles_sl_combinados) > 0 else todas_perdidas.max()
+                                
+                                # Función helper para verificar si una pérdida es un SL directo
+                                def es_sl_directo_comb(perdida_abs):
+                                    """
+                                    Verifica si una pérdida es un SL directo:
+                                    - Si es mayor o igual al nivel principal (si solo hay un nivel, con pequeño margen hacia abajo)
+                                    - Si hay múltiples niveles (alta volatilidad), también verifica si está cerca de alguno
+                                    """
+                                    if len(niveles_sl_combinados) == 0:
+                                        return False
+                                    
+                                    # Nivel principal es el primero (el más común y alto)
+                                    nivel_principal = niveles_sl_combinados[0]
+                                    
+                                    # Si solo hay un nivel (no hay alta volatilidad), usar umbral con pequeño margen
+                                    if len(niveles_sl_combinados) == 1:
+                                        # Aplicar un pequeño margen hacia abajo (2.5% o mínimo $5 menos)
+                                        umbral_ajustado = max(nivel_principal * 0.975, nivel_principal - 5)
+                                        # Si la pérdida es muy cercana al umbral (dentro de $5), también considerarla SL
+                                        if perdida_abs >= umbral_ajustado:
+                                            return True
+                                        # Si está muy cerca del umbral principal (dentro de $5), también es SL
+                                        if abs(perdida_abs - nivel_principal) <= 5:
+                                            return True
+                                        return False
+                                    
+                                    # Si hay múltiples niveles (alta volatilidad):
+                                    # 1. Si es mayor o igual al nivel principal, es SL directo
+                                    if perdida_abs >= nivel_principal:
+                                        return True
+                                    
+                                    # 2. Si está cerca de alguno de los niveles detectados (dentro de tolerancia)
+                                    for nivel in niveles_sl_combinados:
+                                        tolerancia_nivel = nivel * 0.15
+                                        if abs(perdida_abs - nivel) <= tolerancia_nivel:
+                                            return True
+                                    
+                                    return False
+                            else:
+                                riesgo_combinado = 0
+                                niveles_sl_combinados = []
+                                def es_sl_directo_comb(perdida_abs):
+                                    return False
                                 
                             # Calcular SL directos y trailing stops para el conjunto combinado
-                            margen_tolerancia_comb = riesgo_combinado * 0.10 if riesgo_combinado > 0 else 0
+                            margen_tolerancia_comb = riesgo_combinado * 0.15 if riesgo_combinado > 0 else 0
                             sl_directos_combinado = 0  # Inicializar contador de SL directos
                             sl_trailing_combinado = 0  # Inicializar contador de trailing stops
                             tsp_combinado = 0  # Trailing Stop Positivo
@@ -3426,22 +3639,44 @@ with tab1:
                                 
                             for _, trade in df_combinado.iterrows():
                                 beneficio = trade['Beneficio']
-                                if beneficio < 0:
-                                    perdida_abs = abs(beneficio)
-                                    if riesgo_combinado > 0 and perdida_abs >= (riesgo_combinado - margen_tolerancia_comb):
-                                        sl_directos_combinado += 1
-                                    else:
-                                        sl_trailing_combinado += 1
-                                        tsl_combinado += 1  # Trailing Stop Loss
-                                elif beneficio > 0:
-                                    if es_tp_real(trade):
-                                        pass  # TP real se contabiliza aparte
-                                    else:
+                                tipo_cierre = trade.get('TipoCierre')
+                                
+                                # Si el HTML tiene información explícita de [sl] o [tp], usarla PERO validar con el beneficio
+                                if tipo_cierre == 'SL':
+                                    if beneficio < 0:
+                                        # [sl] con pérdida: verificar si es SL directo o TSL
+                                        perdida_abs = abs(beneficio)
+                                        if es_sl_directo_comb(perdida_abs):
+                                            sl_directos_combinado += 1
+                                        else:
+                                            sl_trailing_combinado += 1
+                                            tsl_combinado += 1  # Trailing Stop Loss
+                                    elif beneficio > 0:
                                         sl_trailing_combinado += 1
                                         tsp_combinado += 1  # Trailing Stop Positivo
+                                    else:
+                                        sl_trailing_combinado += 1
+                                        tsl_combinado += 1  # Break-even con [sl]
+                                elif tipo_cierre == 'TP':
+                                    pass  # TP real se contabiliza aparte
                                 else:
-                                    sl_trailing_combinado += 1
-                                    tsl_combinado += 1  # Break-even como TSL
+                                    # Si no hay información explícita, usar la lógica de cálculo
+                                    if beneficio < 0:
+                                        perdida_abs = abs(beneficio)
+                                        if es_sl_directo_comb(perdida_abs):
+                                            sl_directos_combinado += 1
+                                        else:
+                                            sl_trailing_combinado += 1
+                                            tsl_combinado += 1  # Trailing Stop Loss
+                                    elif beneficio > 0:
+                                        if es_tp_real(trade):
+                                            pass  # TP real se contabiliza aparte
+                                        else:
+                                            sl_trailing_combinado += 1
+                                            tsp_combinado += 1  # Trailing Stop Positivo
+                                    else:
+                                        sl_trailing_combinado += 1
+                                        tsl_combinado += 1  # Break-even como TSL
                                 
                             # Calcular métricas combinadas
                             net_profit_comb = df_combinado['Beneficio'].sum()
@@ -3469,8 +3704,8 @@ with tab1:
                             
                             stats_combinadas = {
                                     "retDD": f"{ret_dd_comb:.2f}",
-                                    "Net Profit": f"${net_profit_comb:.2f}",
-                                    "maxDD": f"${max_dd_comb:.2f}",
+                                    "Net Profit": net_profit_comb,  # Mantener numérico para ordenamiento correcto
+                                    "maxDD": max_dd_comb,  # Mantener numérico para ordenamiento correcto
                                     "PF": f"{profit_factor_comb:.2f}" if profit_factor_comb != float('inf') else "∞",
                                     "Trades": int(total_trades_comb),
                                     "TP": int(tp_trades_comb),
@@ -3489,13 +3724,15 @@ with tab1:
                                     "retDD",
                                     help="Return on Drawdown - Ratio: Net Profit / maxDD. Ej: 20 = beneficio es 20x el drawdown"
                                 ),
-                                "Net Profit": st.column_config.TextColumn(
+                                "Net Profit": st.column_config.NumberColumn(
                                     "Net Profit",
-                                    help="Beneficio neto total"
+                                    help="Beneficio neto total",
+                                    format="$%.2f"
                                 ),
-                                "maxDD": st.column_config.TextColumn(
+                                "maxDD": st.column_config.NumberColumn(
                                     "maxDD",
-                                    help="Máximo drawdown (desde el pico más alto)"
+                                    help="Máximo drawdown (desde el pico más alto)",
+                                    format="$%.2f"
                                 ),
                                 "PF": st.column_config.TextColumn(
                                     "PF",
@@ -3584,8 +3821,8 @@ with tab1:
                                         if beneficio < 0:
                                             # [sl] con pérdida: verificar si es SL directo o TSL
                                             perdida_abs = abs(beneficio)
-                                            if riesgo_combinado > 0 and perdida_abs >= (riesgo_combinado - margen_tolerancia_comb):
-                                                # SL directo: pérdida que alcanzó el SL esperado
+                                            if es_sl_directo_comb(perdida_abs):
+                                                # SL directo: pérdida que alcanzó alguno de los SL esperados
                                                 sl_mes += 1
                                             else:
                                                 # TSL: pérdida menor que el SL esperado (trailing stop activó antes)
@@ -3606,7 +3843,7 @@ with tab1:
                                         # Si no hay información explícita, usar la lógica de cálculo
                                         if beneficio < 0:  # Es pérdida
                                             perdida_abs = abs(beneficio)
-                                            if riesgo_combinado > 0 and perdida_abs >= (riesgo_combinado - margen_tolerancia_comb):
+                                            if es_sl_directo_comb(perdida_abs):
                                                 sl_mes += 1
                                             elif perdida_abs > 0:
                                                 ts_mes += 1
@@ -3624,8 +3861,8 @@ with tab1:
                                 
                                 resumen_mensual_comb.append({
                                     "Año - Mes": f"{ano} - {mes_nombre}",
-                                    "Beneficio": f"${beneficio_mes:.2f}",
-                                    "maxDD": f"${max_dd_mes:.2f}",
+                                    "Beneficio": beneficio_mes,  # Mantener numérico para ordenamiento correcto
+                                    "maxDD": max_dd_mes,  # Mantener numérico para ordenamiento correcto
                                     "Trades": total_trades,
                                     "TP": tp_mes,
                                     "SL": sl_mes,
@@ -3637,18 +3874,29 @@ with tab1:
                             df_resumen_mes_comb = pd.DataFrame(resumen_mensual_comb)
                             if not df_resumen_mes_comb.empty:
                                 
-                                # Función para estilizar el beneficio
+                                # Función para estilizar el beneficio (ahora recibe valores numéricos)
                                 def estilizar_beneficio_comb(valor):
-                                    if isinstance(valor, str) and valor.startswith('$'):
-                                        num = float(valor.replace('$', '').replace(',', ''))
-                                        color = '#90EE90' if num >= 0 else '#FFB6C1'  # Verde claro si es ganancia, rojo claro si es pérdida
+                                    if isinstance(valor, (int, float)):
+                                        color = '#90EE90' if valor >= 0 else '#FFB6C1'  # Verde claro si es ganancia, rojo claro si es pérdida
                                         return f'background-color: {color}'
                                     return ''
+                                
+                                column_config_mes_comb = {
+                                    "Año - Mes": st.column_config.TextColumn("Año - Mes", help="Año y mes"),
+                                    "Beneficio": st.column_config.NumberColumn("Beneficio", help="Beneficio del mes", format="$%.2f"),
+                                    "maxDD": st.column_config.NumberColumn("maxDD", help="Máximo drawdown del mes", format="$%.2f"),
+                                    "Trades": st.column_config.NumberColumn("Trades", help="Total de operaciones", format="%d"),
+                                    "TP": st.column_config.NumberColumn("TP", help="Trades con TP", format="%d"),
+                                    "SL": st.column_config.NumberColumn("SL", help="Trades con SL directo", format="%d"),
+                                    "TSP": st.column_config.NumberColumn("TSP", help="Trailing Stop Positivo", format="%d"),
+                                    "TSL": st.column_config.NumberColumn("TSL", help="Trailing Stop Loss", format="%d")
+                                }
                                 
                                 st.dataframe(
                                     df_resumen_mes_comb.style.applymap(estilizar_beneficio_comb, subset=['Beneficio']),
                                     use_container_width=True,
-                                    hide_index=True
+                                    hide_index=True,
+                                    column_config=column_config_mes_comb
                                 )
                             
                             # Preparar datos de cada estrategia individual
@@ -3720,20 +3968,70 @@ with tab1:
                     for (ea, simbolo), grupo in df.groupby(["EA", "Símbolo"]):
                         ordenado = grupo.sort_values(by='Open')
                         
-                        # Detectar el riesgo de la EA para calcular SL
+                        # Detectar múltiples niveles de SL para calcular correctamente
                         perdidas = ordenado[ordenado['Beneficio'] < 0]['Beneficio'].abs()
                         if len(perdidas) > 0:
-                            perdida_maxima = perdidas.max()
-                            margen_busqueda = perdida_maxima * 0.10
-                            sl_detected = perdidas[perdidas >= (perdida_maxima - margen_busqueda)].mode()
-                            if len(sl_detected) > 0:
-                                riesgo_ea = sl_detected.iloc[0]
-                            else:
-                                riesgo_ea = perdida_maxima
-                            margen_tolerancia = riesgo_ea * 0.10
+                            niveles_sl = detectar_niveles_sl(perdidas, min_trades_por_nivel=2, tolerancia_agrupacion=0.15)
+                            if len(niveles_sl) == 0:
+                                perdida_maxima = perdidas.max()
+                                margen_busqueda = perdida_maxima * 0.10
+                                sl_detected = perdidas[perdidas >= (perdida_maxima - margen_busqueda)].mode()
+                                if len(sl_detected) > 0:
+                                    niveles_sl = [sl_detected.iloc[0]]
+                                else:
+                                    niveles_sl = [perdida_maxima]
+                            riesgo_ea = niveles_sl[0] if len(niveles_sl) > 0 else perdidas.max()
+                            margen_tolerancia = riesgo_ea * 0.15
+                            
+                            # Función helper para verificar si una pérdida es un SL directo
+                            def es_sl_directo_mes(perdida_abs):
+                                """
+                                Verifica si una pérdida es un SL directo:
+                                - Si es mayor o igual al nivel principal (si solo hay un nivel, con pequeño margen hacia abajo)
+                                - Si hay múltiples niveles (alta volatilidad), también verifica si está cerca de alguno
+                                """
+                                if len(niveles_sl) == 0:
+                                    return False
+                                
+                                # Nivel principal es el primero (el más común y alto)
+                                nivel_principal = niveles_sl[0]
+                                
+                                # Si solo hay un nivel (no hay alta volatilidad), usar umbral con pequeño margen
+                                if len(niveles_sl) == 1:
+                                    # Aplicar un pequeño margen hacia abajo (2.5% o mínimo $5 menos)
+                                    umbral_ajustado = max(nivel_principal * 0.975, nivel_principal - 5)
+                                    # Si la pérdida es muy cercana al umbral (dentro de $5), también considerarla SL
+                                    if perdida_abs >= umbral_ajustado:
+                                        return True
+                                    # Si está muy cerca del umbral principal (dentro de $5), también es SL
+                                    # Aumentar la tolerancia para capturar pérdidas cercanas al umbral redondeado
+                                    if abs(perdida_abs - nivel_principal) <= 5:
+                                        return True
+                                    # Si la pérdida está cerca del umbral redondeado (dentro de $10), también es SL
+                                    # Esto captura casos como $192.99 cuando el umbral es $190
+                                    umbral_redondeado = round(nivel_principal / 10) * 10
+                                    if abs(perdida_abs - umbral_redondeado) <= 10:
+                                        return True
+                                    return False
+                                
+                                # Si hay múltiples niveles (alta volatilidad):
+                                # 1. Si es mayor o igual al nivel principal, es SL directo
+                                if perdida_abs >= nivel_principal:
+                                    return True
+                                
+                                # 2. Si está cerca de alguno de los niveles detectados (dentro de tolerancia)
+                                for nivel in niveles_sl:
+                                    tolerancia_nivel = nivel * 0.15
+                                    if abs(perdida_abs - nivel) <= tolerancia_nivel:
+                                        return True
+                                
+                                return False
                         else:
                             riesgo_ea = 0
                             margen_tolerancia = 0
+                            niveles_sl = []
+                            def es_sl_directo_mes(perdida_abs):
+                                return False
                         
                         # Agrupar por mes
                         ordenado['Mes'] = ordenado['Open'].dt.to_period('M')
@@ -3770,8 +4068,8 @@ with tab1:
                                     if beneficio < 0:
                                         # [sl] con pérdida: verificar si es SL directo o TSL
                                         perdida_abs = abs(beneficio)
-                                        if perdida_abs >= (riesgo_ea - margen_tolerancia):
-                                            # SL directo: pérdida que alcanzó el SL esperado
+                                        if es_sl_directo_mes(perdida_abs):
+                                            # SL directo: pérdida que alcanzó alguno de los SL esperados
                                             sl_mes += 1
                                         else:
                                             # TSL: pérdida menor que el SL esperado (trailing stop activó antes)
@@ -3797,7 +4095,7 @@ with tab1:
                                     # Si no hay información explícita, usar la lógica de cálculo
                                     if beneficio < 0:  # Es pérdida
                                         perdida_abs = abs(beneficio)
-                                        if perdida_abs >= (riesgo_ea - margen_tolerancia):
+                                        if es_sl_directo_mes(perdida_abs):
                                             sl_mes += 1
                                         elif perdida_abs > 0:
                                             ts_mes += 1
@@ -3815,8 +4113,8 @@ with tab1:
                             
                             resumen_mensual.append({
                                 "Año - Mes": f"{ano} - {mes_nombre}",
-                                "Beneficio": f"${beneficio_mes:.2f}",
-                                "maxDD": f"${max_dd_mes:.2f}",
+                                "Beneficio": beneficio_mes,  # Mantener numérico para ordenamiento correcto
+                                "maxDD": max_dd_mes,  # Mantener numérico para ordenamiento correcto
                                 "Trades": total_trades,
                                 "TP": tp_mes,
                                 "SL": sl_mes,
@@ -3845,14 +4143,10 @@ with tab1:
                         if resumen_ea and resumen_ea['Data']:
                             df_resumen_mes = pd.DataFrame(resumen_ea['Data'])
                             
-                            # Aplicar colores a la columna Beneficio
+                            # Aplicar colores a la columna Beneficio (ahora recibe valores numéricos)
                             def estilizar_beneficio(valor):
-                                # Extraer el número del valor formateado (ej: "$150.50" -> 150.50)
-                                import re
-                                num = re.findall(r'-?\d+\.?\d*', str(valor))
-                                if num:
-                                    beneficio = float(num[0])
-                                    if beneficio >= 0:
+                                if isinstance(valor, (int, float)):
+                                    if valor >= 0:
                                         return 'background-color: #90EE90'  # Verde claro
                                     else:
                                         return 'background-color: #FFB6C1'  # Rojo claro
@@ -3863,8 +4157,8 @@ with tab1:
                             
                             column_config_mes = {
                                 "Año - Mes": st.column_config.TextColumn("Año - Mes", help="Año y mes"),
-                                "Beneficio": st.column_config.TextColumn("Beneficio", help="Beneficio del mes"),
-                                "maxDD": st.column_config.TextColumn("maxDD", help="Máximo drawdown del mes"),
+                                "Beneficio": st.column_config.NumberColumn("Beneficio", help="Beneficio del mes", format="$%.2f"),
+                                "maxDD": st.column_config.NumberColumn("maxDD", help="Máximo drawdown del mes", format="$%.2f"),
                                 "Trades": st.column_config.NumberColumn("Trades", help="Total de operaciones", format="%d"),
                                 "TP": st.column_config.NumberColumn("TP", help="Trades con TP", format="%d"),
                                 "SL": st.column_config.NumberColumn("SL", help="Trades con SL directo", format="%d"),
@@ -3971,20 +4265,70 @@ with tab1:
                         # Guardar beneficio original antes de formatear para el estilo y clasificación
                         beneficio_original = grupo_display['Beneficio'].copy()
                         
-                        # Calcular riesgo_ea para clasificar correctamente los trades (antes de formatear)
+                        # Calcular múltiples niveles de SL para clasificar correctamente los trades (antes de formatear)
                         perdidas = grupo_display[grupo_display['Beneficio'] < 0]['Beneficio'].abs()
                         if len(perdidas) > 0:
-                            perdida_maxima = perdidas.max()
-                            margen_busqueda = perdida_maxima * 0.10
-                            sl_detected = perdidas[perdidas >= (perdida_maxima - margen_busqueda)].mode()
-                            if len(sl_detected) > 0:
-                                riesgo_ea = sl_detected.iloc[0]
-                            else:
-                                riesgo_ea = perdida_maxima
-                            margen_tolerancia = riesgo_ea * 0.10
+                            niveles_sl = detectar_niveles_sl(perdidas, min_trades_por_nivel=2, tolerancia_agrupacion=0.15)
+                            if len(niveles_sl) == 0:
+                                perdida_maxima = perdidas.max()
+                                margen_busqueda = perdida_maxima * 0.10
+                                sl_detected = perdidas[perdidas >= (perdida_maxima - margen_busqueda)].mode()
+                                if len(sl_detected) > 0:
+                                    niveles_sl = [sl_detected.iloc[0]]
+                                else:
+                                    niveles_sl = [perdida_maxima]
+                            riesgo_ea = niveles_sl[0] if len(niveles_sl) > 0 else perdidas.max()
+                            margen_tolerancia = riesgo_ea * 0.15
+                            
+                            # Función helper para verificar si una pérdida es un SL directo
+                            def es_sl_directo_display(perdida_abs):
+                                """
+                                Verifica si una pérdida es un SL directo:
+                                - Si es mayor o igual al nivel principal (si solo hay un nivel, con pequeño margen hacia abajo)
+                                - Si hay múltiples niveles (alta volatilidad), también verifica si está cerca de alguno
+                                """
+                                if len(niveles_sl) == 0:
+                                    return False
+                                
+                                # Nivel principal es el primero (el más común y alto)
+                                nivel_principal = niveles_sl[0]
+                                
+                                # Si solo hay un nivel (no hay alta volatilidad), usar umbral con pequeño margen
+                                if len(niveles_sl) == 1:
+                                    # Aplicar un pequeño margen hacia abajo (2.5% o mínimo $5 menos)
+                                    umbral_ajustado = max(nivel_principal * 0.975, nivel_principal - 5)
+                                    # Si la pérdida es muy cercana al umbral (dentro de $5), también considerarla SL
+                                    if perdida_abs >= umbral_ajustado:
+                                        return True
+                                    # Si está muy cerca del umbral principal (dentro de $5), también es SL
+                                    # Aumentar la tolerancia para capturar pérdidas cercanas al umbral redondeado
+                                    if abs(perdida_abs - nivel_principal) <= 5:
+                                        return True
+                                    # Si la pérdida está cerca del umbral redondeado (dentro de $10), también es SL
+                                    # Esto captura casos como $192.99 cuando el umbral es $190
+                                    umbral_redondeado = round(nivel_principal / 10) * 10
+                                    if abs(perdida_abs - umbral_redondeado) <= 10:
+                                        return True
+                                    return False
+                                
+                                # Si hay múltiples niveles (alta volatilidad):
+                                # 1. Si es mayor o igual al nivel principal, es SL directo
+                                if perdida_abs >= nivel_principal:
+                                    return True
+                                
+                                # 2. Si está cerca de alguno de los niveles detectados (dentro de tolerancia)
+                                for nivel in niveles_sl:
+                                    tolerancia_nivel = nivel * 0.15
+                                    if abs(perdida_abs - nivel) <= tolerancia_nivel:
+                                        return True
+                                
+                                return False
                         else:
                             riesgo_ea = 0
                             margen_tolerancia = 0
+                            niveles_sl = []
+                            def es_sl_directo_display(perdida_abs):
+                                return False
                         
                         # Función para clasificar cada trade (usar beneficio original)
                         def clasificar_trade(row):
@@ -3998,7 +4342,7 @@ with tab1:
                                 if beneficio < 0:
                                     # [sl] con pérdida: verificar si es SL directo o TSL
                                     perdida_abs = abs(beneficio)
-                                    if riesgo_ea > 0 and perdida_abs >= (riesgo_ea - margen_tolerancia):
+                                    if es_sl_directo_display(perdida_abs):
                                         return 'SL'  # SL directo
                                     else:
                                         return 'TSL'  # Trailing Stop Loss
@@ -4012,7 +4356,7 @@ with tab1:
                                 # Si no hay información explícita, usar la lógica de cálculo
                                 if beneficio < 0:
                                     perdida_abs = abs(beneficio)
-                                    if riesgo_ea > 0 and perdida_abs >= (riesgo_ea - margen_tolerancia):
+                                    if es_sl_directo_display(perdida_abs):
                                         return 'SL'  # SL directo
                                     else:
                                         return 'TSL'  # Trailing Stop Loss
@@ -4038,15 +4382,15 @@ with tab1:
                         else:
                             grupo_display['TipoCierre'] = grupo_display.apply(clasificar_trade, axis=1)
                         
-                        # Ahora formatear el beneficio después de la clasificación
-                        grupo_display['Beneficio'] = grupo_display['Beneficio'].apply(formatear_beneficio)
+                        # NO formatear el beneficio como string, mantenerlo numérico para ordenamiento correcto
+                        # El formato se aplicará mediante column_config
                         
                         # Seleccionar todas las columnas excepto EA, TP_decimales y Símbolo
-                        # Reordenar: Tipo, TipoCierre, Beneficio, y el resto
+                        # Reordenar: Tipo, TipoCierre, Beneficio, Duración, y el resto
                         columnas_a_eliminar = ['EA', 'TP_decimales', 'Símbolo']
                         columnas_disponibles = [col for col in grupo_display.columns if col not in columnas_a_eliminar]
                         
-                        # Reordenar: Tipo, TipoCierre, Beneficio, y el resto
+                        # Reordenar: Tipo, TipoCierre, Beneficio, Duración, y el resto
                         columnas_ordenadas = []
                         # Primero: Tipo
                         if 'Tipo' in columnas_disponibles:
@@ -4057,6 +4401,9 @@ with tab1:
                         # Tercero: Beneficio
                         if 'Beneficio' in columnas_disponibles:
                             columnas_ordenadas.append('Beneficio')
+                        # Cuarto: Duración
+                        if 'Duración' in columnas_disponibles:
+                            columnas_ordenadas.append('Duración')
                         # Resto de columnas en su orden original (excepto las ya agregadas)
                         for col in columnas_disponibles:
                             if col not in columnas_ordenadas:
@@ -4077,8 +4424,32 @@ with tab1:
                         # Aplicar estilo a las filas
                         styled_grupo = grupo_display.style.apply(estilo_fila, axis=1)
                         
+                        # Configurar columnas para ordenamiento numérico correcto
+                        column_config_display = {}
+                        if 'Beneficio' in grupo_display.columns:
+                            column_config_display['Beneficio'] = st.column_config.NumberColumn(
+                                "Beneficio",
+                                help="Beneficio de la operación",
+                                format="$%.2f"
+                            )
+                        if 'Volumen' in grupo_display.columns:
+                            # Guardar valores originales para ordenamiento numérico
+                            volumen_original = grupo_display['Volumen'].copy()
+                            # Formatear Volumen como string para eliminar ceros a la derecha (hasta 2 decimales)
+                            grupo_display['Volumen'] = grupo_display['Volumen'].apply(
+                                lambda x: f"{x:.2f}".rstrip('0').rstrip('.') if pd.notna(x) else ''
+                            )
+                            # Usar TextColumn para mostrar el formato sin ceros
+                            # Nota: El ordenamiento será alfabético, pero mostrará correctamente sin ceros
+                            column_config_display['Volumen'] = st.column_config.TextColumn(
+                                "Volumen",
+                                help="Volumen de la operación"
+                            )
+                            # Para ordenamiento numérico, agregar columna oculta (opcional, si se necesita ordenamiento)
+                            # Por ahora, usaremos ordenamiento alfabético que funciona bien para números formateados
+                        
                         with st.expander(f"📌 {ea} ({len(grupo)} operaciones) - {symbol.upper()}"):
-                            st.dataframe(styled_grupo, use_container_width=True)
+                            st.dataframe(styled_grupo, use_container_width=True, column_config=column_config_display)
                 
                 else:
                     st.markdown("""
