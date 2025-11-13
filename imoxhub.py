@@ -1094,7 +1094,7 @@ def display_evolution_interface(df_csv, config):
             challenges_incompletos += 1
     
     # Mostrar estadísticas en métricas
-    st.markdown("### 📊 Estadísticas del Análisis")
+    st.markdown("### Estadísticas del Análisis")
     
     col1, col2, col3, col4 = st.columns(4)
     
@@ -1136,7 +1136,7 @@ def display_evolution_interface(df_csv, config):
     
     st.markdown("""
     <div class="card">
-        <div class="card-title">📈 Evolución Detallada de Challenges</div>
+        <div class="card-title">Evolución Detallada de Challenges</div>
     """, unsafe_allow_html=True)
 
     # Información sobre la funcionalidad
@@ -1257,7 +1257,7 @@ def display_evolution_interface(df_csv, config):
             st.dataframe(styled_df, use_container_width=True, hide_index=True)
             
             # Gráfico de evolución del balance
-            st.markdown("#### 📊 Gráfico de Evolución del Balance")
+            st.markdown("#### Gráfico de Evolución del Balance")
             
             fig = go.Figure()
             
@@ -1310,7 +1310,7 @@ def display_evolution_interface(df_csv, config):
             st.plotly_chart(fig, use_container_width=True)
     
     # Resumen de todos los challenges
-    st.markdown("#### 📋 Resumen de Todos los Challenges")
+    st.markdown("#### Resumen de Todos los Challenges")
     
     summary_data = []
     for challenge_num in available_challenges:
@@ -2885,9 +2885,9 @@ is_admin = st.session_state.user_rank == "admin"
 
 # Crear tabs según si es admin o no
 if is_admin:
-    tab1, tab2, tab3, tab4 = st.tabs(["📊 Análisis", "% Descuentos", "🏆 Ranking", "⚙️ Administración"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Análisis", "Descuentos", "Ranking", "Administración"])
 else:
-    tab1, tab2, tab3 = st.tabs(["📊 Análisis", "% Descuentos", "🏆 Ranking"])
+    tab1, tab2, tab3 = st.tabs(["Análisis", "Descuentos", "Ranking"])
 
 # Contenedor principal
 st.markdown('<div class="main-container">', unsafe_allow_html=True)
@@ -2896,7 +2896,7 @@ st.markdown('<div class="main-container">', unsafe_allow_html=True)
 # Panel central con contenido dinámico según el tab
 with tab1:
     # Crear tabs anidados dentro del tab 1
-    sub_tab1, sub_tab2 = st.tabs(["📈 Análisis de Portafolio", "🔍 Análisis de Prop Firm"])
+    sub_tab1, sub_tab2 = st.tabs(["Análisis de Portafolio", "Análisis de Prop Firm"])
     
     with sub_tab1:
         # Tarjeta de carga de archivo
@@ -3118,7 +3118,7 @@ with tab1:
                         # Análisis de riesgo por EA y SL directo vs trailing stop
                     st.markdown("""
                         <div style="margin-top: 2rem;">
-                            <h3>📊 Resumen de Estrategias</h3>
+                            <h3>Resumen de Estrategias</h3>
                         </div>
                     """, unsafe_allow_html=True)
                     
@@ -3530,8 +3530,8 @@ with tab1:
                         
                     # Selector de estrategias para combinar
                     st.markdown("""
-                    <div style="margin-top: 1rem; margin-bottom: 1rem;">
-                        <h4>🔀 Combinar Estrategias</h4>
+                    <div>
+                        <h4>Combinar Estrategias</h4>
                     </div>
                     """, unsafe_allow_html=True)
                         
@@ -3547,7 +3547,7 @@ with tab1:
                     )
                     
                     if estrategias_seleccionadas:
-                        if st.button("📊 Ver Estadísticas Combinadas", use_container_width=True):
+                        if st.button("Ver Estadísticas Combinadas", use_container_width=True):
                             # Filtrar el dataframe original por las estrategias seleccionadas
                             # Extraer EA y Símbolo de las estrategias seleccionadas
                             estrategias_filtradas = []
@@ -3694,7 +3694,7 @@ with tab1:
                             # Mostrar estadísticas combinadas
                             st.markdown("""
                             <div style="margin-top: 2rem; margin-bottom: 1rem;">
-                                <h4>📊 Estadísticas Combinadas de las Estrategias Seleccionadas</h4>
+                                <h4>Estadísticas Combinadas de las Estrategias Seleccionadas</h4>
                                 <p><strong>Estrategias:</strong> {}</p>
                             </div>
                             """.format(" | ".join(estrategias_seleccionadas)), unsafe_allow_html=True)
@@ -3954,12 +3954,16 @@ with tab1:
                             
                             st.plotly_chart(fig_comb, use_container_width=True)
                 
-                    # Resumen mensual por EA
+                    # Separador visual entre Combinar Estrategias y los tabs
                     st.markdown("""
-                    <div style="margin-top: 2rem;">
-                        <h3>📅 Estadísticas por Mes</h3>
+                    <div style="margin-top: 2rem; margin-bottom: 1rem; border-top: 2px solid #e9ecef; padding-top: 1rem;">
                     </div>
                     """, unsafe_allow_html=True)
+                    
+                    # Resumen mensual por EA - Usar tabs para organizar mejor
+                    # Crear tabs para separar Estadísticas por Mes y Trades por Estrategia
+                    # Usar nombres únicos para evitar conflicto con tabs principales
+                    analisis_tab1, analisis_tab2 = st.tabs(["Estadísticas por Mes", "Trades por Estrategia"])
                     
                     # Guardar datos para el resumen mensual con expandables
                     resumen_mensual_data = []
@@ -4129,50 +4133,100 @@ with tab1:
                             'Data': resumen_mensual
                         })
                     
-                    # Mostrar con expandables
-                    grupos_ordenados_mes = df.groupby(["EA", "Símbolo"]).agg(Beneficio_total=('Beneficio', 'sum')).reset_index()
-                    grupos_ordenados_mes = grupos_ordenados_mes.sort_values(by="Beneficio_total", ascending=False)
-                    
-                    for _, row in grupos_ordenados_mes.iterrows():
-                        ea = row["EA"]
-                        symbol = row["Símbolo"]
+                    # Mostrar con expandables dentro del analisis_tab1
+                    with analisis_tab1:
+                        # Crear selector de EA con cálculo de retDD
+                        grupos_ordenados_mes = df.groupby(["EA", "Símbolo"]).agg(Beneficio_total=('Beneficio', 'sum')).reset_index()
                         
-                        # Buscar los datos del resumen mensual para esta EA
-                        resumen_ea = next((item for item in resumen_mensual_data if item['EA'] == ea and item['Simbolo'] == symbol), None)
+                        # Calcular retDD para cada grupo
+                        ret_dd_list = []
+                        for _, row in grupos_ordenados_mes.iterrows():
+                            ea = row["EA"]
+                            symbol = row["Símbolo"]
+                            grupo = df[(df["EA"] == ea) & (df["Símbolo"] == symbol)]
+                            ordenado = grupo.sort_values(by='Open')
+                            
+                            net_profit = ordenado['Beneficio'].sum()
+                            max_dd = calcular_max_drawdown(ordenado['Beneficio'])
+                            ret_dd = net_profit / abs(max_dd) if max_dd != 0 else 0
+                            ret_dd_list.append(ret_dd)
                         
-                        if resumen_ea and resumen_ea['Data']:
-                            df_resumen_mes = pd.DataFrame(resumen_ea['Data'])
-                            
-                            # Aplicar colores a la columna Beneficio (ahora recibe valores numéricos)
-                            def estilizar_beneficio(valor):
-                                if isinstance(valor, (int, float)):
-                                    if valor >= 0:
-                                        return 'background-color: #90EE90'  # Verde claro
-                                    else:
-                                        return 'background-color: #FFB6C1'  # Rojo claro
-                                return ''
-                            
-                            # Aplicar estilo solo a la columna Beneficio
-                            styled_df = df_resumen_mes.style.applymap(estilizar_beneficio, subset=['Beneficio'])
-                            
-                            column_config_mes = {
-                                "Año - Mes": st.column_config.TextColumn("Año - Mes", help="Año y mes"),
-                                "Beneficio": st.column_config.NumberColumn("Beneficio", help="Beneficio del mes", format="$%.2f"),
-                                "maxDD": st.column_config.NumberColumn("maxDD", help="Máximo drawdown del mes", format="$%.2f"),
-                                "Trades": st.column_config.NumberColumn("Trades", help="Total de operaciones", format="%d"),
-                                "TP": st.column_config.NumberColumn("TP", help="Trades con TP", format="%d"),
-                                "SL": st.column_config.NumberColumn("SL", help="Trades con SL directo", format="%d"),
-                                "TSP": st.column_config.NumberColumn("TSP", help="Trailing Stop Positivo (trades con ganancia cerrados antes del TP)", format="%d"),
-                                "TSL": st.column_config.NumberColumn("TSL", help="Trailing Stop Loss (trades con pérdida menor al SL directo)", format="%d")
-                            }
-                            
-                            with st.expander(f"📌 {ea} - {symbol.upper()}"):
+                        grupos_ordenados_mes['retDD'] = ret_dd_list
+                        grupos_ordenados_mes = grupos_ordenados_mes.sort_values(by="retDD", ascending=False)
+                        
+                        # Crear lista de opciones para el selector
+                        opciones_ea_mes = ["Todas"] + [f"{row['EA']} - {row['Símbolo'].upper()}" for _, row in grupos_ordenados_mes.iterrows()]
+                        
+                        # Selector de EA
+                        ea_seleccionada_mes = st.selectbox(
+                            "Selecciona una estrategia para ver sus estadísticas mensuales:",
+                            opciones_ea_mes,
+                            key="selector_ea_mes"
+                        )
+                        
+                        # Función para mostrar tabla de una EA
+                        def mostrar_tabla_mensual(ea, symbol, resumen_ea):
+                            if resumen_ea and resumen_ea['Data']:
+                                df_resumen_mes = pd.DataFrame(resumen_ea['Data'])
+                                
+                                # Aplicar colores a la columna Beneficio (ahora recibe valores numéricos)
+                                def estilizar_beneficio(valor):
+                                    if isinstance(valor, (int, float)):
+                                        if valor >= 0:
+                                            return 'background-color: #90EE90'  # Verde claro
+                                        else:
+                                            return 'background-color: #FFB6C1'  # Rojo claro
+                                    return ''
+                                
+                                # Aplicar estilo solo a la columna Beneficio
+                                styled_df = df_resumen_mes.style.applymap(estilizar_beneficio, subset=['Beneficio'])
+                                
+                                column_config_mes = {
+                                    "Año - Mes": st.column_config.TextColumn("Año - Mes", help="Año y mes"),
+                                    "Beneficio": st.column_config.NumberColumn("Beneficio", help="Beneficio del mes", format="$%.2f"),
+                                    "maxDD": st.column_config.NumberColumn("maxDD", help="Máximo drawdown del mes", format="$%.2f"),
+                                    "Trades": st.column_config.NumberColumn("Trades", help="Total de operaciones", format="%d"),
+                                    "TP": st.column_config.NumberColumn("TP", help="Trades con TP", format="%d"),
+                                    "SL": st.column_config.NumberColumn("SL", help="Trades con SL directo", format="%d"),
+                                    "TSP": st.column_config.NumberColumn("TSP", help="Trailing Stop Positivo (trades con ganancia cerrados antes del TP)", format="%d"),
+                                    "TSL": st.column_config.NumberColumn("TSL", help="Trailing Stop Loss (trades con pérdida menor al SL directo)", format="%d")
+                                }
+                                
                                 st.dataframe(styled_df, use_container_width=True, column_config=column_config_mes, hide_index=True)
+                        
+                        # Mostrar según selección
+                        if ea_seleccionada_mes == "Todas":
+                            # Mostrar todas las EAs en expanders colapsados
+                            for _, row in grupos_ordenados_mes.iterrows():
+                                ea = row["EA"]
+                                symbol = row["Símbolo"]
+                                
+                                # Buscar los datos del resumen mensual para esta EA
+                                resumen_ea = next((item for item in resumen_mensual_data if item['EA'] == ea and item['Simbolo'] == symbol), None)
+                                
+                                if resumen_ea and resumen_ea['Data']:
+                                    with st.expander(f"📌 {ea} - {symbol.upper()}", expanded=False):
+                                        mostrar_tabla_mensual(ea, symbol, resumen_ea)
+                        else:
+                            # Mostrar solo la EA seleccionada
+                            ea_parts = ea_seleccionada_mes.split(" - ")
+                            if len(ea_parts) == 2:
+                                ea_selected = ea_parts[0]
+                                symbol_selected = ea_parts[1].upper()
+                                
+                                # Buscar los datos del resumen mensual para esta EA
+                                resumen_ea = next((item for item in resumen_mensual_data if item['EA'] == ea_selected and item['Simbolo'].upper() == symbol_selected), None)
+                                
+                                if resumen_ea and resumen_ea['Data']:
+                                    st.markdown(f"### 📌 {ea_selected} - {symbol_selected}")
+                                    mostrar_tabla_mensual(ea_selected, symbol_selected, resumen_ea)
+                                else:
+                                    st.info("No hay datos disponibles para esta estrategia")
                     
                     # Crear gráfico de beneficio acumulado
                     st.markdown("""
                     <div style="margin-top: 2rem;">
-                        <h3 style="margin-bottom: 1rem;">📈 Evolución de Beneficios Acumulados</h3>
+                        <h3 style="margin-bottom: 1rem;">Evolución de Beneficios Acumulados</h3>
                     </div>
                     """, unsafe_allow_html=True)
                     
@@ -4225,231 +4279,216 @@ with tab1:
                     else:
                         st.info("No hay datos suficientes para mostrar el gráfico")
                     
-                    # Separador visual
-                    st.markdown("""
-                    <div style="margin-top: 2rem;">
-                        <h3>📋 Trades por Estrategia</h3>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Mostrar operaciones individuales por EA y símbolo usando expanders
-                    # Mostrar operaciones individuales por EA y símbolo usando expanders
-                    grupos_ordenados = df.groupby(["EA", "Símbolo"]).agg(Beneficio_total=('Beneficio', 'sum')).reset_index()
-                    grupos_ordenados = grupos_ordenados.sort_values(by="Beneficio_total", ascending=False)
-
-                    for _, row in grupos_ordenados.iterrows():
-                        ea = row["EA"]
-                        symbol = row["Símbolo"]
-                        grupo = df[(df["EA"] == ea) & (df["Símbolo"] == symbol)]
+                    # Mostrar operaciones individuales por EA y símbolo dentro del analisis_tab2
+                    with analisis_tab2:
+                        # Crear selector de EA para trades con cálculo de retDD
+                        grupos_ordenados = df.groupby(["EA", "Símbolo"]).agg(Beneficio_total=('Beneficio', 'sum')).reset_index()
                         
-                        # Formatear duración en horas y minutos y beneficio con $
-                        grupo_display = grupo.sort_values(by="Open").copy()
-                        
-                        def formatear_duracion(minutos):
-                            if pd.isna(minutos):
-                                return "-"
-                            horas = int(minutos) // 60
-                            mins = int(minutos) % 60
-                            if horas > 0:
-                                if mins > 0:
-                                    return f"{horas}h {mins}m"
-                                else:
-                                    return f"{horas}h"
-                            else:
-                                return f"{mins}m"
-                        
-                        def formatear_beneficio(beneficio):
-                            return f"${beneficio:.2f}"
-                        
-                        grupo_display['Duración'] = grupo_display['Duración'].apply(formatear_duracion)
-                        # Guardar beneficio original antes de formatear para el estilo y clasificación
-                        beneficio_original = grupo_display['Beneficio'].copy()
-                        
-                        # Calcular múltiples niveles de SL para clasificar correctamente los trades (antes de formatear)
-                        perdidas = grupo_display[grupo_display['Beneficio'] < 0]['Beneficio'].abs()
-                        if len(perdidas) > 0:
-                            niveles_sl = detectar_niveles_sl(perdidas, min_trades_por_nivel=2, tolerancia_agrupacion=0.15)
-                            if len(niveles_sl) == 0:
-                                perdida_maxima = perdidas.max()
-                                margen_busqueda = perdida_maxima * 0.10
-                                sl_detected = perdidas[perdidas >= (perdida_maxima - margen_busqueda)].mode()
-                                if len(sl_detected) > 0:
-                                    niveles_sl = [sl_detected.iloc[0]]
-                                else:
-                                    niveles_sl = [perdida_maxima]
-                            riesgo_ea = niveles_sl[0] if len(niveles_sl) > 0 else perdidas.max()
-                            margen_tolerancia = riesgo_ea * 0.15
+                        # Calcular retDD para cada grupo
+                        ret_dd_list = []
+                        for _, row in grupos_ordenados.iterrows():
+                            ea = row["EA"]
+                            symbol = row["Símbolo"]
+                            grupo = df[(df["EA"] == ea) & (df["Símbolo"] == symbol)]
+                            ordenado = grupo.sort_values(by='Open')
                             
-                            # Función helper para verificar si una pérdida es un SL directo
-                            def es_sl_directo_display(perdida_abs):
-                                """
-                                Verifica si una pérdida es un SL directo:
-                                - Si es mayor o igual al nivel principal (si solo hay un nivel, con pequeño margen hacia abajo)
-                                - Si hay múltiples niveles (alta volatilidad), también verifica si está cerca de alguno
-                                """
+                            net_profit = ordenado['Beneficio'].sum()
+                            max_dd = calcular_max_drawdown(ordenado['Beneficio'])
+                            ret_dd = net_profit / abs(max_dd) if max_dd != 0 else 0
+                            ret_dd_list.append(ret_dd)
+                        
+                        grupos_ordenados['retDD'] = ret_dd_list
+                        grupos_ordenados = grupos_ordenados.sort_values(by="retDD", ascending=False)
+                        
+                        # Crear lista de opciones para el selector
+                        opciones_ea_trades = ["Todas"] + [f"{row['EA']} - {row['Símbolo'].upper()}" for _, row in grupos_ordenados.iterrows()]
+                        
+                        # Selector de EA
+                        ea_seleccionada_trades = st.selectbox(
+                            "Selecciona una estrategia para ver sus trades individuales:",
+                            opciones_ea_trades,
+                            key="selector_ea_trades"
+                        )
+                        
+                        # Función para mostrar trades de una EA
+                        def mostrar_trades_ea(ea, symbol, grupo):
+                            grupo_display = grupo.sort_values(by="Open").copy()
+                            
+                            def formatear_duracion(minutos):
+                                if pd.isna(minutos):
+                                    return "-"
+                                horas = int(minutos) // 60
+                                mins = int(minutos) % 60
+                                if horas > 0:
+                                    if mins > 0:
+                                        return f"{horas}h {mins}m"
+                                    else:
+                                        return f"{horas}h"
+                                else:
+                                    return f"{mins}m"
+                            
+                            grupo_display['Duración'] = grupo_display['Duración'].apply(formatear_duracion)
+                            beneficio_original = grupo_display['Beneficio'].copy()
+                            
+                            # Calcular múltiples niveles de SL para clasificar correctamente los trades
+                            perdidas = grupo_display[grupo_display['Beneficio'] < 0]['Beneficio'].abs()
+                            if len(perdidas) > 0:
+                                niveles_sl = detectar_niveles_sl(perdidas, min_trades_por_nivel=2, tolerancia_agrupacion=0.15)
                                 if len(niveles_sl) == 0:
+                                    perdida_maxima = perdidas.max()
+                                    margen_busqueda = perdida_maxima * 0.10
+                                    sl_detected = perdidas[perdidas >= (perdida_maxima - margen_busqueda)].mode()
+                                    if len(sl_detected) > 0:
+                                        niveles_sl = [sl_detected.iloc[0]]
+                                    else:
+                                        niveles_sl = [perdida_maxima]
+                                riesgo_ea = niveles_sl[0] if len(niveles_sl) > 0 else perdidas.max()
+                                margen_tolerancia = riesgo_ea * 0.15
+                                
+                                def es_sl_directo_display(perdida_abs):
+                                    if len(niveles_sl) == 0:
+                                        return False
+                                    nivel_principal = niveles_sl[0]
+                                    if len(niveles_sl) == 1:
+                                        umbral_ajustado = max(nivel_principal * 0.975, nivel_principal - 5)
+                                        if perdida_abs >= umbral_ajustado:
+                                            return True
+                                        if abs(perdida_abs - nivel_principal) <= 5:
+                                            return True
+                                        umbral_redondeado = round(nivel_principal / 10) * 10
+                                        if abs(perdida_abs - umbral_redondeado) <= 10:
+                                            return True
+                                        return False
+                                    if perdida_abs >= nivel_principal:
+                                        return True
+                                    for nivel in niveles_sl:
+                                        tolerancia_nivel = nivel * 0.15
+                                        if abs(perdida_abs - nivel) <= tolerancia_nivel:
+                                            return True
                                     return False
-                                
-                                # Nivel principal es el primero (el más común y alto)
-                                nivel_principal = niveles_sl[0]
-                                
-                                # Si solo hay un nivel (no hay alta volatilidad), usar umbral con pequeño margen
-                                if len(niveles_sl) == 1:
-                                    # Aplicar un pequeño margen hacia abajo (2.5% o mínimo $5 menos)
-                                    umbral_ajustado = max(nivel_principal * 0.975, nivel_principal - 5)
-                                    # Si la pérdida es muy cercana al umbral (dentro de $5), también considerarla SL
-                                    if perdida_abs >= umbral_ajustado:
-                                        return True
-                                    # Si está muy cerca del umbral principal (dentro de $5), también es SL
-                                    # Aumentar la tolerancia para capturar pérdidas cercanas al umbral redondeado
-                                    if abs(perdida_abs - nivel_principal) <= 5:
-                                        return True
-                                    # Si la pérdida está cerca del umbral redondeado (dentro de $10), también es SL
-                                    # Esto captura casos como $192.99 cuando el umbral es $190
-                                    umbral_redondeado = round(nivel_principal / 10) * 10
-                                    if abs(perdida_abs - umbral_redondeado) <= 10:
-                                        return True
+                            else:
+                                riesgo_ea = 0
+                                margen_tolerancia = 0
+                                niveles_sl = []
+                                def es_sl_directo_display(perdida_abs):
                                     return False
-                                
-                                # Si hay múltiples niveles (alta volatilidad):
-                                # 1. Si es mayor o igual al nivel principal, es SL directo
-                                if perdida_abs >= nivel_principal:
-                                    return True
-                                
-                                # 2. Si está cerca de alguno de los niveles detectados (dentro de tolerancia)
-                                for nivel in niveles_sl:
-                                    tolerancia_nivel = nivel * 0.15
-                                    if abs(perdida_abs - nivel) <= tolerancia_nivel:
-                                        return True
-                                
-                                return False
-                        else:
-                            riesgo_ea = 0
-                            margen_tolerancia = 0
-                            niveles_sl = []
-                            def es_sl_directo_display(perdida_abs):
-                                return False
-                        
-                        # Función para clasificar cada trade (usar beneficio original)
-                        def clasificar_trade(row):
-                            # Usar el índice para obtener el beneficio original
-                            idx = row.name
-                            beneficio = beneficio_original.loc[idx]
-                            tipo_cierre_html = row['TipoCierre'] if 'TipoCierre' in row.index and pd.notna(row['TipoCierre']) else None
                             
-                            # Si el HTML tiene información explícita de [sl] o [tp], usarla PERO validar con el beneficio
-                            if tipo_cierre_html == 'SL':
-                                if beneficio < 0:
-                                    # [sl] con pérdida: verificar si es SL directo o TSL
-                                    perdida_abs = abs(beneficio)
-                                    if es_sl_directo_display(perdida_abs):
-                                        return 'SL'  # SL directo
+                            def clasificar_trade(row):
+                                idx = row.name
+                                beneficio = beneficio_original.loc[idx]
+                                tipo_cierre_html = row['TipoCierre'] if 'TipoCierre' in row.index and pd.notna(row['TipoCierre']) else None
+                                
+                                if tipo_cierre_html == 'SL':
+                                    if beneficio < 0:
+                                        perdida_abs = abs(beneficio)
+                                        if es_sl_directo_display(perdida_abs):
+                                            return 'SL'
+                                        else:
+                                            return 'TSL'
+                                    elif beneficio > 0:
+                                        return 'TSP'
                                     else:
-                                        return 'TSL'  # Trailing Stop Loss
-                                elif beneficio > 0:
-                                    return 'TSP'  # Trailing Stop Positivo
+                                        return 'TSL'
+                                elif tipo_cierre_html == 'TP':
+                                    return 'TP'
                                 else:
-                                    return 'TSL'  # Break-even con [sl]
-                            elif tipo_cierre_html == 'TP':
-                                return 'TP'  # TP real (confiamos en el HTML)
-                            else:
-                                # Si no hay información explícita, usar la lógica de cálculo
-                                if beneficio < 0:
-                                    perdida_abs = abs(beneficio)
-                                    if es_sl_directo_display(perdida_abs):
-                                        return 'SL'  # SL directo
+                                    if beneficio < 0:
+                                        perdida_abs = abs(beneficio)
+                                        if es_sl_directo_display(perdida_abs):
+                                            return 'SL'
+                                        else:
+                                            return 'TSL'
+                                    elif beneficio > 0:
+                                        try:
+                                            tp_val = row['TP_val'] if 'TP_val' in row.index and pd.notna(row['TP_val']) else None
+                                            close_price = row['PrecioClose'] if 'PrecioClose' in row.index and pd.notna(row['PrecioClose']) else None
+                                            if tp_val is not None and close_price is not None:
+                                                decs = row['TP_decimales'] if 'TP_decimales' in row.index and pd.notna(row['TP_decimales']) else 0
+                                                tol = max(10 ** (-(decs)), 1e-6)
+                                                if abs(close_price - tp_val) <= 2 * tol:
+                                                    return 'TP'
+                                        except:
+                                            pass
+                                        return 'TSP'
                                     else:
-                                        return 'TSL'  # Trailing Stop Loss
-                                elif beneficio > 0:
-                                    # Verificar si es TP real
-                                    try:
-                                        tp_val = row['TP_val'] if 'TP_val' in row.index and pd.notna(row['TP_val']) else None
-                                        close_price = row['PrecioClose'] if 'PrecioClose' in row.index and pd.notna(row['PrecioClose']) else None
-                                        if tp_val is not None and close_price is not None:
-                                            decs = row['TP_decimales'] if 'TP_decimales' in row.index and pd.notna(row['TP_decimales']) else 0
-                                            tol = max(10 ** (-(decs)), 1e-6)
-                                            if abs(close_price - tp_val) <= 2 * tol:
-                                                return 'TP'  # TP real
-                                    except:
-                                        pass
-                                    return 'TSP'  # Trailing Stop Positivo
-                                else:
-                                    return 'TSL'  # Break-even
-                        
-                        # Aplicar clasificación a TipoCierre (antes de formatear el beneficio)
-                        if 'TipoCierre' in grupo_display.columns:
-                            grupo_display['TipoCierre'] = grupo_display.apply(clasificar_trade, axis=1)
-                        else:
-                            grupo_display['TipoCierre'] = grupo_display.apply(clasificar_trade, axis=1)
-                        
-                        # NO formatear el beneficio como string, mantenerlo numérico para ordenamiento correcto
-                        # El formato se aplicará mediante column_config
-                        
-                        # Seleccionar todas las columnas excepto EA, TP_decimales y Símbolo
-                        # Reordenar: Tipo, TipoCierre, Beneficio, Duración, y el resto
-                        columnas_a_eliminar = ['EA', 'TP_decimales', 'Símbolo']
-                        columnas_disponibles = [col for col in grupo_display.columns if col not in columnas_a_eliminar]
-                        
-                        # Reordenar: Tipo, TipoCierre, Beneficio, Duración, y el resto
-                        columnas_ordenadas = []
-                        # Primero: Tipo
-                        if 'Tipo' in columnas_disponibles:
-                            columnas_ordenadas.append('Tipo')
-                        # Segundo: TipoCierre
-                        if 'TipoCierre' in columnas_disponibles:
-                            columnas_ordenadas.append('TipoCierre')
-                        # Tercero: Beneficio
-                        if 'Beneficio' in columnas_disponibles:
-                            columnas_ordenadas.append('Beneficio')
-                        # Cuarto: Duración
-                        if 'Duración' in columnas_disponibles:
-                            columnas_ordenadas.append('Duración')
-                        # Resto de columnas en su orden original (excepto las ya agregadas)
-                        for col in columnas_disponibles:
-                            if col not in columnas_ordenadas:
-                                columnas_ordenadas.append(col)
-                        
-                        grupo_display = grupo_display[columnas_ordenadas].copy()
-                        
-                        # Función para aplicar estilo a las filas según el beneficio
-                        def estilo_fila(row):
-                            beneficio = beneficio_original[row.name]
-                            if beneficio > 0:
-                                return ['background-color: #90EE90'] * len(row)  # Verde claro
-                            elif beneficio < 0:
-                                return ['background-color: #FFB6C1'] * len(row)  # Rojo claro
+                                        return 'TSL'
+                            
+                            if 'TipoCierre' in grupo_display.columns:
+                                grupo_display['TipoCierre'] = grupo_display.apply(clasificar_trade, axis=1)
                             else:
-                                return ['background-color: white'] * len(row)  # Blanco
-                        
-                        # Aplicar estilo a las filas
-                        styled_grupo = grupo_display.style.apply(estilo_fila, axis=1)
-                        
-                        # Configurar columnas para ordenamiento numérico correcto
-                        column_config_display = {}
-                        if 'Beneficio' in grupo_display.columns:
-                            column_config_display['Beneficio'] = st.column_config.NumberColumn(
-                                "Beneficio",
-                                help="Beneficio de la operación",
-                                format="$%.2f"
-                            )
-                        if 'Volumen' in grupo_display.columns:
-                            # Guardar valores originales para ordenamiento numérico
-                            volumen_original = grupo_display['Volumen'].copy()
-                            # Formatear Volumen como string para eliminar ceros a la derecha (hasta 2 decimales)
-                            grupo_display['Volumen'] = grupo_display['Volumen'].apply(
-                                lambda x: f"{x:.2f}".rstrip('0').rstrip('.') if pd.notna(x) else ''
-                            )
-                            # Usar TextColumn para mostrar el formato sin ceros
-                            # Nota: El ordenamiento será alfabético, pero mostrará correctamente sin ceros
-                            column_config_display['Volumen'] = st.column_config.TextColumn(
-                                "Volumen",
-                                help="Volumen de la operación"
-                            )
-                            # Para ordenamiento numérico, agregar columna oculta (opcional, si se necesita ordenamiento)
-                            # Por ahora, usaremos ordenamiento alfabético que funciona bien para números formateados
-                        
-                        with st.expander(f"📌 {ea} ({len(grupo)} operaciones) - {symbol.upper()}"):
+                                grupo_display['TipoCierre'] = grupo_display.apply(clasificar_trade, axis=1)
+                            
+                            columnas_a_eliminar = ['EA', 'TP_decimales', 'Símbolo']
+                            columnas_disponibles = [col for col in grupo_display.columns if col not in columnas_a_eliminar]
+                            
+                            columnas_ordenadas = []
+                            if 'Tipo' in columnas_disponibles:
+                                columnas_ordenadas.append('Tipo')
+                            if 'TipoCierre' in columnas_disponibles:
+                                columnas_ordenadas.append('TipoCierre')
+                            if 'Beneficio' in columnas_disponibles:
+                                columnas_ordenadas.append('Beneficio')
+                            if 'Duración' in columnas_disponibles:
+                                columnas_ordenadas.append('Duración')
+                            for col in columnas_disponibles:
+                                if col not in columnas_ordenadas:
+                                    columnas_ordenadas.append(col)
+                            
+                            grupo_display = grupo_display[columnas_ordenadas].copy()
+                            
+                            def estilo_fila(row):
+                                beneficio = beneficio_original[row.name]
+                                if beneficio > 0:
+                                    return ['background-color: #90EE90'] * len(row)
+                                elif beneficio < 0:
+                                    return ['background-color: #FFB6C1'] * len(row)
+                                else:
+                                    return ['background-color: white'] * len(row)
+                            
+                            styled_grupo = grupo_display.style.apply(estilo_fila, axis=1)
+                            
+                            column_config_display = {}
+                            if 'Beneficio' in grupo_display.columns:
+                                column_config_display['Beneficio'] = st.column_config.NumberColumn(
+                                    "Beneficio",
+                                    help="Beneficio de la operación",
+                                    format="$%.2f"
+                                )
+                            if 'Volumen' in grupo_display.columns:
+                                volumen_original = grupo_display['Volumen'].copy()
+                                grupo_display['Volumen'] = grupo_display['Volumen'].apply(
+                                    lambda x: f"{x:.2f}".rstrip('0').rstrip('.') if pd.notna(x) else ''
+                                )
+                                column_config_display['Volumen'] = st.column_config.TextColumn(
+                                    "Volumen",
+                                    help="Volumen de la operación"
+                                )
+                            
                             st.dataframe(styled_grupo, use_container_width=True, column_config=column_config_display)
+                        
+                        # Mostrar según selección
+                        if ea_seleccionada_trades == "Todas":
+                            # Mostrar todas las EAs en expanders colapsados
+                            for _, row in grupos_ordenados.iterrows():
+                                ea = row["EA"]
+                                symbol = row["Símbolo"]
+                                grupo = df[(df["EA"] == ea) & (df["Símbolo"] == symbol)]
+                                
+                                with st.expander(f"📌 {ea} ({len(grupo)} operaciones) - {symbol.upper()}", expanded=False):
+                                    mostrar_trades_ea(ea, symbol, grupo)
+                        else:
+                            # Mostrar solo la EA seleccionada
+                            ea_parts = ea_seleccionada_trades.split(" - ")
+                            if len(ea_parts) == 2:
+                                ea_selected = ea_parts[0]
+                                symbol_selected = ea_parts[1].upper()
+                                grupo = df[(df["EA"] == ea_selected) & (df["Símbolo"].str.upper() == symbol_selected)]
+                                
+                                if len(grupo) > 0:
+                                    st.markdown(f"### 📌 {ea_selected} ({len(grupo)} operaciones) - {symbol_selected}")
+                                    mostrar_trades_ea(ea_selected, symbol_selected, grupo)
+                                else:
+                                    st.info("No hay trades disponibles para esta estrategia")
                 
                 else:
                     st.markdown("""
@@ -4481,7 +4520,7 @@ with tab1:
         # Tarjeta de análisis de Prop Firm
         st.markdown("""
         <div class="card">
-            <div class="card-title">📈 Evolución Detallada de Challenges</div>
+            <div class="card-title">Evolución Detallada de Challenges</div>
         """, unsafe_allow_html=True)
 
         # Contenedor para subir archivo CSV
@@ -4518,7 +4557,7 @@ with tab1:
                 
                 # Segunda fila de selectores para objetivos y límites
                 st.markdown("---")
-                st.markdown("### 🎯 Objetivos de Ganancia y Límites de Drawdown")
+                st.markdown("### Objetivos de Ganancia y Límites de Drawdown")
                 
                 col3, col4, col5, col6 = st.columns(4)
                 
@@ -4560,7 +4599,7 @@ with tab1:
                 
                 # Información sobre el análisis
                 st.markdown("---")
-                st.markdown("### 📊 Configuración Completada")
+                st.markdown("### Configuración Completada")
                 
                 # Mostrar resumen de la configuración
                 col1, col2 = st.columns(2)
@@ -4767,7 +4806,7 @@ with tab2:
 # Tab de Ranking
 with tab3:
     # Crear tabs anidados dentro del tab 3
-    ranking_sub_tab1, ranking_sub_tab2 = st.tabs(["🏆 Ranking", "💰 Añadir Cobro"])
+    ranking_sub_tab1, ranking_sub_tab2 = st.tabs(["Ranking", "Añadir Cobro"])
     
     with ranking_sub_tab1:
         # Selector de mes con navegación usando Streamlit
@@ -5506,7 +5545,7 @@ with tab3:
     # Gráfico de evolución mensual por categoría (después de todos los rankings)
     st.markdown("""
     <div class="card" style="margin-top: 2rem;">
-        <div class="card-title">📈 Evolución Mensual por Categoría</div>
+        <div class="card-title">Evolución Mensual por Categoría</div>
     """, unsafe_allow_html=True)
     
     # Preparar datos para el gráfico mensual de payouts
@@ -5680,7 +5719,7 @@ with tab3:
     with ranking_sub_tab2:
         st.markdown("""
         <div class="card">
-            <div class="card-title">💰 Añadir Cobro</div>
+            <div class="card-title">Añadir Cobro</div>
             <div style="text-align: center; padding: 2rem;">
                 <div style="font-size: 4rem; margin-bottom: 1rem;" class="construction-icon">💰</div>
                 <h2 style="color: #6c757d; margin-bottom: 1rem;">¡En Desarrollo!</h2>
@@ -5696,7 +5735,7 @@ if is_admin:
     with tab4:
         st.markdown("""
         <div class="card">
-            <div class="card-title">⚙️ Administración de Usuarios</div>
+            <div class="card-title">Administración de Usuarios</div>
         """, unsafe_allow_html=True)
         
         st.markdown("### Crear Nuevo Usuario")
