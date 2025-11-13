@@ -2457,6 +2457,7 @@ st.markdown("""
         border-radius: 0.75rem !important;
     }
     
+    
     .stSelectbox > div > div:hover {
         border-color: #6c757d !important;
     }
@@ -3963,6 +3964,10 @@ with tab1:
                     # Resumen mensual por EA - Usar tabs para organizar mejor
                     # Crear tabs para separar Estadísticas por Mes y Trades por Estrategia
                     # Usar nombres únicos para evitar conflicto con tabs principales
+                    # Inicializar selección compartida en session_state (antes de los tabs)
+                    if 'estrategias_seleccionadas_analisis' not in st.session_state:
+                        st.session_state.estrategias_seleccionadas_analisis = []
+                    
                     analisis_tab1, analisis_tab2 = st.tabs(["Estadísticas por Mes", "Trades por Estrategia"])
                     
                     # Guardar datos para el resumen mensual con expandables
@@ -4154,15 +4159,36 @@ with tab1:
                         grupos_ordenados_mes['retDD'] = ret_dd_list
                         grupos_ordenados_mes = grupos_ordenados_mes.sort_values(by="retDD", ascending=False)
                         
-                        # Crear lista de opciones para el selector
-                        opciones_ea_mes = ["Todas"] + [f"{row['EA']} - {row['Símbolo'].upper()}" for _, row in grupos_ordenados_mes.iterrows()]
+                        # Crear lista de opciones para el selector múltiple
+                        opciones_ea_mes = [f"{row['EA']} - {row['Símbolo'].upper()}" for _, row in grupos_ordenados_mes.iterrows()]
                         
-                        # Selector de EA
-                        ea_seleccionada_mes = st.selectbox(
-                            "Selecciona una estrategia para ver sus estadísticas mensuales:",
-                            opciones_ea_mes,
-                            key="selector_ea_mes"
+                        # Inicializar selección compartida en session_state
+                        if 'estrategias_seleccionadas_analisis' not in st.session_state:
+                            st.session_state.estrategias_seleccionadas_analisis = []
+                        
+                        # Filtrar las opciones seleccionadas que existen en este tab
+                        seleccion_validas_mes = [s for s in st.session_state.estrategias_seleccionadas_analisis if s in opciones_ea_mes]
+                        
+                        # Inicializar la key del multiselect si no existe o sincronizar con estado compartido
+                        if 'multiselect_ea_mes' not in st.session_state:
+                            st.session_state.multiselect_ea_mes = seleccion_validas_mes
+                        else:
+                            # Mantener las selecciones que siguen siendo válidas y agregar las nuevas del estado compartido
+                            actuales_validas = [s for s in st.session_state.multiselect_ea_mes if s in opciones_ea_mes]
+                            nuevas_del_compartido = [s for s in seleccion_validas_mes if s not in actuales_validas]
+                            st.session_state.multiselect_ea_mes = actuales_validas + nuevas_del_compartido
+                        
+                        # Selector múltiple de EAs (compartido entre ambos tabs)
+                        # No usar default, dejar que Streamlit use el valor de session_state[key]
+                        estrategias_seleccionadas_mes = st.multiselect(
+                            "Selecciona una o más estrategias para ver sus estadísticas mensuales:",
+                            options=opciones_ea_mes,
+                            key="multiselect_ea_mes",
+                            help="Selecciona una o más estrategias para ver sus estadísticas mensuales."
                         )
+                        
+                        # Actualizar estado compartido
+                        st.session_state.estrategias_seleccionadas_analisis = estrategias_seleccionadas_mes
                         
                         # Función para mostrar tabla de una EA
                         def mostrar_tabla_mensual(ea, symbol, resumen_ea):
@@ -4194,34 +4220,22 @@ with tab1:
                                 
                                 st.dataframe(styled_df, use_container_width=True, column_config=column_config_mes, hide_index=True)
                         
-                        # Mostrar según selección
-                        if ea_seleccionada_mes == "Todas":
-                            # Mostrar todas las EAs en expanders colapsados
-                            for _, row in grupos_ordenados_mes.iterrows():
-                                ea = row["EA"]
-                                symbol = row["Símbolo"]
-                                
-                                # Buscar los datos del resumen mensual para esta EA
-                                resumen_ea = next((item for item in resumen_mensual_data if item['EA'] == ea and item['Simbolo'] == symbol), None)
-                                
-                                if resumen_ea and resumen_ea['Data']:
-                                    with st.expander(f"📌 {ea} - {symbol.upper()}", expanded=False):
-                                        mostrar_tabla_mensual(ea, symbol, resumen_ea)
-                        else:
-                            # Mostrar solo la EA seleccionada
-                            ea_parts = ea_seleccionada_mes.split(" - ")
-                            if len(ea_parts) == 2:
-                                ea_selected = ea_parts[0]
-                                symbol_selected = ea_parts[1].upper()
+                        # Mostrar las estrategias seleccionadas
+                        for estrategia_sel in estrategias_seleccionadas_mes:
+                            # Formato: "EA - SÍMBOLO"
+                            partes = estrategia_sel.split(" - ")
+                            if len(partes) == 2:
+                                ea_selected = partes[0]
+                                symbol_selected = partes[1].upper()
                                 
                                 # Buscar los datos del resumen mensual para esta EA
                                 resumen_ea = next((item for item in resumen_mensual_data if item['EA'] == ea_selected and item['Simbolo'].upper() == symbol_selected), None)
                                 
                                 if resumen_ea and resumen_ea['Data']:
-                                    st.markdown(f"### 📌 {ea_selected} - {symbol_selected}")
-                                    mostrar_tabla_mensual(ea_selected, symbol_selected, resumen_ea)
+                                    with st.expander(f"📌 {ea_selected} - {symbol_selected}", expanded=False):
+                                        mostrar_tabla_mensual(ea_selected, symbol_selected, resumen_ea)
                                 else:
-                                    st.info("No hay datos disponibles para esta estrategia")
+                                    st.info(f"No hay datos disponibles para {estrategia_sel}")
                     
                     # Crear gráfico de beneficio acumulado
                     st.markdown("""
@@ -4300,15 +4314,32 @@ with tab1:
                         grupos_ordenados['retDD'] = ret_dd_list
                         grupos_ordenados = grupos_ordenados.sort_values(by="retDD", ascending=False)
                         
-                        # Crear lista de opciones para el selector
-                        opciones_ea_trades = ["Todas"] + [f"{row['EA']} - {row['Símbolo'].upper()}" for _, row in grupos_ordenados.iterrows()]
+                        # Crear lista de opciones para el selector múltiple
+                        opciones_ea_trades = [f"{row['EA']} - {row['Símbolo'].upper()}" for _, row in grupos_ordenados.iterrows()]
                         
-                        # Selector de EA
-                        ea_seleccionada_trades = st.selectbox(
-                            "Selecciona una estrategia para ver sus trades individuales:",
-                            opciones_ea_trades,
-                            key="selector_ea_trades"
+                        # Filtrar las opciones seleccionadas que existen en este tab
+                        seleccion_validas_trades = [s for s in st.session_state.estrategias_seleccionadas_analisis if s in opciones_ea_trades]
+                        
+                        # Inicializar la key del multiselect si no existe o sincronizar con estado compartido
+                        if 'multiselect_ea_trades' not in st.session_state:
+                            st.session_state.multiselect_ea_trades = seleccion_validas_trades
+                        else:
+                            # Mantener las selecciones que siguen siendo válidas y agregar las nuevas del estado compartido
+                            actuales_validas = [s for s in st.session_state.multiselect_ea_trades if s in opciones_ea_trades]
+                            nuevas_del_compartido = [s for s in seleccion_validas_trades if s not in actuales_validas]
+                            st.session_state.multiselect_ea_trades = actuales_validas + nuevas_del_compartido
+                        
+                        # Selector múltiple de EAs (compartido entre ambos tabs)
+                        # No usar default, dejar que Streamlit use el valor de session_state[key]
+                        estrategias_seleccionadas_trades = st.multiselect(
+                            "Selecciona una o más estrategias para ver sus trades individuales:",
+                            options=opciones_ea_trades,
+                            key="multiselect_ea_trades",
+                            help="Selecciona una o más estrategias para ver sus trades individuales."
                         )
+                        
+                        # Actualizar estado compartido
+                        st.session_state.estrategias_seleccionadas_analisis = estrategias_seleccionadas_trades
                         
                         # Función para mostrar trades de una EA
                         def mostrar_trades_ea(ea, symbol, grupo):
@@ -4466,27 +4497,19 @@ with tab1:
                             
                             st.dataframe(styled_grupo, use_container_width=True, column_config=column_config_display)
                         
-                        # Mostrar según selección
-                        if ea_seleccionada_trades == "Todas":
-                            # Mostrar todas las EAs en expanders colapsados
-                            for _, row in grupos_ordenados.iterrows():
-                                ea = row["EA"]
-                                symbol = row["Símbolo"]
-                                grupo = df[(df["EA"] == ea) & (df["Símbolo"] == symbol)]
-                                
-                                with st.expander(f"📌 {ea} ({len(grupo)} operaciones) - {symbol.upper()}", expanded=False):
-                                    mostrar_trades_ea(ea, symbol, grupo)
-                        else:
-                            # Mostrar solo la EA seleccionada
-                            ea_parts = ea_seleccionada_trades.split(" - ")
-                            if len(ea_parts) == 2:
-                                ea_selected = ea_parts[0]
-                                symbol_selected = ea_parts[1].upper()
+                        # Mostrar las estrategias seleccionadas
+                        for estrategia_sel in estrategias_seleccionadas_trades:
+                            # Formato: "EA - SÍMBOLO"
+                            partes = estrategia_sel.split(" - ")
+                            if len(partes) == 2:
+                                ea_selected = partes[0]
+                                symbol_selected = partes[1].upper()
+                                # Comparar símbolo de forma case-insensitive
                                 grupo = df[(df["EA"] == ea_selected) & (df["Símbolo"].str.upper() == symbol_selected)]
                                 
                                 if len(grupo) > 0:
-                                    st.markdown(f"### 📌 {ea_selected} ({len(grupo)} operaciones) - {symbol_selected}")
-                                    mostrar_trades_ea(ea_selected, symbol_selected, grupo)
+                                    with st.expander(f"📌 {ea_selected} ({len(grupo)} operaciones) - {symbol_selected}", expanded=False):
+                                        mostrar_trades_ea(ea_selected, symbol_selected, grupo)
                                 else:
                                     st.info("No hay trades disponibles para esta estrategia")
                 
