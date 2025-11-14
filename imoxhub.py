@@ -4166,17 +4166,14 @@ with tab1:
                         if 'estrategias_seleccionadas_analisis' not in st.session_state:
                             st.session_state.estrategias_seleccionadas_analisis = []
                         
-                        # Filtrar las opciones seleccionadas que existen en este tab
-                        seleccion_validas_mes = [s for s in st.session_state.estrategias_seleccionadas_analisis if s in opciones_ea_mes]
-                        
-                        # Inicializar la key del multiselect si no existe o sincronizar con estado compartido
+                        # Inicializar la key del multiselect solo si no existe
                         if 'multiselect_ea_mes' not in st.session_state:
+                            # Filtrar las opciones seleccionadas que existen en este tab
+                            seleccion_validas_mes = [s for s in st.session_state.estrategias_seleccionadas_analisis if s in opciones_ea_mes]
                             st.session_state.multiselect_ea_mes = seleccion_validas_mes
-                        else:
-                            # Mantener las selecciones que siguen siendo válidas y agregar las nuevas del estado compartido
-                            actuales_validas = [s for s in st.session_state.multiselect_ea_mes if s in opciones_ea_mes]
-                            nuevas_del_compartido = [s for s in seleccion_validas_mes if s not in actuales_validas]
-                            st.session_state.multiselect_ea_mes = actuales_validas + nuevas_del_compartido
+                        
+                        # Filtrar solo las selecciones válidas del multiselect (respeta eliminaciones del usuario)
+                        seleccion_actual_mes = [s for s in st.session_state.multiselect_ea_mes if s in opciones_ea_mes]
                         
                         # Selector múltiple de EAs (compartido entre ambos tabs)
                         # No usar default, dejar que Streamlit use el valor de session_state[key]
@@ -4187,8 +4184,14 @@ with tab1:
                             help="Selecciona una o más estrategias para ver sus estadísticas mensuales."
                         )
                         
-                        # Actualizar estado compartido
-                        st.session_state.estrategias_seleccionadas_analisis = estrategias_seleccionadas_mes
+                        # Actualizar estado compartido: combinar con las del otro tab
+                        if 'multiselect_ea_trades' in st.session_state:
+                            # Usar las selecciones del otro tab directamente (ya están filtradas por sus opciones)
+                            otras_validas = st.session_state.multiselect_ea_trades
+                            todas_selecciones = list(set(estrategias_seleccionadas_mes + otras_validas))
+                            st.session_state.estrategias_seleccionadas_analisis = todas_selecciones
+                        else:
+                            st.session_state.estrategias_seleccionadas_analisis = estrategias_seleccionadas_mes
                         
                         # Función para mostrar tabla de una EA
                         def mostrar_tabla_mensual(ea, symbol, resumen_ea):
@@ -4317,17 +4320,14 @@ with tab1:
                         # Crear lista de opciones para el selector múltiple
                         opciones_ea_trades = [f"{row['EA']} - {row['Símbolo'].upper()}" for _, row in grupos_ordenados.iterrows()]
                         
-                        # Filtrar las opciones seleccionadas que existen en este tab
-                        seleccion_validas_trades = [s for s in st.session_state.estrategias_seleccionadas_analisis if s in opciones_ea_trades]
-                        
-                        # Inicializar la key del multiselect si no existe o sincronizar con estado compartido
+                        # Inicializar la key del multiselect solo si no existe
                         if 'multiselect_ea_trades' not in st.session_state:
+                            # Filtrar las opciones seleccionadas que existen en este tab
+                            seleccion_validas_trades = [s for s in st.session_state.estrategias_seleccionadas_analisis if s in opciones_ea_trades]
                             st.session_state.multiselect_ea_trades = seleccion_validas_trades
-                        else:
-                            # Mantener las selecciones que siguen siendo válidas y agregar las nuevas del estado compartido
-                            actuales_validas = [s for s in st.session_state.multiselect_ea_trades if s in opciones_ea_trades]
-                            nuevas_del_compartido = [s for s in seleccion_validas_trades if s not in actuales_validas]
-                            st.session_state.multiselect_ea_trades = actuales_validas + nuevas_del_compartido
+                        
+                        # Filtrar solo las selecciones válidas del multiselect (respeta eliminaciones del usuario)
+                        seleccion_actual_trades = [s for s in st.session_state.multiselect_ea_trades if s in opciones_ea_trades]
                         
                         # Selector múltiple de EAs (compartido entre ambos tabs)
                         # No usar default, dejar que Streamlit use el valor de session_state[key]
@@ -4338,8 +4338,14 @@ with tab1:
                             help="Selecciona una o más estrategias para ver sus trades individuales."
                         )
                         
-                        # Actualizar estado compartido
-                        st.session_state.estrategias_seleccionadas_analisis = estrategias_seleccionadas_trades
+                        # Actualizar estado compartido: combinar con las del otro tab
+                        if 'multiselect_ea_mes' in st.session_state:
+                            # Usar las selecciones del otro tab directamente (ya están filtradas por sus opciones)
+                            otras_validas = st.session_state.multiselect_ea_mes
+                            todas_selecciones = list(set(estrategias_seleccionadas_trades + otras_validas))
+                            st.session_state.estrategias_seleccionadas_analisis = todas_selecciones
+                        else:
+                            st.session_state.estrategias_seleccionadas_analisis = estrategias_seleccionadas_trades
                         
                         # Función para mostrar trades de una EA
                         def mostrar_trades_ea(ea, symbol, grupo):
