@@ -2484,6 +2484,10 @@ st.markdown("""
     .st-dv {
         background-color: white !important;
     }
+
+    .st-dv.st-fv {
+        background-color: #495057 !important;
+    }
     
     .stDataFrame table {
         background-color: white !important;
@@ -3560,7 +3564,6 @@ with tab1:
                                     value=(fecha_min_disponible, fecha_max_disponible),
                                     min_value=fecha_min_disponible,
                                     max_value=fecha_max_disponible,
-                                    help="Selecciona un rango de fechas para filtrar las estadísticas combinadas"
                                 )
                                 # Manejar el caso cuando date_input devuelve None o una tupla
                                 if fecha_seleccionada is None:
