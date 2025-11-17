@@ -2406,7 +2406,6 @@ st.markdown("""
     /* Estilos para gráficos de Plotly - forzar tema claro */
     .stPlotlyChart {
         border-radius: 0.75rem !important;
-        border: 1px solid #e9ecef !important;
         box-sizing: border-box !important;
     }
     
@@ -3990,7 +3989,7 @@ with tab1:
                                             
                                             if activos_con_multiples:
                                                 st.markdown("""
-                                                <div style="margin-top: 2rem; margin-bottom: 1rem;">
+                                                <div style="margin-top: 2rem; margin-bottom: 2.5rem;">
                                                     <h4>Matriz de Correlación de Timing y Dirección de Entrada</h4>
                                                     <p style="color: #6c757d; font-size: 0.9em;">Matriz de correlación entre estrategias del mismo activo basada en timing de entrada (hora del día, día de la semana) y dirección de operación (Buy/Sell). Valores cercanos a 1 indican que las estrategias tienen comportamientos similares (o inversos), valores cercanos a 0 indican comportamientos independientes.</p>
                                                     <p style="color: #6c757d; font-size: 0.85em; font-style: italic;">Nota: La correlación se calcula comparando el timing de entrada y la dirección de operación (dentro de 7 días), usando el valor absoluto para mostrar solo valores entre 0 y 1. "N/A" aparece cuando no hay suficientes trades coincidentes (mínimo 3 puntos).</p>
@@ -4128,10 +4127,13 @@ with tab1:
                                                     
                                                     fig_heatmap.update_layout(
                                                         title=f"Matriz de Correlación - {activo.upper()}",
-                                                        xaxis_title="Estrategia (Columna)",
-                                                        yaxis_title="Estrategia (Fila)",
                                                         width=600,
-                                                        height=600
+                                                        height=600,
+                                                        margin=dict(l=80, r=20, t=60, b=60),  # Margen izquierdo más amplio para separar del borde
+                                                        plot_bgcolor='#f8f9fa',  # Fondo del área del gráfico
+                                                        paper_bgcolor='#f8f9fa',  # Fondo del papel/contenedor
+                                                        xaxis=dict(showgrid=False, zeroline=False, showline=False),  # Quitar líneas y bordes del eje X
+                                                        yaxis=dict(showgrid=False, zeroline=False, showline=False)   # Quitar líneas y bordes del eje Y
                                                     )
                                                     
                                                     st.plotly_chart(fig_heatmap, use_container_width=True)
@@ -4565,7 +4567,7 @@ with tab1:
                                             
                                             if activos_con_multiples:
                                                 st.markdown("""
-                                                <div style="margin-top: 2rem; margin-bottom: 1rem;">
+                                                <div style="margin-top: 2rem; margin-bottom: 2.5rem;">
                                                     <h4>Matriz de Correlación de Timing y Dirección de Entrada</h4>
                                                     <p style="color: #6c757d; font-size: 0.9em;">Matriz de correlación entre estrategias del mismo activo basada en timing de entrada (hora del día, día de la semana) y dirección de operación (Buy/Sell). Valores cercanos a 1 indican que las estrategias tienen comportamientos similares (o inversos), valores cercanos a 0 indican comportamientos independientes.</p>
                                                     <p style="color: #6c757d; font-size: 0.85em; font-style: italic;">Nota: La correlación se calcula comparando el timing de entrada y la dirección de operación (dentro de 7 días), usando el valor absoluto para mostrar solo valores entre 0 y 1. "N/A" aparece cuando no hay suficientes trades coincidentes (mínimo 3 puntos).</p>
@@ -4703,10 +4705,13 @@ with tab1:
                                                     
                                                     fig_heatmap.update_layout(
                                                         title=f"Matriz de Correlación - {activo.upper()}",
-                                                        xaxis_title="Estrategia (Columna)",
-                                                        yaxis_title="Estrategia (Fila)",
                                                         width=600,
-                                                        height=600
+                                                        height=600,
+                                                        margin=dict(l=80, r=20, t=60, b=60),  # Margen izquierdo más amplio para separar del borde
+                                                        plot_bgcolor='#f8f9fa',  # Fondo del área del gráfico
+                                                        paper_bgcolor='#f8f9fa',  # Fondo del papel/contenedor
+                                                        xaxis=dict(showgrid=False, zeroline=False, showline=False),  # Quitar líneas y bordes del eje X
+                                                        yaxis=dict(showgrid=False, zeroline=False, showline=False)   # Quitar líneas y bordes del eje Y
                                                     )
                                                     
                                                     st.plotly_chart(fig_heatmap, use_container_width=True)
