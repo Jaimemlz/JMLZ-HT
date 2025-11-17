@@ -2891,9 +2891,9 @@ is_admin = st.session_state.user_rank == "admin"
 
 # Crear tabs según si es admin o no
 if is_admin:
-    tab1, tab2, tab3, tab4 = st.tabs(["Análisis", "Descuentos", "Ranking", "Administración"])
+    tab1, tab4 = st.tabs(["Análisis", "Administración"])
 else:
-    tab1, tab2, tab3 = st.tabs(["Análisis", "Descuentos", "Ranking"])
+    tab1, = st.tabs(["Análisis"])
 
 # Contenedor principal
 st.markdown('<div class="main-container">', unsafe_allow_html=True)
@@ -5671,940 +5671,938 @@ def generar_promo_html(promo):
     
     return f'<div class="promo-card-full" style="cursor:pointer;"><div class="promo-image-section"><img src="{promo["logo"]}" alt="{promo["nombre"]}" class="promo-main-logo"></div><div class="promo-content-section"><div class="promo-info"><div class="promo-discount">{promo["descuento"]}</div><div class="promo-code"><span>Código: </span><code id="{promo["id"]}-code">{promo["codigo"]}</code><button class="copy-btn" onclick="copyCode(\'{promo["id"]}-code\')">📋</button></div></div><div class="promo-actions">{timer_html}<a href="{promo["url"]}" target="_blank" class="promo-link"></a></div></div></div>'
 
-# Tab de Prop Firms
-with tab2:
+# Tab de Prop Firms (oculto)
+# with tab2:
+#     # Generar promociones dinámicamente desde el array
+#     for promo in promociones:
+#         st.markdown(generar_promo_html(promo), unsafe_allow_html=True)
 
+# Tab de Ranking (oculto)
+# with tab3:
+#     # Crear tabs anidados dentro del tab 3
+#     ranking_sub_tab1, ranking_sub_tab2 = st.tabs(["Ranking", "Añadir Cobro"])
     
-    # Generar promociones dinámicamente desde el array
-    for promo in promociones:
-        st.markdown(generar_promo_html(promo), unsafe_allow_html=True)
-
-# Tab de Ranking
-with tab3:
-    # Crear tabs anidados dentro del tab 3
-    ranking_sub_tab1, ranking_sub_tab2 = st.tabs(["Ranking", "Añadir Cobro"])
-    
-    with ranking_sub_tab1:
+    #with ranking_sub_tab1:
         # Selector de mes con navegación usando Streamlit
-        if 'selected_month' not in st.session_state:
-            st.session_state.selected_month = 0  # 0 = mes actual
+        #if 'selected_month' not in st.session_state:
+            #st.session_state.selected_month = 0  # 0 = mes actual
         
         # Obtener fecha actual
-        from datetime import datetime, timedelta
-        current_date = datetime.now()
-        target_date = current_date + timedelta(days=30 * st.session_state.selected_month)
+        #from datetime import datetime, timedelta
+        #current_date = datetime.now()
+        #target_date = current_date + timedelta(days=30 * st.session_state.selected_month)
         
-        month_names = [
-            "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-            "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
-        ]
+        #month_names = [
+            #"Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+            #"Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+        #]
         
         # Crear layout para el selector de mes
-        col_prev, col_month, col_next = st.columns([1, 3, 1])
+        #col_prev, col_month, col_next = st.columns([1, 3, 1])
         
-        with col_prev:
-            st.markdown("""
-            <div style="display: flex; align-items: center; justify-content: flex-end; height: 100%; width: 100%;">
-            """, unsafe_allow_html=True)
-            if st.button("←", key="prev_month", help="Mes anterior"):
-                st.session_state.selected_month -= 1
-                st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
+        #with col_prev:
+            #st.markdown("""
+            #<div style="display: flex; align-items: center; justify-content: flex-end; height: 100%; width: 100%;">
+            #""", unsafe_allow_html=True)
+            #if st.button("←", key="prev_month", help="Mes anterior"):
+                #st.session_state.selected_month -= 1
+                #st.rerun()
+            #st.markdown("</div>", unsafe_allow_html=True)
         
-        with col_month:
-            month_name = month_names[target_date.month - 1]
-            year = target_date.year
-            st.markdown(f"""
-            <div class="card-month"><h2>{month_name} {year}</h2></div>
-            """, unsafe_allow_html=True)
+        #with col_month:
+            #month_name = month_names[target_date.month - 1]
+            #year = target_date.year
+            #st.markdown(f"""
+            #<div class="card-month"><h2>{month_name} {year}</h2></div>
+            #""", unsafe_allow_html=True)
         
-        with col_next:
-            st.markdown("""
-            <div style="display: flex; align-items: center; justify-content: center; height: 100%;">
-            """, unsafe_allow_html=True)
-            if st.button("→", key="next_month", help="Mes siguiente"):
-                st.session_state.selected_month += 1
-                st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
+        #with col_next:
+            #st.markdown("""
+            #<div style="display: flex; align-items: center; justify-content: center; height: 100%;">
+            #""", unsafe_allow_html=True)
+            #if st.button("→", key="next_month", help="Mes siguiente"):
+                #st.session_state.selected_month += 1
+                #st.rerun()
+            #st.markdown("</div>", unsafe_allow_html=True)
         
         # Obtener datos del backend con indicador de carga
-        with st.spinner("Cargando datos del ranking..."):
-            payouts_data = get_payouts_from_api()
-            users_data = get_users_from_api()
+        #with st.spinner("Cargando datos del ranking..."):
+            #payouts_data = get_payouts_from_api()
+            #users_data = get_users_from_api()
         
         # Validar que los datos estén disponibles
-        if not payouts_data or not isinstance(payouts_data, list):
-            st.warning("⚠️ No se pudieron cargar los datos de payouts. Por favor, verifica la conexión con el backend.")
-            st.stop()
+        #if not payouts_data or not isinstance(payouts_data, list):
+            #st.warning("⚠️ No se pudieron cargar los datos de payouts. Por favor, verifica la conexión con el backend.")
+            #st.stop()
         
-        if not users_data or not isinstance(users_data, list):
-            st.warning("⚠️ No se pudieron cargar los datos de usuarios. Por favor, verifica la conexión con el backend.")
-            st.stop()
+        #if not users_data or not isinstance(users_data, list):
+            #st.warning("⚠️ No se pudieron cargar los datos de usuarios. Por favor, verifica la conexión con el backend.")
+            #st.stop()
         
         # Crear rankings separados por rango
-        global_ranking = create_monthly_payout_ranking(payouts_data, users_data, st.session_state.selected_month)
-        gold_ranking = create_monthly_payout_ranking(payouts_data, users_data, st.session_state.selected_month, 'gold')
-        silver_ranking = create_monthly_payout_ranking(payouts_data, users_data, st.session_state.selected_month, 'silver')
+        #global_ranking = create_monthly_payout_ranking(payouts_data, users_data, st.session_state.selected_month)
+        #gold_ranking = create_monthly_payout_ranking(payouts_data, users_data, st.session_state.selected_month, 'gold')
+        #silver_ranking = create_monthly_payout_ranking(payouts_data, users_data, st.session_state.selected_month, 'silver')
         
         # Crear tres columnas para los paneles de ranking (responsive)
-        col1, col2, col3 = st.columns([1, 1, 1])
+        #col1, col2, col3 = st.columns([1, 1, 1])
         
-        with col1:
+        #with col1:
             # Crear columnas para título y botón
-            title_col, share_col = st.columns([4, 1])
+            #title_col, share_col = st.columns([4, 1])
             
-            with title_col:
-                st.markdown("""
-                <div class="card ranking-panel">
-                    <div class="card-title">🌍 Ranking Global</div>
-                </div>
-                """, unsafe_allow_html=True)
+            #with title_col:
+                #st.markdown("""
+                #<div class="card ranking-panel">
+                    #<div class="card-title">🌍 Ranking Global</div>
+                #</div>
+                #""", unsafe_allow_html=True)
             
-            with share_col:
+            #with share_col:
                 # Preparar datos del ranking
-                ranking_data = []
-                if not global_ranking.empty:
-                    for _, row in global_ranking.head(10).iterrows():
-                        ranking_data.append((
-                            row['position'],
-                            row['name'],
-                            row['total_payout_formatted']
-                        ))
+                #ranking_data = []
+                #if not global_ranking.empty:
+                    #for _, row in global_ranking.head(10).iterrows():
+                        #ranking_data.append((
+                            #row['position'],
+                            #row['name'],
+                            #row['total_payout_formatted']
+                        #))
                 
                 # Función para generar imagen
-                def generate_ranking_image(ranking_data):
-                    from PIL import Image, ImageDraw, ImageFont
-                    import io
+                #def generate_ranking_image(ranking_data):
+                    #from PIL import Image, ImageDraw, ImageFont
+                    #import io
                     
-                    width, height = 1080, 1920
-                    img = Image.new('RGB', (width, height), color='#ffffff')
-                    draw = ImageDraw.Draw(img)
+                    #width, height = 1080, 1920
+                    #img = Image.new('RGB', (width, height), color='#ffffff')
+                    #draw = ImageDraw.Draw(img)
                     
-                    try:
-                        title_font = ImageFont.truetype("Arial Bold", 80)
-                        subtitle_font = ImageFont.truetype("Arial", 50)
-                        name_font = ImageFont.truetype("Arial", 45)
-                        score_font = ImageFont.truetype("Arial Bold", 40)
-                        total_font = ImageFont.truetype("Arial Bold", 60)
-                        medal_font = ImageFont.truetype("Arial Bold", 50)
-                    except:
-                        title_font = ImageFont.load_default()
-                        subtitle_font = ImageFont.load_default()
-                        name_font = ImageFont.load_default()
-                        score_font = ImageFont.load_default()
-                        total_font = ImageFont.load_default()
-                        medal_font = ImageFont.load_default()
+                    #try:
+                        #title_font = ImageFont.truetype("Arial Bold", 80)
+                        #subtitle_font = ImageFont.truetype("Arial", 50)
+                        #name_font = ImageFont.truetype("Arial", 45)
+                        #score_font = ImageFont.truetype("Arial Bold", 40)
+                        #total_font = ImageFont.truetype("Arial Bold", 60)
+                        #medal_font = ImageFont.truetype("Arial Bold", 50)
+                    #except:
+                        #title_font = ImageFont.load_default()
+                        #subtitle_font = ImageFont.load_default()
+                        #name_font = ImageFont.load_default()
+                        #score_font = ImageFont.load_default()
+                        #total_font = ImageFont.load_default()
+                        #medal_font = ImageFont.load_default()
                     
                     # Logo y título
-                    try:
-                        logo = Image.open('logo.png')
-                        logo = logo.resize((100, 100), Image.Resampling.LANCZOS)  # Logo más grande
+                    #try:
+                        #logo = Image.open('logo.png')
+                        #logo = logo.resize((100, 100), Image.Resampling.LANCZOS)  # Logo más grande
                         
                         # Posicionar logo arriba del título, centrado
-                        logo_x = width//2 - 50  # Centrar el logo (100px de ancho / 2)
-                        logo_y = 60  # Posición más arriba
+                        #logo_x = width//2 - 50  # Centrar el logo (100px de ancho / 2)
+                        #logo_y = 60  # Posición más arriba
                         
                         # Pegar logo
-                        if logo.mode == 'RGBA':
-                            img.paste(logo, (logo_x, logo_y), logo)
-                        else:
-                            img.paste(logo, (logo_x, logo_y))
+                        #if logo.mode == 'RGBA':
+                            #img.paste(logo, (logo_x, logo_y), logo)
+                        #else:
+                            #img.paste(logo, (logo_x, logo_y))
                         
                         # Título centrado debajo del logo
-                        draw.text((width//2, 200), "IMOX CLUB", fill='#1a1a1a', font=title_font, anchor='mm')
+                        #draw.text((width//2, 200), "IMOX CLUB", fill='#1a1a1a', font=title_font, anchor='mm')
                         
-                    except FileNotFoundError:
+                    #except FileNotFoundError:
                         # Si no encuentra el logo, usar solo texto
-                        draw.text((width//2, 150), "IMOX CLUB", fill='#1a1a1a', font=title_font, anchor='mm')
+                        #draw.text((width//2, 150), "IMOX CLUB", fill='#1a1a1a', font=title_font, anchor='mm')
                     
                     # Mes del ranking
-                    target_date = datetime.now() + timedelta(days=30 * st.session_state.selected_month)
-                    month_name = target_date.strftime('%B %Y')
+                    #target_date = datetime.now() + timedelta(days=30 * st.session_state.selected_month)
+                    #month_name = target_date.strftime('%B %Y')
                     
                     # Traducir meses al español
-                    month_translations = {
-                        'January': 'Enero', 'February': 'Febrero', 'March': 'Marzo',
-                        'April': 'Abril', 'May': 'Mayo', 'June': 'Junio',
-                        'July': 'Julio', 'August': 'Agosto', 'September': 'Septiembre',
-                        'October': 'Octubre', 'November': 'Noviembre', 'December': 'Diciembre'
-                    }
+                    #month_translations = {
+                        #'January': 'Enero', 'February': 'Febrero', 'March': 'Marzo',
+                        #'April': 'Abril', 'May': 'Mayo', 'June': 'Junio',
+                        #'July': 'Julio', 'August': 'Agosto', 'September': 'Septiembre',
+                        #'October': 'Octubre', 'November': 'Noviembre', 'December': 'Diciembre'
+                    #}
                     
-                    month_spanish = month_translations.get(target_date.strftime('%B'), target_date.strftime('%B'))
-                    month_text = f"{month_spanish} {target_date.year}"
+                    #month_spanish = month_translations.get(target_date.strftime('%B'), target_date.strftime('%B'))
+                    #month_text = f"{month_spanish} {target_date.year}"
                     
-                    draw.text((width//2, 270), month_text, fill='black', font=subtitle_font, anchor='mm')
+                    #draw.text((width//2, 270), month_text, fill='black', font=subtitle_font, anchor='mm')
                     
                     # Ranking con símbolos que PIL puede renderizar
-                    medals = {
-                        1: '1°', 2: '2°', 3: '3°', 4: '4°', 5: '5°', 
-                        6: '6°', 7: '7°', 8: '8°', 9: '9°', 10: '10°'
-                    }
+                    #medals = {
+                        #1: '1°', 2: '2°', 3: '3°', 4: '4°', 5: '5°', 
+                        #6: '6°', 7: '7°', 8: '8°', 9: '9°', 10: '10°'
+                    #}
                     
-                    for i, (position, name, score) in enumerate(ranking_data[:10]):
-                        y_pos = 400 + i * 140
+                    #for i, (position, name, score) in enumerate(ranking_data[:10]):
+                        #y_pos = 400 + i * 140
                         
                         # Fondo redondeado para cada fila
-                        draw.rounded_rectangle([50, y_pos-50, width-50, y_pos+50], radius=15, fill='#f8f9fa', outline='#dee2e6', width=2)
+                        #draw.rounded_rectangle([50, y_pos-50, width-50, y_pos+50], radius=15, fill='#f8f9fa', outline='#dee2e6', width=2)
                         
                         # Medalla con símbolos simples en negro
-                        medal = medals.get(position, f"{position}°")
-                        draw.text((100, y_pos), medal, fill='#000000', font=medal_font, anchor='mm')
+                        #medal = medals.get(position, f"{position}°")
+                        #draw.text((100, y_pos), medal, fill='#000000', font=medal_font, anchor='mm')
                         
                         # Nombre
-                        draw.text((200, y_pos), name, fill='#1a1a1a', font=name_font, anchor='lm')
+                        #draw.text((200, y_pos), name, fill='#1a1a1a', font=name_font, anchor='lm')
                         
                         # Score formateado con $ al final y sin centavos, usando punto como separador de miles
-                        score_value = float(score.replace('$', '').replace(',', ''))
-                        score_formatted = f"{score_value:,.0f}$".replace(',', '.')
-                        draw.text((width-100, y_pos), score_formatted, fill='#28a745', font=score_font, anchor='rm')
+                        #score_value = float(score.replace('$', '').replace(',', ''))
+                        #score_formatted = f"{score_value:,.0f}$".replace(',', '.')
+                        #draw.text((width-100, y_pos), score_formatted, fill='#28a745', font=score_font, anchor='rm')
                     
                     # Total generado al final con $ al final y sin centavos, usando punto como separador de miles
-                    if not global_ranking.empty:
-                        total_amount = sum([float(row['total_payout']) for _, row in global_ranking.head(10).iterrows()])
-                        total_text = f"Total: {total_amount:,.0f}$".replace(',', '.')
-                        draw.text((width//2, height-150), total_text, fill='#1a1a1a', font=total_font, anchor='mm')
+                    #if not global_ranking.empty:
+                        #total_amount = sum([float(row['total_payout']) for _, row in global_ranking.head(10).iterrows()])
+                        #total_text = f"Total: {total_amount:,.0f}$".replace(',', '.')
+                        #draw.text((width//2, height-150), total_text, fill='#1a1a1a', font=total_font, anchor='mm')
                     
                     # Marca de agua
-                    draw.text((width//2, height-50), "@imoxtrading", fill='#999999', font=subtitle_font, anchor='mm')
+                    #draw.text((width//2, height-50), "@imoxtrading", fill='#999999', font=subtitle_font, anchor='mm')
                     
-                    return img
+                    #return img
                 
                 # Generar imagen
-                img = generate_ranking_image(ranking_data)
-                buffer = io.BytesIO()
-                img.save(buffer, format='PNG')
-                buffer.seek(0)
+                #img = generate_ranking_image(ranking_data)
+                #buffer = io.BytesIO()
+                #img.save(buffer, format='PNG')
+                #buffer.seek(0)
                 
                 # UN SOLO BOTÓN que descarga directamente
-                try:
+                #try:
                     # Cargar el icono personalizado
-                    icon = Image.open('downloadIcon.png')
-                    icon = icon.resize((32, 32), Image.Resampling.LANCZOS)
+                    #icon = Image.open('downloadIcon.png')
+                    #icon = icon.resize((32, 32), Image.Resampling.LANCZOS)
                     
                     # Convertir a base64 para usar en el botón
-                    import base64
-                    buffer_icon = io.BytesIO()
-                    icon.save(buffer_icon, format='PNG')
-                    buffer_icon.seek(0)
-                    icon_base64 = base64.b64encode(buffer_icon.getvalue()).decode()
+                    #import base64
+                    #buffer_icon = io.BytesIO()
+                    #icon.save(buffer_icon, format='PNG')
+                    #buffer_icon.seek(0)
+                    #icon_base64 = base64.b64encode(buffer_icon.getvalue()).decode()
                     
                     # Usar st.download_button con el icono como texto
-                    st.download_button(
-                        f"![Icon](data:image/png;base64,{icon_base64})",
-                        data=buffer.getvalue(),
-                        file_name=f"ranking_global_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
-                        mime="image/png",
-                        key="share_global",
-                        help="Compartir ranking en Instagram",
-                        use_container_width=True
-                    )
+                    #st.download_button(
+                        #f"![Icon](data:image/png;base64,{icon_base64})",
+                        #data=buffer.getvalue(),
+                        #file_name=f"ranking_global_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                        #mime="image/png",
+                        #key="share_global",
+                        #help="Compartir ranking en Instagram",
+                        #use_container_width=True
+                    #)
                     
-                except FileNotFoundError:
+                #except FileNotFoundError:
                     # Si no encuentra el icono, usar el botón normal
-                    st.download_button(
-                        "📥",
-                        data=buffer.getvalue(),
-                        file_name=f"ranking_global_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
-                        mime="image/png",
-                        key="share_global",
-                        help="Compartir ranking en Instagram",
-                        use_container_width=True
-                    )
+                    #st.download_button(
+                        #"📥",
+                        #data=buffer.getvalue(),
+                        #file_name=f"ranking_global_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                        #mime="image/png",
+                        #key="share_global",
+                        #help="Compartir ranking en Instagram",
+                        #use_container_width=True
+                    #)
             
-            if not global_ranking.empty:
+            #if not global_ranking.empty:
                 # Crear expanders para cada usuario en el ranking
-                for _, row in global_ranking.iterrows():
-                    position = row['position']
-                    name = row['name']
-                    total_payout = row['total_payout_formatted']
-                    num_payouts = row['num_payouts']
+                #for _, row in global_ranking.iterrows():
+                    #position = row['position']
+                    #name = row['name']
+                    #total_payout = row['total_payout_formatted']
+                    #num_payouts = row['num_payouts']
                     
                     # Medalla según posición
-                    medal = ('🥇' if position == 1 else 
-                             '🥈' if position == 2 else 
-                             '🥉' if position == 3 else 
-                             '➃' if position == 4 else
-                             '➄' if position == 5 else
-                             '➅' if position == 6 else
-                             '➆' if position == 7 else
-                             '➇' if position == 8 else
-                             '➈' if position == 9 else
-                             '➉' if position == 10 else
-                             f"{position}.")
+                    #medal = ('🥇' if position == 1 else 
+                             #'🥈' if position == 2 else 
+                             #'🥉' if position == 3 else 
+                             #'➃' if position == 4 else
+                             #'➄' if position == 5 else
+                             #'➅' if position == 6 else
+                             #'➆' if position == 7 else
+                             #'➇' if position == 8 else
+                             #'➈' if position == 9 else
+                             #'➉' if position == 10 else
+                             #f"{position}.")
                     
                     # Obtener payouts detallados del usuario
-                    user_payouts = [p for p in payouts_data if p['nick'] == row['nick'] and p['fecha_payout']]
+                    #user_payouts = [p for p in payouts_data if p['nick'] == row['nick'] and p['fecha_payout']]
                     
                     # Filtrar por mes seleccionado
-                    target_date = datetime.now() + timedelta(days=30 * st.session_state.selected_month)
-                    target_year = target_date.year
-                    target_month = target_date.month
+                    #target_date = datetime.now() + timedelta(days=30 * st.session_state.selected_month)
+                    #target_year = target_date.year
+                    #target_month = target_date.month
                     
-                    monthly_payouts = []
-                    for payout in user_payouts:
-                        payout_date = datetime.fromisoformat(payout['fecha_payout'].replace('Z', '+00:00'))
-                        if payout_date.year == target_year and payout_date.month == target_month:
-                            monthly_payouts.append(payout)
+                    #monthly_payouts = []
+                    #for payout in user_payouts:
+                        #payout_date = datetime.fromisoformat(payout['fecha_payout'].replace('Z', '+00:00'))
+                        #if payout_date.year == target_year and payout_date.month == target_month:
+                            #monthly_payouts.append(payout)
                     
                     # Crear expander para el usuario
-                    with st.expander(f"{medal} {name} - {total_payout} ({num_payouts} payouts)", expanded=False):
-                        if monthly_payouts:
+                    #with st.expander(f"{medal} {name} - {total_payout} ({num_payouts} payouts)", expanded=False):
+                        #if monthly_payouts:
                             # Crear DataFrame con los payouts detallados
-                            payouts_df = pd.DataFrame(monthly_payouts)
-                            payouts_df['fecha_payout'] = pd.to_datetime(payouts_df['fecha_payout'])
-                            payouts_df = payouts_df.sort_values('fecha_payout')
+                            #payouts_df = pd.DataFrame(monthly_payouts)
+                            #payouts_df['fecha_payout'] = pd.to_datetime(payouts_df['fecha_payout'])
+                            #payouts_df = payouts_df.sort_values('fecha_payout')
                             
                             # Seleccionar y renombrar columnas
-                            display_df = payouts_df[['fecha_payout', 'payout', 'herramienta']].copy()
-                            display_df.columns = ['Fecha', 'Monto', 'Herramienta']
-                            display_df['Fecha'] = display_df['Fecha'].dt.strftime('%d/%m/%Y')
-                            display_df['Monto'] = display_df['Monto'].apply(lambda x: f"${float(x):,.2f}")
+                            #display_df = payouts_df[['fecha_payout', 'payout', 'herramienta']].copy()
+                            #display_df.columns = ['Fecha', 'Monto', 'Herramienta']
+                            #display_df['Fecha'] = display_df['Fecha'].dt.strftime('%d/%m/%Y')
+                            #display_df['Monto'] = display_df['Monto'].apply(lambda x: f"${float(x):,.2f}")
                             
-                            st.dataframe(display_df, use_container_width=True, hide_index=True)
-                        else:
-                            st.info("No hay payouts detallados para este mes")
+                            #st.dataframe(display_df, use_container_width=True, hide_index=True)
+                        #else:
+                            #st.info("No hay payouts detallados para este mes")
                 
                 # Mostrar estadísticas adicionales
-                total_payouts = global_ranking['total_payout'].sum()
+                #total_payouts = global_ranking['total_payout'].sum()
                 
-                st.markdown(f"""
-                <div class="ranking-total" style="background: white; padding: 1rem; border-radius: 8px; margin-top: 1rem;">
-                    <div style="display: flex; justify-content: space-between;">
-                        <span style="color: #6c757d;">Total:</span>
-                        <span style="font-weight: bold; color: #28a745;">${total_payouts:,.2f}</span>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown("""
-                <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin: 1rem; text-align: center;">
-                    <p style="color: #6c757d; font-size: 0.9rem; margin: 0;">
-                        No hay payouts para este mes
-                    </p>
-                </div>
-                """, unsafe_allow_html=True)
+                #st.markdown(f"""
+                #<div class="ranking-total" style="background: white; padding: 1rem; border-radius: 8px; margin-top: 1rem;">
+                    #<div style="display: flex; justify-content: space-between;">
+                        #<span style="color: #6c757d;">Total:</span>
+                        #<span style="font-weight: bold; color: #28a745;">${total_payouts:,.2f}</span>
+                    #</div>
+                #</div>
+                #""", unsafe_allow_html=True)
+            #else:
+                #st.markdown("""
+                #<div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin: 1rem; text-align: center;">
+                    #<p style="color: #6c757d; font-size: 0.9rem; margin: 0;">
+                        #No hay payouts para este mes
+                    #</p>
+                #</div>
+                #""", unsafe_allow_html=True)
             
-            st.markdown('</div></div>', unsafe_allow_html=True)
+            #st.markdown('</div></div>', unsafe_allow_html=True)
         
-        with col2:
+        #with col2:
             # Crear columnas para título y botón
-            title_col, share_col = st.columns([4, 1])
+            #title_col, share_col = st.columns([4, 1])
             
-            with title_col:
-                st.markdown("""
-                <div class="card ranking-panel">
-                    <div class="card-title">🥇 Ranking Gold</div>
-                </div>
-                """, unsafe_allow_html=True)
+            #with title_col:
+                #st.markdown("""
+                #<div class="card ranking-panel">
+                    #<div class="card-title">🥇 Ranking Gold</div>
+                #</div>
+                #""", unsafe_allow_html=True)
             
-            with share_col:
+            #with share_col:
                 # Preparar datos del ranking Gold
-                gold_ranking_data = []
-                if not gold_ranking.empty:
-                    for _, row in gold_ranking.head(10).iterrows():
-                        gold_ranking_data.append((
-                            row['position'],
-                            row['name'],
-                            row['total_payout_formatted']
-                        ))
+                #gold_ranking_data = []
+                #if not gold_ranking.empty:
+                    #for _, row in gold_ranking.head(10).iterrows():
+                        #gold_ranking_data.append((
+                            #row['position'],
+                            #row['name'],
+                            #row['total_payout_formatted']
+                        #))
                 
                 # Función para generar imagen Gold
-                def generate_gold_ranking_image(ranking_data):
-                    from PIL import Image, ImageDraw, ImageFont
-                    import io
+                #def generate_gold_ranking_image(ranking_data):
+                    #from PIL import Image, ImageDraw, ImageFont
+                    #import io
                     
-                    width, height = 1080, 1920
-                    img = Image.new('RGB', (width, height), color='#ffffff')
-                    draw = ImageDraw.Draw(img)
+                    #width, height = 1080, 1920
+                    #img = Image.new('RGB', (width, height), color='#ffffff')
+                    #draw = ImageDraw.Draw(img)
                     
-                    try:
-                        title_font = ImageFont.truetype("Arial Bold", 80)
-                        subtitle_font = ImageFont.truetype("Arial", 50)
-                        name_font = ImageFont.truetype("Arial", 45)
-                        score_font = ImageFont.truetype("Arial Bold", 40)
-                        total_font = ImageFont.truetype("Arial Bold", 60)
-                        medal_font = ImageFont.truetype("Arial Bold", 50)
-                    except:
-                        title_font = ImageFont.load_default()
-                        subtitle_font = ImageFont.load_default()
-                        name_font = ImageFont.load_default()
-                        score_font = ImageFont.load_default()
-                        total_font = ImageFont.load_default()
-                        medal_font = ImageFont.load_default()
+                    #try:
+                        #title_font = ImageFont.truetype("Arial Bold", 80)
+                        #subtitle_font = ImageFont.truetype("Arial", 50)
+                        #name_font = ImageFont.truetype("Arial", 45)
+                        #score_font = ImageFont.truetype("Arial Bold", 40)
+                        #total_font = ImageFont.truetype("Arial Bold", 60)
+                        #medal_font = ImageFont.truetype("Arial Bold", 50)
+                    #except:
+                        #title_font = ImageFont.load_default()
+                        #subtitle_font = ImageFont.load_default()
+                        #name_font = ImageFont.load_default()
+                        #score_font = ImageFont.load_default()
+                        #total_font = ImageFont.load_default()
+                        #medal_font = ImageFont.load_default()
                     
                     # Logo y título
-                    try:
-                        logo = Image.open('logo.png')
-                        logo = logo.resize((100, 100), Image.Resampling.LANCZOS)
+                    #try:
+                        #logo = Image.open('logo.png')
+                        #logo = logo.resize((100, 100), Image.Resampling.LANCZOS)
                         
-                        logo_x = width//2 - 50
-                        logo_y = 60
+                        #logo_x = width//2 - 50
+                        #logo_y = 60
                         
-                        if logo.mode == 'RGBA':
-                            img.paste(logo, (logo_x, logo_y), logo)
-                        else:
-                            img.paste(logo, (logo_x, logo_y))
+                        #if logo.mode == 'RGBA':
+                            #img.paste(logo, (logo_x, logo_y), logo)
+                        #else:
+                            #img.paste(logo, (logo_x, logo_y))
                         
-                        draw.text((width//2, 200), "IMOX CLUB", fill='#1a1a1a', font=title_font, anchor='mm')
+                        #draw.text((width//2, 200), "IMOX CLUB", fill='#1a1a1a', font=title_font, anchor='mm')
                         
-                    except FileNotFoundError:
-                        draw.text((width//2, 150), "IMOX CLUB", fill='#1a1a1a', font=title_font, anchor='mm')
+                    #except FileNotFoundError:
+                        #draw.text((width//2, 150), "IMOX CLUB", fill='#1a1a1a', font=title_font, anchor='mm')
                     
                     # Mes del ranking
-                    target_date = datetime.now() + timedelta(days=30 * st.session_state.selected_month)
-                    month_translations = {
-                        'January': 'Enero', 'February': 'Febrero', 'March': 'Marzo',
-                        'April': 'Abril', 'May': 'Mayo', 'June': 'Junio',
-                        'July': 'Julio', 'August': 'Agosto', 'September': 'Septiembre',
-                        'October': 'Octubre', 'November': 'Noviembre', 'December': 'Diciembre'
-                    }
+                    #target_date = datetime.now() + timedelta(days=30 * st.session_state.selected_month)
+                    #month_translations = {
+                        #'January': 'Enero', 'February': 'Febrero', 'March': 'Marzo',
+                        #'April': 'Abril', 'May': 'Mayo', 'June': 'Junio',
+                        #'July': 'Julio', 'August': 'Agosto', 'September': 'Septiembre',
+                        #'October': 'Octubre', 'November': 'Noviembre', 'December': 'Diciembre'
+                    #}
                     
-                    month_spanish = month_translations.get(target_date.strftime('%B'), target_date.strftime('%B'))
-                    month_text = f"{month_spanish} {target_date.year} - GOLD"
+                    #month_spanish = month_translations.get(target_date.strftime('%B'), target_date.strftime('%B'))
+                    #month_text = f"{month_spanish} {target_date.year} - GOLD"
                     
-                    draw.text((width//2, 270), month_text, fill='#ffc107', font=subtitle_font, anchor='mm')
+                    #draw.text((width//2, 270), month_text, fill='#ffc107', font=subtitle_font, anchor='mm')
                     
                     # Ranking Gold
-                    medals = {1: '1°', 2: '2°', 3: '3°', 4: '4°', 5: '5°', 6: '6°', 7: '7°', 8: '8°', 9: '9°', 10: '10°'}
+                    #medals = {1: '1°', 2: '2°', 3: '3°', 4: '4°', 5: '5°', 6: '6°', 7: '7°', 8: '8°', 9: '9°', 10: '10°'}
                     
-                    for i, (position, name, score) in enumerate(ranking_data[:10]):
-                        y_pos = 400 + i * 140
+                    #for i, (position, name, score) in enumerate(ranking_data[:10]):
+                        #y_pos = 400 + i * 140
                         
-                        draw.rectangle([50, y_pos-50, width-50, y_pos+50], fill='#fff3cd', outline='#ffc107', width=2)
+                        #draw.rectangle([50, y_pos-50, width-50, y_pos+50], fill='#fff3cd', outline='#ffc107', width=2)
                         
-                        medal = medals.get(position, f"{position}°")
-                        draw.text((100, y_pos), medal, fill='#ffc107', font=medal_font, anchor='mm')
+                        #medal = medals.get(position, f"{position}°")
+                        #draw.text((100, y_pos), medal, fill='#ffc107', font=medal_font, anchor='mm')
                         
-                        draw.text((200, y_pos), name, fill='#1a1a1a', font=name_font, anchor='lm')
-                        draw.text((width-100, y_pos), score, fill='#28a745', font=score_font, anchor='rm')
-                        draw.line([(200, y_pos+30), (width-150, y_pos+30)], fill='#ffc107', width=1)
+                        #draw.text((200, y_pos), name, fill='#1a1a1a', font=name_font, anchor='lm')
+                        #draw.text((width-100, y_pos), score, fill='#28a745', font=score_font, anchor='rm')
+                        #draw.line([(200, y_pos+30), (width-150, y_pos+30)], fill='#ffc107', width=1)
                     
                     # Total Gold
-                    if not gold_ranking.empty:
-                        total_amount = sum([float(row['total_payout']) for _, row in gold_ranking.head(10).iterrows()])
-                        total_text = f"Total Gold: ${total_amount:,.2f}"
-                        draw.text((width//2, height-200), total_text, fill='#1a1a1a', font=total_font, anchor='mm')
+                    #if not gold_ranking.empty:
+                        #total_amount = sum([float(row['total_payout']) for _, row in gold_ranking.head(10).iterrows()])
+                        #total_text = f"Total Gold: ${total_amount:,.2f}"
+                        #draw.text((width//2, height-200), total_text, fill='#1a1a1a', font=total_font, anchor='mm')
                     
-                    draw.text((width//2, height-100), "@imoxhub", fill='#999999', font=subtitle_font, anchor='mm')
+                    #draw.text((width//2, height-100), "@imoxhub", fill='#999999', font=subtitle_font, anchor='mm')
                     
-                    return img
+                    #return img
                 
                 # Generar imagen Gold
-                gold_img = generate_gold_ranking_image(gold_ranking_data)
-                gold_buffer = io.BytesIO()
-                gold_img.save(gold_buffer, format='PNG')
-                gold_buffer.seek(0)
+                #gold_img = generate_gold_ranking_image(gold_ranking_data)
+                #gold_buffer = io.BytesIO()
+                #gold_img.save(gold_buffer, format='PNG')
+                #gold_buffer.seek(0)
                 
                 # Botón de descarga Gold
-                try:
-                    icon = Image.open('downloadIcon.png')
-                    icon = icon.resize((32, 32), Image.Resampling.LANCZOS)
+                #try:
+                    #icon = Image.open('downloadIcon.png')
+                    #icon = icon.resize((32, 32), Image.Resampling.LANCZOS)
                     
-                    import base64
-                    buffer_icon = io.BytesIO()
-                    icon.save(buffer_icon, format='PNG')
-                    buffer_icon.seek(0)
-                    icon_base64 = base64.b64encode(buffer_icon.getvalue()).decode()
+                    #import base64
+                    #buffer_icon = io.BytesIO()
+                    #icon.save(buffer_icon, format='PNG')
+                    #buffer_icon.seek(0)
+                    #icon_base64 = base64.b64encode(buffer_icon.getvalue()).decode()
                     
-                    st.download_button(
-                        f"![Icon](data:image/png;base64,{icon_base64})",
-                        data=gold_buffer.getvalue(),
-                        file_name=f"ranking_gold_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
-                        mime="image/png",
-                        key="share_gold",
-                        help="Compartir ranking Gold en Instagram",
-                        use_container_width=True
-                    )
+                    #st.download_button(
+                        #f"![Icon](data:image/png;base64,{icon_base64})",
+                        #data=gold_buffer.getvalue(),
+                        #file_name=f"ranking_gold_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                        #mime="image/png",
+                        #key="share_gold",
+                        #help="Compartir ranking Gold en Instagram",
+                        #use_container_width=True
+                    #)
                     
-                except FileNotFoundError:
-                    st.download_button(
-                        "📥",
-                        data=gold_buffer.getvalue(),
-                        file_name=f"ranking_gold_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
-                        mime="image/png",
-                        key="share_gold",
-                        help="Compartir ranking Gold en Instagram",
-                        use_container_width=True
-                    )
+                #except FileNotFoundError:
+                    #st.download_button(
+                        #"📥",
+                        #data=gold_buffer.getvalue(),
+                        #file_name=f"ranking_gold_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                        #mime="image/png",
+                        #key="share_gold",
+                        #help="Compartir ranking Gold en Instagram",
+                        #use_container_width=True
+                    #)
             
-            if not gold_ranking.empty:
+            #if not gold_ranking.empty:
                 # Crear expanders para cada usuario Gold
-                for _, row in gold_ranking.iterrows():
-                    position = row['position']
-                    name = row['name']
-                    total_payout = row['total_payout_formatted']
-                    num_payouts = row['num_payouts']
+                #for _, row in gold_ranking.iterrows():
+                    #position = row['position']
+                    #name = row['name']
+                    #total_payout = row['total_payout_formatted']
+                    #num_payouts = row['num_payouts']
                     
                     # Medalla según posición
-                    medal = ('🥇' if position == 1 else 
-                             '🥈' if position == 2 else 
-                             '🥉' if position == 3 else 
-                             '❶' if position == 4 else
-                             '❷' if position == 5 else
-                             '❸' if position == 6 else
-                             '❹' if position == 7 else
-                             '❺' if position == 8 else
-                             '❻' if position == 9 else
-                             '❼' if position == 10 else
-                             f"{position}.")
+                    #medal = ('🥇' if position == 1 else 
+                             #'🥈' if position == 2 else 
+                             #'🥉' if position == 3 else 
+                             #'❶' if position == 4 else
+                             #'❷' if position == 5 else
+                             #'❸' if position == 6 else
+                             #'❹' if position == 7 else
+                             #'❺' if position == 8 else
+                             #'❻' if position == 9 else
+                             #'❼' if position == 10 else
+                             #f"{position}.")
                     
                     # Obtener payouts detallados del usuario
-                    user_payouts = [p for p in payouts_data if p['nick'] == row['nick'] and p['fecha_payout']]
+                    #user_payouts = [p for p in payouts_data if p['nick'] == row['nick'] and p['fecha_payout']]
                     
                     # Filtrar por mes seleccionado
-                    target_date = datetime.now() + timedelta(days=30 * st.session_state.selected_month)
-                    target_year = target_date.year
-                    target_month = target_date.month
+                    #target_date = datetime.now() + timedelta(days=30 * st.session_state.selected_month)
+                    #target_year = target_date.year
+                    #target_month = target_date.month
                     
-                    monthly_payouts = []
-                    for payout in user_payouts:
-                        payout_date = datetime.fromisoformat(payout['fecha_payout'].replace('Z', '+00:00'))
-                        if payout_date.year == target_year and payout_date.month == target_month:
-                            monthly_payouts.append(payout)
+                    #monthly_payouts = []
+                    #for payout in user_payouts:
+                        #payout_date = datetime.fromisoformat(payout['fecha_payout'].replace('Z', '+00:00'))
+                        #if payout_date.year == target_year and payout_date.month == target_month:
+                            #monthly_payouts.append(payout)
                     
                     # Crear expander para el usuario
-                    with st.expander(f"{medal} {name} - {total_payout} ({num_payouts} payouts)", expanded=False):
-                        if monthly_payouts:
+                    #with st.expander(f"{medal} {name} - {total_payout} ({num_payouts} payouts)", expanded=False):
+                        #if monthly_payouts:
                             # Crear DataFrame con los payouts detallados
-                            payouts_df = pd.DataFrame(monthly_payouts)
-                            payouts_df['fecha_payout'] = pd.to_datetime(payouts_df['fecha_payout'])
-                            payouts_df = payouts_df.sort_values('fecha_payout')
+                            #payouts_df = pd.DataFrame(monthly_payouts)
+                            #payouts_df['fecha_payout'] = pd.to_datetime(payouts_df['fecha_payout'])
+                            #payouts_df = payouts_df.sort_values('fecha_payout')
                             
                             # Seleccionar y renombrar columnas
-                            display_df = payouts_df[['fecha_payout', 'payout', 'herramienta']].copy()
-                            display_df.columns = ['Fecha', 'Monto', 'Herramienta']
-                            display_df['Fecha'] = display_df['Fecha'].dt.strftime('%d/%m/%Y')
-                            display_df['Monto'] = display_df['Monto'].apply(lambda x: f"${float(x):,.2f}")
+                            #display_df = payouts_df[['fecha_payout', 'payout', 'herramienta']].copy()
+                            #display_df.columns = ['Fecha', 'Monto', 'Herramienta']
+                            #display_df['Fecha'] = display_df['Fecha'].dt.strftime('%d/%m/%Y')
+                            #display_df['Monto'] = display_df['Monto'].apply(lambda x: f"${float(x):,.2f}")
                             
-                            st.dataframe(display_df, use_container_width=True, hide_index=True)
-                        else:
-                            st.info("No hay payouts detallados para este mes")
+                            #st.dataframe(display_df, use_container_width=True, hide_index=True)
+                        #else:
+                            #st.info("No hay payouts detallados para este mes")
                 
                 # Mostrar estadísticas Gold
-                total_gold = gold_ranking['total_payout'].sum()
+                #total_gold = gold_ranking['total_payout'].sum()
                 
-                st.html(f"""
-                <div class="ranking-total" style="background: #fff3cd; padding: 1rem; border-radius: 8px; margin-top: 1rem; border-left: 7px solid #ffc107;">
-                    <div style="display: flex; justify-content: space-between;">
-                        <span style="color: #856404;">Total Gold:</span>
-                        <span style="font-weight: bold; color: #856404;">${total_gold:,.2f}</span>
-                    </div>
-                </div>
-                """)
-            else:
-                st.markdown("""
-                <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin: 1rem; text-align: center;">
-                    <p style="color: #6c757d; font-size: 0.9rem; margin: 0;">
-                        No hay usuarios Gold con payouts este mes
-                    </p>
-                </div>
-                """, unsafe_allow_html=True)
+                #st.html(f"""
+                #<div class="ranking-total" style="background: #fff3cd; padding: 1rem; border-radius: 8px; margin-top: 1rem; border-left: 7px solid #ffc107;">
+                    #<div style="display: flex; justify-content: space-between;">
+                        #<span style="color: #856404;">Total Gold:</span>
+                        #<span style="font-weight: bold; color: #856404;">${total_gold:,.2f}</span>
+                    #</div>
+                #</div>
+                #""")
+            #else:
+                #st.markdown("""
+                #<div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin: 1rem; text-align: center;">
+                    #<p style="color: #6c757d; font-size: 0.9rem; margin: 0;">
+                        #No hay usuarios Gold con payouts este mes
+                    #</p>
+                #</div>
+                #""", unsafe_allow_html=True)
             
-            st.markdown('</div></div>', unsafe_allow_html=True)
+            #st.markdown('</div></div>', unsafe_allow_html=True)
         
-        with col3:
+        #with col3:
             # Crear columnas para título y botón
-            title_col, share_col = st.columns([4, 1])
+            #title_col, share_col = st.columns([4, 1])
             
-            with title_col:
-                st.markdown("""
-                <div class="card ranking-panel">
-                    <div class="card-title">🥈 Ranking Silver</div>
-                </div>
-                """, unsafe_allow_html=True)
+            #with title_col:
+                #st.markdown("""
+                #<div class="card ranking-panel">
+                    #<div class="card-title">🥈 Ranking Silver</div>
+                #</div>
+                #""", unsafe_allow_html=True)
             
-            with share_col:
+            #with share_col:
                 # Preparar datos del ranking Silver
-                silver_ranking_data = []
-                if not silver_ranking.empty:
-                    for _, row in silver_ranking.head(10).iterrows():
-                        silver_ranking_data.append((
-                            row['position'],
-                            row['name'],
-                            row['total_payout_formatted']
-                        ))
+                #silver_ranking_data = []
+                #if not silver_ranking.empty:
+                    #for _, row in silver_ranking.head(10).iterrows():
+                        #silver_ranking_data.append((
+                            #row['position'],
+                            #row['name'],
+                            #row['total_payout_formatted']
+                        #))
                 
                 # Función para generar imagen Silver
-                def generate_silver_ranking_image(ranking_data):
-                    from PIL import Image, ImageDraw, ImageFont
-                    import io
+                #def generate_silver_ranking_image(ranking_data):
+                    #from PIL import Image, ImageDraw, ImageFont
+                    #import io
                     
-                    width, height = 1080, 1920
-                    img = Image.new('RGB', (width, height), color='#ffffff')
-                    draw = ImageDraw.Draw(img)
+                    #width, height = 1080, 1920
+                    #img = Image.new('RGB', (width, height), color='#ffffff')
+                    #draw = ImageDraw.Draw(img)
                     
-                    try:
-                        title_font = ImageFont.truetype("Arial Bold", 80)
-                        subtitle_font = ImageFont.truetype("Arial", 50)
-                        name_font = ImageFont.truetype("Arial", 45)
-                        score_font = ImageFont.truetype("Arial Bold", 40)
-                        total_font = ImageFont.truetype("Arial Bold", 60)
-                        medal_font = ImageFont.truetype("Arial Bold", 50)
-                    except:
-                        title_font = ImageFont.load_default()
-                        subtitle_font = ImageFont.load_default()
-                        name_font = ImageFont.load_default()
-                        score_font = ImageFont.load_default()
-                        total_font = ImageFont.load_default()
-                        medal_font = ImageFont.load_default()
+                    #try:
+                        #title_font = ImageFont.truetype("Arial Bold", 80)
+                        #subtitle_font = ImageFont.truetype("Arial", 50)
+                        #name_font = ImageFont.truetype("Arial", 45)
+                        #score_font = ImageFont.truetype("Arial Bold", 40)
+                        #total_font = ImageFont.truetype("Arial Bold", 60)
+                        #medal_font = ImageFont.truetype("Arial Bold", 50)
+                    #except:
+                        #title_font = ImageFont.load_default()
+                        #subtitle_font = ImageFont.load_default()
+                        #name_font = ImageFont.load_default()
+                        #score_font = ImageFont.load_default()
+                        #total_font = ImageFont.load_default()
+                        #medal_font = ImageFont.load_default()
                     
                     # Logo y título
-                    try:
-                        logo = Image.open('logo.png')
-                        logo = logo.resize((100, 100), Image.Resampling.LANCZOS)
+                    #try:
+                        #logo = Image.open('logo.png')
+                        #logo = logo.resize((100, 100), Image.Resampling.LANCZOS)
                         
-                        logo_x = width//2 - 50
-                        logo_y = 60
+                        #logo_x = width//2 - 50
+                        #logo_y = 60
                         
-                        if logo.mode == 'RGBA':
-                            img.paste(logo, (logo_x, logo_y), logo)
-                        else:
-                            img.paste(logo, (logo_x, logo_y))
+                        #if logo.mode == 'RGBA':
+                            #img.paste(logo, (logo_x, logo_y), logo)
+                        #else:
+                            #img.paste(logo, (logo_x, logo_y))
                         
-                        draw.text((width//2, 200), "IMOX CLUB", fill='#1a1a1a', font=title_font, anchor='mm')
+                        #draw.text((width//2, 200), "IMOX CLUB", fill='#1a1a1a', font=title_font, anchor='mm')
                         
-                    except FileNotFoundError:
-                        draw.text((width//2, 150), "IMOX CLUB", fill='#1a1a1a', font=title_font, anchor='mm')
+                    #except FileNotFoundError:
+                        #draw.text((width//2, 150), "IMOX CLUB", fill='#1a1a1a', font=title_font, anchor='mm')
                     
                     # Mes del ranking
-                    target_date = datetime.now() + timedelta(days=30 * st.session_state.selected_month)
-                    month_translations = {
-                        'January': 'Enero', 'February': 'Febrero', 'March': 'Marzo',
-                        'April': 'Abril', 'May': 'Mayo', 'June': 'Junio',
-                        'July': 'Julio', 'August': 'Agosto', 'September': 'Septiembre',
-                        'October': 'Octubre', 'November': 'Noviembre', 'December': 'Diciembre'
-                    }
+                    #target_date = datetime.now() + timedelta(days=30 * st.session_state.selected_month)
+                    #month_translations = {
+                        #'January': 'Enero', 'February': 'Febrero', 'March': 'Marzo',
+                        #'April': 'Abril', 'May': 'Mayo', 'June': 'Junio',
+                        #'July': 'Julio', 'August': 'Agosto', 'September': 'Septiembre',
+                        #'October': 'Octubre', 'November': 'Noviembre', 'December': 'Diciembre'
+                    #}
                     
-                    month_spanish = month_translations.get(target_date.strftime('%B'), target_date.strftime('%B'))
-                    month_text = f"{month_spanish} {target_date.year} - SILVER"
+                    #month_spanish = month_translations.get(target_date.strftime('%B'), target_date.strftime('%B'))
+                    #month_text = f"{month_spanish} {target_date.year} - SILVER"
                     
-                    draw.text((width//2, 270), month_text, fill='#6c757d', font=subtitle_font, anchor='mm')
+                    #draw.text((width//2, 270), month_text, fill='#6c757d', font=subtitle_font, anchor='mm')
                     
                     # Ranking Silver
-                    medals = {1: '1°', 2: '2°', 3: '3°', 4: '4°', 5: '5°', 6: '6°', 7: '7°', 8: '8°', 9: '9°', 10: '10°'}
+                    #medals = {1: '1°', 2: '2°', 3: '3°', 4: '4°', 5: '5°', 6: '6°', 7: '7°', 8: '8°', 9: '9°', 10: '10°'}
                     
-                    for i, (position, name, score) in enumerate(ranking_data[:10]):
-                        y_pos = 400 + i * 140
+                    #for i, (position, name, score) in enumerate(ranking_data[:10]):
+                        #y_pos = 400 + i * 140
                         
-                        draw.rectangle([50, y_pos-50, width-50, y_pos+50], fill='#f8f9fa', outline='#6c757d', width=2)
+                        #draw.rectangle([50, y_pos-50, width-50, y_pos+50], fill='#f8f9fa', outline='#6c757d', width=2)
                         
-                        medal = medals.get(position, f"{position}°")
-                        draw.text((100, y_pos), medal, fill='#6c757d', font=medal_font, anchor='mm')
+                        #medal = medals.get(position, f"{position}°")
+                        #draw.text((100, y_pos), medal, fill='#6c757d', font=medal_font, anchor='mm')
                         
-                        draw.text((200, y_pos), name, fill='#1a1a1a', font=name_font, anchor='lm')
-                        draw.text((width-100, y_pos), score, fill='#28a745', font=score_font, anchor='rm')
-                        draw.line([(200, y_pos+30), (width-150, y_pos+30)], fill='#6c757d', width=1)
+                        #draw.text((200, y_pos), name, fill='#1a1a1a', font=name_font, anchor='lm')
+                        #draw.text((width-100, y_pos), score, fill='#28a745', font=score_font, anchor='rm')
+                        #draw.line([(200, y_pos+30), (width-150, y_pos+30)], fill='#6c757d', width=1)
                     
                     # Total Silver
-                    if not silver_ranking.empty:
-                        total_amount = sum([float(row['total_payout']) for _, row in silver_ranking.head(10).iterrows()])
-                        total_text = f"Total Silver: ${total_amount:,.2f}"
-                        draw.text((width//2, height-200), total_text, fill='#1a1a1a', font=total_font, anchor='mm')
+                    #if not silver_ranking.empty:
+                        #total_amount = sum([float(row['total_payout']) for _, row in silver_ranking.head(10).iterrows()])
+                        #total_text = f"Total Silver: ${total_amount:,.2f}"
+                        #draw.text((width//2, height-200), total_text, fill='#1a1a1a', font=total_font, anchor='mm')
                     
-                    draw.text((width//2, height-100), "@imoxhub", fill='#999999', font=subtitle_font, anchor='mm')
+                    #draw.text((width//2, height-100), "@imoxhub", fill='#999999', font=subtitle_font, anchor='mm')
                     
-                    return img
+                    #return img
                 
                 # Generar imagen Silver
-                silver_img = generate_silver_ranking_image(silver_ranking_data)
-                silver_buffer = io.BytesIO()
-                silver_img.save(silver_buffer, format='PNG')
-                silver_buffer.seek(0)
+                #silver_img = generate_silver_ranking_image(silver_ranking_data)
+                #silver_buffer = io.BytesIO()
+                #silver_img.save(silver_buffer, format='PNG')
+                #silver_buffer.seek(0)
                 
                 # Botón de descarga Silver
-                try:
-                    icon = Image.open('downloadIcon.png')
-                    icon = icon.resize((32, 32), Image.Resampling.LANCZOS)
+                #try:
+                    #icon = Image.open('downloadIcon.png')
+                    #icon = icon.resize((32, 32), Image.Resampling.LANCZOS)
                     
-                    import base64
-                    buffer_icon = io.BytesIO()
-                    icon.save(buffer_icon, format='PNG')
-                    buffer_icon.seek(0)
-                    icon_base64 = base64.b64encode(buffer_icon.getvalue()).decode()
+                    #import base64
+                    #buffer_icon = io.BytesIO()
+                    #icon.save(buffer_icon, format='PNG')
+                    #buffer_icon.seek(0)
+                    #icon_base64 = base64.b64encode(buffer_icon.getvalue()).decode()
                     
-                    st.download_button(
-                        f"![Icon](data:image/png;base64,{icon_base64})",
-                        data=silver_buffer.getvalue(),
-                        file_name=f"ranking_silver_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
-                        mime="image/png",
-                        key="share_silver",
-                        help="Compartir ranking Silver en Instagram",
-                        use_container_width=True
-                    )
+                    #st.download_button(
+                        #f"![Icon](data:image/png;base64,{icon_base64})",
+                        #data=silver_buffer.getvalue(),
+                        #file_name=f"ranking_silver_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                        #mime="image/png",
+                        #key="share_silver",
+                        #help="Compartir ranking Silver en Instagram",
+                        #use_container_width=True
+                    #)
                     
-                except FileNotFoundError:
-                    st.download_button(
-                        "📥",
-                        data=silver_buffer.getvalue(),
-                        file_name=f"ranking_silver_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
-                        mime="image/png",
-                        key="share_silver",
-                        help="Compartir ranking Silver en Instagram",
-                        use_container_width=True
-                    )
+                #except FileNotFoundError:
+                    #st.download_button(
+                        #"📥",
+                        #data=silver_buffer.getvalue(),
+                        #file_name=f"ranking_silver_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                        #mime="image/png",
+                        #key="share_silver",
+                        #help="Compartir ranking Silver en Instagram",
+                        #use_container_width=True
+                    #)
             
-            if not silver_ranking.empty:
+            #if not silver_ranking.empty:
                 # Crear expanders para cada usuario Silver
-                for _, row in silver_ranking.iterrows():
-                    position = row['position']
-                    name = row['name']
-                    total_payout = row['total_payout_formatted']
-                    num_payouts = row['num_payouts']
+                #for _, row in silver_ranking.iterrows():
+                    #position = row['position']
+                    #name = row['name']
+                    #total_payout = row['total_payout_formatted']
+                    #num_payouts = row['num_payouts']
                     
                     # Medalla según posición
-                    medal = ('🥇' if position == 1 else 
-                             '🥈' if position == 2 else 
-                             '🥉' if position == 3 else 
-                             '❶' if position == 4 else
-                             '❷' if position == 5 else
-                             '❸' if position == 6 else
-                             '❹' if position == 7 else
-                             '❺' if position == 8 else
-                             '❻' if position == 9 else
-                             '❼' if position == 10 else
-                             f"{position}.")
+                    #medal = ('🥇' if position == 1 else 
+                             #'🥈' if position == 2 else 
+                             #'🥉' if position == 3 else 
+                             #'❶' if position == 4 else
+                             #'❷' if position == 5 else
+                             #'❸' if position == 6 else
+                             #'❹' if position == 7 else
+                             #'❺' if position == 8 else
+                             #'❻' if position == 9 else
+                             #'❼' if position == 10 else
+                             #f"{position}.")
                     
                     # Obtener payouts detallados del usuario
-                    user_payouts = [p for p in payouts_data if p['nick'] == row['nick'] and p['fecha_payout']]
+                    #user_payouts = [p for p in payouts_data if p['nick'] == row['nick'] and p['fecha_payout']]
                     
                     # Filtrar por mes seleccionado
-                    target_date = datetime.now() + timedelta(days=30 * st.session_state.selected_month)
-                    target_year = target_date.year
-                    target_month = target_date.month
+                    #target_date = datetime.now() + timedelta(days=30 * st.session_state.selected_month)
+                    #target_year = target_date.year
+                    #target_month = target_date.month
                     
-                    monthly_payouts = []
-                    for payout in user_payouts:
-                        payout_date = datetime.fromisoformat(payout['fecha_payout'].replace('Z', '+00:00'))
-                        if payout_date.year == target_year and payout_date.month == target_month:
-                            monthly_payouts.append(payout)
+                    #monthly_payouts = []
+                    #for payout in user_payouts:
+                        #payout_date = datetime.fromisoformat(payout['fecha_payout'].replace('Z', '+00:00'))
+                        #if payout_date.year == target_year and payout_date.month == target_month:
+                            #monthly_payouts.append(payout)
                     
                     # Crear expander para el usuario
-                    with st.expander(f"{medal} {name} - {total_payout} ({num_payouts} payouts)", expanded=False):
-                        if monthly_payouts:
+                    #with st.expander(f"{medal} {name} - {total_payout} ({num_payouts} payouts)", expanded=False):
+                        #if monthly_payouts:
                             # Crear DataFrame con los payouts detallados
-                            payouts_df = pd.DataFrame(monthly_payouts)
-                            payouts_df['fecha_payout'] = pd.to_datetime(payouts_df['fecha_payout'])
-                            payouts_df = payouts_df.sort_values('fecha_payout')
+                            #payouts_df = pd.DataFrame(monthly_payouts)
+                            #payouts_df['fecha_payout'] = pd.to_datetime(payouts_df['fecha_payout'])
+                            #payouts_df = payouts_df.sort_values('fecha_payout')
                             
                             # Seleccionar y renombrar columnas
-                            display_df = payouts_df[['fecha_payout', 'payout', 'herramienta']].copy()
-                            display_df.columns = ['Fecha', 'Monto', 'Herramienta']
-                            display_df['Fecha'] = display_df['Fecha'].dt.strftime('%d/%m/%Y')
-                            display_df['Monto'] = display_df['Monto'].apply(lambda x: f"${float(x):,.2f}")
+                            #display_df = payouts_df[['fecha_payout', 'payout', 'herramienta']].copy()
+                            #display_df.columns = ['Fecha', 'Monto', 'Herramienta']
+                            #display_df['Fecha'] = display_df['Fecha'].dt.strftime('%d/%m/%Y')
+                            #display_df['Monto'] = display_df['Monto'].apply(lambda x: f"${float(x):,.2f}")
                             
-                            st.dataframe(display_df, use_container_width=True, hide_index=True)
-                        else:
-                            st.info("No hay payouts detallados para este mes")
+                            #st.dataframe(display_df, use_container_width=True, hide_index=True)
+                        #else:
+                            #st.info("No hay payouts detallados para este mes")
                 
                 # Mostrar estadísticas Silver
-                total_silver = silver_ranking['total_payout'].sum()
+                #total_silver = silver_ranking['total_payout'].sum()
                 
-                st.markdown(f"""
-                <div class="ranking-total" style="background: white; padding: 1rem; border-radius: 8px; margin-top: 1rem; border-left: 7px solid #6c757d;">
-                    <div style="display: flex; justify-content: space-between;">
-                        <span style="color: #6c757d;">Total Silver:</span>
-                        <span style="font-weight: bold; color: #6c757d;">${total_silver:,.2f}</span>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown("""
-                <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin: 1rem; text-align: center;">
-                    <p style="color: #6c757d; font-size: 0.9rem; margin: 0;">
-                        No hay usuarios Silver con payouts este mes
-                    </p>
-                </div>
-                """, unsafe_allow_html=True)
+                #st.markdown(f"""
+                #<div class="ranking-total" style="background: white; padding: 1rem; border-radius: 8px; margin-top: 1rem; border-left: 7px solid #6c757d;">
+                    #<div style="display: flex; justify-content: space-between;">
+                        #<span style="color: #6c757d;">Total Silver:</span>
+                        #<span style="font-weight: bold; color: #6c757d;">${total_silver:,.2f}</span>
+                    #</div>
+                #</div>
+                #""", unsafe_allow_html=True)
+            #else:
+                #st.markdown("""
+                #<div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; margin: 1rem; text-align: center;">
+                    #<p style="color: #6c757d; font-size: 0.9rem; margin: 0;">
+                        #No hay usuarios Silver con payouts este mes
+                    #</p>
+                #</div>
+                #""", unsafe_allow_html=True)
             
-            st.markdown('</div></div>', unsafe_allow_html=True)
+            #st.markdown('</div></div>', unsafe_allow_html=True)
     
     # Gráfico de evolución mensual por categoría (después de todos los rankings)
-    st.markdown("""
-    <div class="card" style="margin-top: 2rem;">
-        <div class="card-title">Evolución Mensual por Categoría</div>
-    """, unsafe_allow_html=True)
+    #st.markdown("""
+    #<div class="card" style="margin-top: 2rem;">
+        #<div class="card-title">Evolución Mensual por Categoría</div>
+    #""", unsafe_allow_html=True)
     
     # Preparar datos para el gráfico mensual de payouts
-    if not payouts_data:
-        st.info("No hay datos de payouts para mostrar")
-        st.markdown('</div>', unsafe_allow_html=True)
-    else:
-        df_payouts = pd.DataFrame(payouts_data)
+    #if not payouts_data:
+        #st.info("No hay datos de payouts para mostrar")
+        #st.markdown('</div>', unsafe_allow_html=True)
+    #else:
+        #df_payouts = pd.DataFrame(payouts_data)
         
         # Verificar que la columna fecha_payout existe antes de usarla
-        if 'fecha_payout' not in df_payouts.columns:
-            st.info("No hay datos de fechas de payout disponibles")
-            st.markdown('</div>', unsafe_allow_html=True)
-        else:
-            df_payouts['fecha_payout'] = pd.to_datetime(df_payouts['fecha_payout'], errors='coerce')
+        #if 'fecha_payout' not in df_payouts.columns:
+            #st.info("No hay datos de fechas de payout disponibles")
+            #st.markdown('</div>', unsafe_allow_html=True)
+        #else:
+            #df_payouts['fecha_payout'] = pd.to_datetime(df_payouts['fecha_payout'], errors='coerce')
     
     # Filtrar solo payouts válidos
-    df_payouts_valid = df_payouts.dropna(subset=['fecha_payout']).copy()
+    #df_payouts_valid = df_payouts.dropna(subset=['fecha_payout']).copy()
     
-    if not df_payouts_valid.empty:
+    #if not df_payouts_valid.empty:
         # Convertir payout a float
-        df_payouts_valid['payout_amount'] = pd.to_numeric(df_payouts_valid['payout'], errors='coerce')
-        df_payouts_valid = df_payouts_valid.dropna(subset=['payout_amount'])
+        #df_payouts_valid['payout_amount'] = pd.to_numeric(df_payouts_valid['payout'], errors='coerce')
+        #df_payouts_valid = df_payouts_valid.dropna(subset=['payout_amount'])
         
         # Crear diccionario de usuarios para obtener rangos
-        users_dict = {user['nick']: {'name': user['name'], 'rank': user['rank']} for user in users_data}
+        #users_dict = {user['nick']: {'name': user['name'], 'rank': user['rank']} for user in users_data}
         
         # Agregar información de usuario
-        df_payouts_valid['rank'] = df_payouts_valid['nick'].map(lambda x: users_dict.get(x, {}).get('rank', 'unknown'))
+        #df_payouts_valid['rank'] = df_payouts_valid['nick'].map(lambda x: users_dict.get(x, {}).get('rank', 'unknown'))
         
         # Agrupar por mes y categoría
-        df_payouts_valid['year_month'] = df_payouts_valid['fecha_payout'].dt.to_period('M')
+        #df_payouts_valid['year_month'] = df_payouts_valid['fecha_payout'].dt.to_period('M')
         
         # Calcular totales mensuales por categoría
-        datos_mensuales = []
+        #datos_mensuales = []
         
-        for mes in df_payouts_valid['year_month'].unique():
-            df_mes = df_payouts_valid[df_payouts_valid['year_month'] == mes]
+        #for mes in df_payouts_valid['year_month'].unique():
+            #df_mes = df_payouts_valid[df_payouts_valid['year_month'] == mes]
             
             # Global (todos los datos)
-            total_global = df_mes['payout_amount'].sum()
+            #total_global = df_mes['payout_amount'].sum()
             
             # Gold (usuarios con rank 'gold')
-            df_gold = df_mes[df_mes['rank'] == 'gold']
-            total_gold = df_gold['payout_amount'].sum()
+            #df_gold = df_mes[df_mes['rank'] == 'gold']
+            #total_gold = df_gold['payout_amount'].sum()
             
             # Silver (usuarios con rank 'silver')
-            df_silver = df_mes[df_mes['rank'] == 'silver']
-            total_silver = df_silver['payout_amount'].sum()
+            #df_silver = df_mes[df_mes['rank'] == 'silver']
+            #total_silver = df_silver['payout_amount'].sum()
             
-            datos_mensuales.append({
-                'Mes': mes,
-                'Global': total_global,
-                'Gold': total_gold,
-                'Silver': total_silver
-            })
+            #datos_mensuales.append({
+                #'Mes': mes,
+                #'Global': total_global,
+                #'Gold': total_gold,
+                #'Silver': total_silver
+            #})
         
         # Crear DataFrame para el gráfico
-        df_mensual = pd.DataFrame(datos_mensuales)
-        df_mensual = df_mensual.sort_values('Mes')
-        df_mensual['Mes_Str'] = df_mensual['Mes'].astype(str)
+        #df_mensual = pd.DataFrame(datos_mensuales)
+        #df_mensual = df_mensual.sort_values('Mes')
+        #df_mensual['Mes_Str'] = df_mensual['Mes'].astype(str)
         
         # Crear gráfico de líneas
-        import plotly.graph_objects as go
+        #import plotly.graph_objects as go
         
-        fig_mensual = go.Figure()
+        #fig_mensual = go.Figure()
         
         # Línea Global
-        fig_mensual.add_trace(go.Scatter(
-            x=df_mensual['Mes_Str'],
-            y=df_mensual['Global'],
-            mode='lines+markers',
-            name='Global',
-            line=dict(color='#1f77b4', width=3),
-            marker=dict(size=8),
-            hovertemplate='<b>Global</b><br>Mes: %{x}<br>Total: $%{y:,.2f}<extra></extra>'
-        ))
+        #fig_mensual.add_trace(go.Scatter(
+            #x=df_mensual['Mes_Str'],
+            #y=df_mensual['Global'],
+            #mode='lines+markers',
+            #name='Global',
+            #line=dict(color='#1f77b4', width=3),
+            #marker=dict(size=8),
+            #hovertemplate='<b>Global</b><br>Mes: %{x}<br>Total: $%{y:,.2f}<extra></extra>'
+        #))
         
         # Línea Gold
-        fig_mensual.add_trace(go.Scatter(
-            x=df_mensual['Mes_Str'],
-            y=df_mensual['Gold'],
-            mode='lines+markers',
-            name='Gold',
-            line=dict(color='#ffd700', width=3),
-            marker=dict(size=8),
-            hovertemplate='<b>Gold</b><br>Mes: %{x}<br>Total: $%{y:,.2f}<extra></extra>'
-        ))
+        #fig_mensual.add_trace(go.Scatter(
+            #x=df_mensual['Mes_Str'],
+            #y=df_mensual['Gold'],
+            #mode='lines+markers',
+            #name='Gold',
+            #line=dict(color='#ffd700', width=3),
+            #marker=dict(size=8),
+            #hovertemplate='<b>Gold</b><br>Mes: %{x}<br>Total: $%{y:,.2f}<extra></extra>'
+        #))
         
         # Línea Silver
-        fig_mensual.add_trace(go.Scatter(
-            x=df_mensual['Mes_Str'],
-            y=df_mensual['Silver'],
-            mode='lines+markers',
-            name='Silver',
-            line=dict(color='#c0c0c0', width=3),
-            marker=dict(size=8),
-            hovertemplate='<b>Silver</b><br>Mes: %{x}<br>Total: $%{y:,.2f}<extra></extra>'
-        ))
+        #fig_mensual.add_trace(go.Scatter(
+            #x=df_mensual['Mes_Str'],
+            #y=df_mensual['Silver'],
+            #mode='lines+markers',
+            #name='Silver',
+            #line=dict(color='#c0c0c0', width=3),
+            #marker=dict(size=8),
+            #hovertemplate='<b>Silver</b><br>Mes: %{x}<br>Total: $%{y:,.2f}<extra></extra>'
+        #))
         
         # Configurar layout
-        fig_mensual.update_layout(
-            title="Evolución Mensual de Payouts por Categoría",
-            xaxis_title="Mes",
-            yaxis_title="Payout Total ($)",
-            template="plotly_white",
-            height=500,
-            margin=dict(l=20, r=20, t=40, b=20),
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            font=dict(color='#495057'),
-            xaxis=dict(
-                gridcolor='#e9ecef',
-                linecolor='#e9ecef',
-                tickcolor='#495057',
-                tickfont=dict(color='#495057')
-            ),
-            yaxis=dict(
-                gridcolor='#e9ecef',
-                linecolor='#e9ecef',
-                tickcolor='#495057',
-                tickfont=dict(color='#495057'),
-                tickformat='$,.0f'
-            ),
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1
-            )
-        )
+        #fig_mensual.update_layout(
+            #title="Evolución Mensual de Payouts por Categoría",
+            #xaxis_title="Mes",
+            #yaxis_title="Payout Total ($)",
+            #template="plotly_white",
+            #height=500,
+            #margin=dict(l=20, r=20, t=40, b=20),
+            #plot_bgcolor='white',
+            #paper_bgcolor='white',
+            #font=dict(color='#495057'),
+            #xaxis=dict(
+                #gridcolor='#e9ecef',
+                #linecolor='#e9ecef',
+                #tickcolor='#495057',
+                #tickfont=dict(color='#495057')
+            #),
+            #yaxis=dict(
+                #gridcolor='#e9ecef',
+                #linecolor='#e9ecef',
+                #tickcolor='#495057',
+                #tickfont=dict(color='#495057'),
+                #tickformat='$,.0f'
+            #),
+            #legend=dict(
+                #orientation="h",
+                #yanchor="bottom",
+                #y=1.02,
+                #xanchor="right",
+                #x=1
+            #)
+        #)
         
-        st.plotly_chart(fig_mensual, use_container_width=True)
+        #st.plotly_chart(fig_mensual, use_container_width=True)
         
         # Mostrar estadísticas del gráfico
-        col1, col2, col3 = st.columns(3)
+        #col1, col2, col3 = st.columns(3)
         
-        with col1:
-            total_global_periodo = df_mensual['Global'].sum()
-            st.metric(
-                "Total Global",
-                f"${total_global_periodo:,.2f}",
-                help="Suma total de todos los payouts en el período"
-            )
+        #with col1:
+            #total_global_periodo = df_mensual['Global'].sum()
+            #st.metric(
+                #"Total Global",
+                #f"${total_global_periodo:,.2f}",
+                #help="Suma total de todos los payouts en el período"
+            #)
         
-        with col2:
-            total_gold_periodo = df_mensual['Gold'].sum()
-            porcentaje_gold = (total_gold_periodo / total_global_periodo * 100) if total_global_periodo > 0 else 0
-            st.metric(
-                "Total Gold",
-                f"${total_gold_periodo:,.2f}",
-                f"{porcentaje_gold:.1f}% del total",
-                help="Suma de usuarios Gold"
-            )
+        #with col2:
+            #total_gold_periodo = df_mensual['Gold'].sum()
+            #porcentaje_gold = (total_gold_periodo / total_global_periodo * 100) if total_global_periodo > 0 else 0
+            #st.metric(
+                #"Total Gold",
+                #f"${total_gold_periodo:,.2f}",
+                #f"{porcentaje_gold:.1f}% del total",
+                #help="Suma de usuarios Gold"
+            #)
         
-        with col3:
-            total_silver_periodo = df_mensual['Silver'].sum()
-            porcentaje_silver = (total_silver_periodo / total_global_periodo * 100) if total_global_periodo > 0 else 0
-            st.metric(
-                "Total Silver",
-                f"${total_silver_periodo:,.2f}",
-                f"{porcentaje_silver:.1f}% del total",
-                help="Suma de usuarios Silver"
-            )
-    else:
-        st.info("No hay datos de payouts suficientes para generar el gráfico")
+        #with col3:
+            #total_silver_periodo = df_mensual['Silver'].sum()
+            #porcentaje_silver = (total_silver_periodo / total_global_periodo * 100) if total_global_periodo > 0 else 0
+            #st.metric(
+                #"Total Silver",
+                #f"${total_silver_periodo:,.2f}",
+                #f"{porcentaje_silver:.1f}% del total",
+                #help="Suma de usuarios Silver"
+            #)
+    #else:
+        #st.info("No hay datos de payouts suficientes para generar el gráfico")
     
-    st.markdown('</div>', unsafe_allow_html=True)
+    #st.markdown('</div>', unsafe_allow_html=True)
     
-    with ranking_sub_tab2:
-        st.markdown("""
-        <div class="card">
-            <div class="card-title">Añadir Cobro</div>
-            <div style="text-align: center; padding: 2rem;">
-                <div style="font-size: 4rem; margin-bottom: 1rem;" class="construction-icon">💰</div>
-                <h2 style="color: #6c757d; margin-bottom: 1rem;">¡En Desarrollo!</h2>
-                <p style="color: #6c757d; font-size: 1.1rem; margin-bottom: 2rem;">
-                    Próximamente disponible.
-                </p>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+    #with ranking_sub_tab2:
+        #st.markdown("""
+        #<div class="card">
+            #<div class="card-title">Añadir Cobro</div>
+            #<div style="text-align: center; padding: 2rem;">
+                #<div style="font-size: 4rem; margin-bottom: 1rem;" class="construction-icon">💰</div>
+                #<h2 style="color: #6c757d; margin-bottom: 1rem;">¡En Desarrollo!</h2>
+                #<p style="color: #6c757d; font-size: 1.1rem; margin-bottom: 2rem;">
+                    #Próximamente disponible.
+                #</p>
+            #</div>
+        #</div>
+        #""", unsafe_allow_html=True)
 
 # Tab de Administración (solo para admin)
 if is_admin:
