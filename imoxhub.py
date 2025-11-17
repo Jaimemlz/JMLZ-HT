@@ -3977,6 +3977,190 @@ with tab1:
                                                 column_config=column_config_mes_comb
                                             )
                                             
+                                            # Análisis de correlación de precios de entrada por activo
+                                            # Agrupar estrategias por activo
+                                            estrategias_por_activo = {}
+                                            for ea_nombre, activo in estrategias_filtradas:
+                                                if activo not in estrategias_por_activo:
+                                                    estrategias_por_activo[activo] = []
+                                                estrategias_por_activo[activo].append(ea_nombre)
+                                            
+                                            # Mostrar matriz de correlación solo para activos con más de una estrategia
+                                            activos_con_multiples = {activo: eas for activo, eas in estrategias_por_activo.items() if len(eas) > 1}
+                                            
+                                            if activos_con_multiples:
+                                                st.markdown("""
+                                                <div style="margin-top: 2rem; margin-bottom: 1rem;">
+                                                    <h4>Matriz de Correlación de Timing y Dirección de Entrada</h4>
+                                                    <p style="color: #6c757d; font-size: 0.9em;">Matriz de correlación entre estrategias del mismo activo basada en timing de entrada (hora del día, día de la semana) y dirección de operación (Buy/Sell). Valores cercanos a 1 indican que las estrategias tienen comportamientos similares (o inversos), valores cercanos a 0 indican comportamientos independientes.</p>
+                                                    <p style="color: #6c757d; font-size: 0.85em; font-style: italic;">Nota: La correlación se calcula comparando el timing de entrada y la dirección de operación (dentro de 7 días), usando el valor absoluto para mostrar solo valores entre 0 y 1. "N/A" aparece cuando no hay suficientes trades coincidentes (mínimo 3 puntos).</p>
+                                                </div>
+                                                """, unsafe_allow_html=True)
+                                                
+                                                # Función helper para calcular correlación entre dos estrategias
+                                                def calcular_correlacion_estrategias(ea1, ea2, activo, df_data):
+                                                    """Calcula la correlación basada en timing de entrada y dirección de operación"""
+                                                    df_ea1 = df_data[
+                                                        (df_data['EA'] == ea1) & 
+                                                        (df_data['Símbolo'].str.lower() == activo)
+                                                    ][['Open', 'Tipo']].copy()
+                                                    df_ea2 = df_data[
+                                                        (df_data['EA'] == ea2) & 
+                                                        (df_data['Símbolo'].str.lower() == activo)
+                                                    ][['Open', 'Tipo']].copy()
+                                                    
+                                                    if len(df_ea1) == 0 or len(df_ea2) == 0:
+                                                        return np.nan
+                                                    
+                                                    # Calcular características de entrada para cada estrategia
+                                                    # 1. Hora del día (0-23) normalizada a 0-1
+                                                    # 2. Día de la semana (0-6) normalizado a 0-1
+                                                    # 3. Dirección (1 para Buy, -1 para Sell)
+                                                    
+                                                    caracteristicas_ea1 = []
+                                                    caracteristicas_ea2 = []
+                                                    
+                                                    # Ventana amplia para encontrar coincidencias
+                                                    ventana = pd.Timedelta(days=7)  # Una semana completa
+                                                    
+                                                    for _, row1 in df_ea1.iterrows():
+                                                        fecha1 = row1['Open']
+                                                        df_cercanos = df_ea2[
+                                                            (df_ea2['Open'] >= fecha1 - ventana) & 
+                                                            (df_ea2['Open'] <= fecha1 + ventana)
+                                                        ]
+                                                        if len(df_cercanos) > 0:
+                                                            # Encontrar el más cercano en tiempo
+                                                            df_cercanos = df_cercanos.copy()
+                                                            df_cercanos['diff'] = abs(df_cercanos['Open'] - fecha1)
+                                                            mas_cercano = df_cercanos.nsmallest(1, 'diff').iloc[0]
+                                                            
+                                                            # Características de la estrategia 1
+                                                            hora1 = fecha1.hour / 23.0  # Normalizar a 0-1
+                                                            dia_semana1 = fecha1.weekday() / 6.0  # Normalizar a 0-1
+                                                            tipo1 = 1.0 if row1['Tipo'] == 'Buy' else -1.0
+                                                            
+                                                            # Características de la estrategia 2
+                                                            fecha2 = mas_cercano['Open']
+                                                            hora2 = fecha2.hour / 23.0
+                                                            dia_semana2 = fecha2.weekday() / 6.0
+                                                            tipo2 = 1.0 if mas_cercano['Tipo'] == 'Buy' else -1.0
+                                                            
+                                                            # Crear vector de características (combinación ponderada)
+                                                            # Peso mayor a la dirección y hora del día
+                                                            caracteristica1 = hora1 * 0.4 + dia_semana1 * 0.2 + tipo1 * 0.4
+                                                            caracteristica2 = hora2 * 0.4 + dia_semana2 * 0.2 + tipo2 * 0.4
+                                                            
+                                                            caracteristicas_ea1.append(caracteristica1)
+                                                            caracteristicas_ea2.append(caracteristica2)
+                                                    
+                                                    # Calcular correlación de las características
+                                                    if len(caracteristicas_ea1) >= 3:
+                                                        try:
+                                                            correlacion = np.corrcoef(caracteristicas_ea1, caracteristicas_ea2)[0, 1]
+                                                            # Usar valor absoluto para que la correlación esté entre 0 y 1
+                                                            # 0 = sin correlación, 1 = correlación perfecta (positiva o negativa)
+                                                            if not np.isnan(correlacion):
+                                                                return abs(correlacion)
+                                                            return np.nan
+                                                        except:
+                                                            return np.nan
+                                                    return np.nan
+                                                
+                                                for activo, eas in activos_con_multiples.items():
+                                                    # Crear matriz de correlación
+                                                    n_estrategias = len(eas)
+                                                    matriz_correlacion = np.full((n_estrategias, n_estrategias), np.nan)
+                                                    
+                                                    # Calcular correlación para cada par de estrategias
+                                                    for i in range(n_estrategias):
+                                                        for j in range(n_estrategias):
+                                                            if i == j:
+                                                                # Diagonal: correlación consigo mismo es 1.0
+                                                                matriz_correlacion[i, j] = 1.0
+                                                            elif i < j:
+                                                                # Calcular correlación solo una vez para cada par
+                                                                corr = calcular_correlacion_estrategias(eas[i], eas[j], activo, df_combinado)
+                                                                matriz_correlacion[i, j] = corr
+                                                                matriz_correlacion[j, i] = corr  # Matriz simétrica
+                                                    
+                                                    # Crear DataFrame para la matriz
+                                                    df_matriz = pd.DataFrame(
+                                                        matriz_correlacion,
+                                                        index=eas,
+                                                        columns=eas
+                                                    )
+                                                    
+                                                    # Crear heatmap con plotly
+                                                    # Preparar texto con mejor contraste
+                                                    text_matrix = []
+                                                    for row in matriz_correlacion:
+                                                        text_row = []
+                                                        for val in row:
+                                                            if not np.isnan(val):
+                                                                text_row.append(f"{val:.3f}")
+                                                            else:
+                                                                text_row.append("N/A")
+                                                        text_matrix.append(text_row)
+                                                    
+                                                    # Escala de colores profesional: rojo para alta correlación, verde suave para baja
+                                                    # Colores corporativos y profesionales
+                                                    colorscale_custom = [
+                                                        [0,    '#1b5e20'],
+                                                        [0.25, '#2e7d32'],
+                                                        [0.5,  '#fb8c00'],   # Naranja puro
+                                                        [0.75, '#f4511e'],   # Naranja rojizo
+                                                        [1,    '#c62828']      # Rojo más intenso para máxima correlación      # Rojo más intenso para máxima correlación
+                                                    ]
+                                                    
+                                                    fig_heatmap = go.Figure(data=go.Heatmap(
+                                                        z=matriz_correlacion,
+                                                        x=eas,
+                                                        y=eas,
+                                                        colorscale=colorscale_custom,
+                                                        zmin=0,
+                                                        zmax=1,
+                                                        text=text_matrix,
+                                                        texttemplate="%{text}",
+                                                        textfont={"size": 13},  # Texto gris/negro por defecto (mejor contraste con fondos claros)
+                                                        colorbar=dict(title="Correlación")
+                                                    ))
+                                                    
+                                                    fig_heatmap.update_layout(
+                                                        title=f"Matriz de Correlación - {activo.upper()}",
+                                                        xaxis_title="Estrategia (Columna)",
+                                                        yaxis_title="Estrategia (Fila)",
+                                                        width=600,
+                                                        height=600
+                                                    )
+                                                    
+                                                    st.plotly_chart(fig_heatmap, use_container_width=True)
+                                                    
+                                                    # Mostrar también como tabla para mejor legibilidad
+                                                    st.markdown(f"**Tabla de Correlación - {activo.upper()}**")
+                                                    
+                                                    # Formatear valores para la tabla
+                                                    df_matriz_display = df_matriz.copy()
+                                                    for col in df_matriz_display.columns:
+                                                        df_matriz_display[col] = df_matriz_display[col].apply(
+                                                            lambda x: f"{x:.3f}" if not np.isnan(x) else "N/A"
+                                                        )
+                                                    
+                                                    # Configurar columnas para la tabla
+                                                    column_config_matriz = {}
+                                                    for col in df_matriz_display.columns:
+                                                        column_config_matriz[col] = st.column_config.TextColumn(
+                                                            col,
+                                                            help=f"Correlación con {col}"
+                                                        )
+                                                    
+                                                    st.dataframe(
+                                                        df_matriz_display,
+                                                        use_container_width=True,
+                                                        column_config=column_config_matriz,
+                                                        hide_index=False
+                                                    )
+                                            
                                             # Preparar datos de cada estrategia individual
                                             df_combinado['Fecha'] = df_combinado['Close'].dt.date
                                             
@@ -4367,6 +4551,190 @@ with tab1:
                                                 hide_index=True,
                                                 column_config=column_config_mes_comb
                                             )
+                                            
+                                            # Análisis de correlación de precios de entrada por activo
+                                            # Agrupar estrategias por activo
+                                            estrategias_por_activo = {}
+                                            for ea_nombre, activo in estrategias_filtradas:
+                                                if activo not in estrategias_por_activo:
+                                                    estrategias_por_activo[activo] = []
+                                                estrategias_por_activo[activo].append(ea_nombre)
+                                            
+                                            # Mostrar matriz de correlación solo para activos con más de una estrategia
+                                            activos_con_multiples = {activo: eas for activo, eas in estrategias_por_activo.items() if len(eas) > 1}
+                                            
+                                            if activos_con_multiples:
+                                                st.markdown("""
+                                                <div style="margin-top: 2rem; margin-bottom: 1rem;">
+                                                    <h4>Matriz de Correlación de Timing y Dirección de Entrada</h4>
+                                                    <p style="color: #6c757d; font-size: 0.9em;">Matriz de correlación entre estrategias del mismo activo basada en timing de entrada (hora del día, día de la semana) y dirección de operación (Buy/Sell). Valores cercanos a 1 indican que las estrategias tienen comportamientos similares (o inversos), valores cercanos a 0 indican comportamientos independientes.</p>
+                                                    <p style="color: #6c757d; font-size: 0.85em; font-style: italic;">Nota: La correlación se calcula comparando el timing de entrada y la dirección de operación (dentro de 7 días), usando el valor absoluto para mostrar solo valores entre 0 y 1. "N/A" aparece cuando no hay suficientes trades coincidentes (mínimo 3 puntos).</p>
+                                                </div>
+                                                """, unsafe_allow_html=True)
+                                                
+                                                # Función helper para calcular correlación entre dos estrategias
+                                                def calcular_correlacion_estrategias(ea1, ea2, activo, df_data):
+                                                    """Calcula la correlación basada en timing de entrada y dirección de operación"""
+                                                    df_ea1 = df_data[
+                                                        (df_data['EA'] == ea1) & 
+                                                        (df_data['Símbolo'].str.lower() == activo)
+                                                    ][['Open', 'Tipo']].copy()
+                                                    df_ea2 = df_data[
+                                                        (df_data['EA'] == ea2) & 
+                                                        (df_data['Símbolo'].str.lower() == activo)
+                                                    ][['Open', 'Tipo']].copy()
+                                                    
+                                                    if len(df_ea1) == 0 or len(df_ea2) == 0:
+                                                        return np.nan
+                                                    
+                                                    # Calcular características de entrada para cada estrategia
+                                                    # 1. Hora del día (0-23) normalizada a 0-1
+                                                    # 2. Día de la semana (0-6) normalizado a 0-1
+                                                    # 3. Dirección (1 para Buy, -1 para Sell)
+                                                    
+                                                    caracteristicas_ea1 = []
+                                                    caracteristicas_ea2 = []
+                                                    
+                                                    # Ventana amplia para encontrar coincidencias
+                                                    ventana = pd.Timedelta(days=7)  # Una semana completa
+                                                    
+                                                    for _, row1 in df_ea1.iterrows():
+                                                        fecha1 = row1['Open']
+                                                        df_cercanos = df_ea2[
+                                                            (df_ea2['Open'] >= fecha1 - ventana) & 
+                                                            (df_ea2['Open'] <= fecha1 + ventana)
+                                                        ]
+                                                        if len(df_cercanos) > 0:
+                                                            # Encontrar el más cercano en tiempo
+                                                            df_cercanos = df_cercanos.copy()
+                                                            df_cercanos['diff'] = abs(df_cercanos['Open'] - fecha1)
+                                                            mas_cercano = df_cercanos.nsmallest(1, 'diff').iloc[0]
+                                                            
+                                                            # Características de la estrategia 1
+                                                            hora1 = fecha1.hour / 23.0  # Normalizar a 0-1
+                                                            dia_semana1 = fecha1.weekday() / 6.0  # Normalizar a 0-1
+                                                            tipo1 = 1.0 if row1['Tipo'] == 'Buy' else -1.0
+                                                            
+                                                            # Características de la estrategia 2
+                                                            fecha2 = mas_cercano['Open']
+                                                            hora2 = fecha2.hour / 23.0
+                                                            dia_semana2 = fecha2.weekday() / 6.0
+                                                            tipo2 = 1.0 if mas_cercano['Tipo'] == 'Buy' else -1.0
+                                                            
+                                                            # Crear vector de características (combinación ponderada)
+                                                            # Peso mayor a la dirección y hora del día
+                                                            caracteristica1 = hora1 * 0.4 + dia_semana1 * 0.2 + tipo1 * 0.4
+                                                            caracteristica2 = hora2 * 0.4 + dia_semana2 * 0.2 + tipo2 * 0.4
+                                                            
+                                                            caracteristicas_ea1.append(caracteristica1)
+                                                            caracteristicas_ea2.append(caracteristica2)
+                                                    
+                                                    # Calcular correlación de las características
+                                                    if len(caracteristicas_ea1) >= 3:
+                                                        try:
+                                                            correlacion = np.corrcoef(caracteristicas_ea1, caracteristicas_ea2)[0, 1]
+                                                            # Usar valor absoluto para que la correlación esté entre 0 y 1
+                                                            # 0 = sin correlación, 1 = correlación perfecta (positiva o negativa)
+                                                            if not np.isnan(correlacion):
+                                                                return abs(correlacion)
+                                                            return np.nan
+                                                        except:
+                                                            return np.nan
+                                                    return np.nan
+                                                
+                                                for activo, eas in activos_con_multiples.items():
+                                                    # Crear matriz de correlación
+                                                    n_estrategias = len(eas)
+                                                    matriz_correlacion = np.full((n_estrategias, n_estrategias), np.nan)
+                                                    
+                                                    # Calcular correlación para cada par de estrategias
+                                                    for i in range(n_estrategias):
+                                                        for j in range(n_estrategias):
+                                                            if i == j:
+                                                                # Diagonal: correlación consigo mismo es 1.0
+                                                                matriz_correlacion[i, j] = 1.0
+                                                            elif i < j:
+                                                                # Calcular correlación solo una vez para cada par
+                                                                corr = calcular_correlacion_estrategias(eas[i], eas[j], activo, df_combinado)
+                                                                matriz_correlacion[i, j] = corr
+                                                                matriz_correlacion[j, i] = corr  # Matriz simétrica
+                                                    
+                                                    # Crear DataFrame para la matriz
+                                                    df_matriz = pd.DataFrame(
+                                                        matriz_correlacion,
+                                                        index=eas,
+                                                        columns=eas
+                                                    )
+                                                    
+                                                    # Crear heatmap con plotly
+                                                    # Preparar texto con mejor contraste
+                                                    text_matrix = []
+                                                    for row in matriz_correlacion:
+                                                        text_row = []
+                                                        for val in row:
+                                                            if not np.isnan(val):
+                                                                text_row.append(f"{val:.3f}")
+                                                            else:
+                                                                text_row.append("N/A")
+                                                        text_matrix.append(text_row)
+                                                    
+                                                    # Escala de colores profesional: rojo para alta correlación, verde suave para baja
+                                                    # Colores adaptados para contraste con texto gris/negro por defecto
+                                                    colorscale_custom = [
+                                                        [0,    '#a5d6a7'],   # Verde claro para valores bajos (buen contraste con texto negro)
+                                                        [0.25, '#81c784'],   # Verde medio claro
+                                                        [0.5,  '#ffb74d'],   # Naranja claro
+                                                        [0.75, '#ff8a65'],   # Naranja rojizo claro
+                                                        [1,    '#e57373']    # Rojo claro para máxima correlación (buen contraste)
+                                                    ]
+                                                    
+                                                    fig_heatmap = go.Figure(data=go.Heatmap(
+                                                        z=matriz_correlacion,
+                                                        x=eas,
+                                                        y=eas,
+                                                        colorscale=colorscale_custom,
+                                                        zmin=0,
+                                                        zmax=1,
+                                                        text=text_matrix,
+                                                        texttemplate="%{text}",
+                                                        textfont={"size": 13},  # Texto gris/negro por defecto (mejor contraste con fondos claros)
+                                                        colorbar=dict(title="Correlación")
+                                                    ))
+                                                    
+                                                    fig_heatmap.update_layout(
+                                                        title=f"Matriz de Correlación - {activo.upper()}",
+                                                        xaxis_title="Estrategia (Columna)",
+                                                        yaxis_title="Estrategia (Fila)",
+                                                        width=600,
+                                                        height=600
+                                                    )
+                                                    
+                                                    st.plotly_chart(fig_heatmap, use_container_width=True)
+                                                    
+                                                    # Mostrar también como tabla para mejor legibilidad
+                                                    st.markdown(f"**Tabla de Correlación - {activo.upper()}**")
+                                                    
+                                                    # Formatear valores para la tabla
+                                                    df_matriz_display = df_matriz.copy()
+                                                    for col in df_matriz_display.columns:
+                                                        df_matriz_display[col] = df_matriz_display[col].apply(
+                                                            lambda x: f"{x:.3f}" if not np.isnan(x) else "N/A"
+                                                        )
+                                                    
+                                                    # Configurar columnas para la tabla
+                                                    column_config_matriz = {}
+                                                    for col in df_matriz_display.columns:
+                                                        column_config_matriz[col] = st.column_config.TextColumn(
+                                                            col,
+                                                            help=f"Correlación con {col}"
+                                                        )
+                                                    
+                                                    st.dataframe(
+                                                        df_matriz_display,
+                                                        use_container_width=True,
+                                                        column_config=column_config_matriz,
+                                                        hide_index=False
+                                                    )
                                             
                                             # Preparar datos de cada estrategia individual
                                             df_combinado['Fecha'] = df_combinado['Close'].dt.date
