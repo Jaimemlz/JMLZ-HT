@@ -2480,12 +2480,14 @@ st.markdown("""
         color: #495057 !important;
     }
     
-    .st-dv {
-        background-color: white !important;
-    }
+
 
     .st-dv.st-fv {
         background-color: #495057 !important;
+    }
+
+    span.st-ae.st-af.st-ag.st-ah.st-ai.st-aj.st-cj {
+        background-color: white !important;
     }
     
     .stDataFrame table {
