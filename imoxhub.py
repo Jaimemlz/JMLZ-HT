@@ -2902,7 +2902,7 @@ st.markdown('<div class="main-container">', unsafe_allow_html=True)
 # Panel central con contenido dinámico según el tab
 with tab1:
     # Crear tabs anidados dentro del tab 1
-    sub_tab1, sub_tab2 = st.tabs(["Análisis de Portafolio", "Análisis de Prop Firm"])
+    sub_tab1, sub_tab2, sub_tab3 = st.tabs(["Análisis de Portafolio", "Análisis de EA", "Análisis de Prop Firm"])
     
     with sub_tab1:
         # Tarjeta de carga de archivo
@@ -3331,56 +3331,56 @@ with tab1:
                                     
                                     return False
                             
-                            for _, trade in ordenado.iterrows():
-                                beneficio = trade['Beneficio']
-                                tipo_cierre = trade.get('TipoCierre')
-                                
-                                # Si el HTML tiene información explícita de [sl] o [tp], usarla PERO validar con el beneficio
-                                if tipo_cierre == 'SL':
-                                    # [sl] en HTML: verificar si es pérdida o ganancia
-                                    if beneficio < 0:
-                                        # [sl] con pérdida: verificar si es SL directo o TSL
-                                        perdida_abs = abs(beneficio)
-                                        if es_sl_directo(perdida_abs):
-                                            # SL directo: pérdida que alcanzó alguno de los SL esperados
-                                            sl_directos += 1
-                                        else:
-                                            # TSL: pérdida menor que los SL esperados (trailing stop activó antes)
-                                            sl_trailing += 1
-                                            tsl += 1  # Trailing Stop Loss
-                                    elif beneficio > 0:
-                                        # [sl] en HTML pero con ganancia: es un Trailing Stop Positivo
-                                        sl_trailing += 1
-                                        tsp += 1  # Trailing Stop Positivo
-                                    else:
-                                        # Break-even con [sl]: TSL
-                                        sl_trailing += 1
-                                        tsl += 1
-                                elif tipo_cierre == 'TP':
-                                    # [tp] en HTML: confiamos en el HTML, es un TP real
-                                    # Se contará abajo para mantener claridad
-                                    pass
-                                else:
-                                    # Si no hay información explícita, usar la lógica de cálculo
-                                    if beneficio < 0:  # Pérdida
-                                        perdida_abs = abs(beneficio)
-                                        if es_sl_directo(perdida_abs):
-                                            sl_directos += 1
-                                        else:
-                                            sl_trailing += 1
-                                            tsl += 1  # Trailing Stop Loss
-                                    elif beneficio > 0:  # Ganancia
-                                        if es_tp_real(trade):
-                                            # TP real (tocó el TP)
-                                            pass  # se contará abajo para mantener claridad
-                                        else:
-                                            # TS positivo (o cierre manual en ganancia que no tocó TP)
+                                for _, trade in ordenado.iterrows():
+                                    beneficio = trade['Beneficio']
+                                    tipo_cierre = trade.get('TipoCierre')
+                                    
+                                    # Si el HTML tiene información explícita de [sl] o [tp], usarla PERO validar con el beneficio
+                                    if tipo_cierre == 'SL':
+                                        # [sl] en HTML: verificar si es pérdida o ganancia
+                                        if beneficio < 0:
+                                            # [sl] con pérdida: verificar si es SL directo o TSL
+                                            perdida_abs = abs(beneficio)
+                                            if es_sl_directo(perdida_abs):
+                                                # SL directo: pérdida que alcanzó alguno de los SL esperados
+                                                sl_directos += 1
+                                            else:
+                                                # TSL: pérdida menor que los SL esperados (trailing stop activó antes)
+                                                sl_trailing += 1
+                                                tsl += 1  # Trailing Stop Loss
+                                        elif beneficio > 0:
+                                            # [sl] en HTML pero con ganancia: es un Trailing Stop Positivo
                                             sl_trailing += 1
                                             tsp += 1  # Trailing Stop Positivo
+                                        else:
+                                            # Break-even con [sl]: TSL
+                                            sl_trailing += 1
+                                            tsl += 1
+                                    elif tipo_cierre == 'TP':
+                                        # [tp] en HTML: confiamos en el HTML, es un TP real
+                                        # Se contará abajo para mantener claridad
+                                        pass
                                     else:
-                                        # Break-even -> lo consideramos TS (sin ganancia ni pérdida, lo contamos como TSL)
-                                        sl_trailing += 1
-                                        tsl += 1
+                                        # Si no hay información explícita, usar la lógica de cálculo
+                                        if beneficio < 0:  # Pérdida
+                                            perdida_abs = abs(beneficio)
+                                            if es_sl_directo(perdida_abs):
+                                                sl_directos += 1
+                                            else:
+                                                sl_trailing += 1
+                                                tsl += 1  # Trailing Stop Loss
+                                        elif beneficio > 0:  # Ganancia
+                                            if es_tp_real(trade):
+                                                # TP real (tocó el TP)
+                                                pass  # se contará abajo para mantener claridad
+                                            else:
+                                                # TS positivo (o cierre manual en ganancia que no tocó TP)
+                                                sl_trailing += 1
+                                                tsp += 1  # Trailing Stop Positivo
+                                        else:
+                                            # Break-even -> lo consideramos TS (sin ganancia ni pérdida, lo contamos como TSL)
+                                            sl_trailing += 1
+                                            tsl += 1
                             else:
                                 # No hay pérdidas, no podemos calcular el riesgo
                                 riesgo_ea = 0
@@ -5393,6 +5393,257 @@ with tab1:
         st.markdown('</div>', unsafe_allow_html=True)
     
     with sub_tab2:
+        # Tarjeta de análisis de EA
+        st.markdown("""
+        <div class="card">
+            <div class="card-title">Análisis de EA</div>
+        """, unsafe_allow_html=True)
+        
+        # Contenedor para subir archivos CSV
+        archivos_csv = st.file_uploader(
+            "Elegir archivo(s) CSV", 
+            type=["csv"], 
+            label_visibility="collapsed", 
+            accept_multiple_files=True,
+            key="analisis_ea_csv"
+        )
+        
+        if archivos_csv:
+            try:
+                resultados = []
+                
+                for archivo_csv in archivos_csv:
+                    # Leer el CSV - intentar diferentes separadores (priorizar ; para CSVs europeos)
+                    df = None
+                    for sep in [';', ',', '\t']:
+                        try:
+                            df = pd.read_csv(archivo_csv, sep=sep, quotechar='"', encoding='utf-8')
+                            # Verificar que se leyó correctamente (debe tener más de 0 columnas)
+                            if len(df.columns) > 0:
+                                break
+                        except:
+                            continue
+                    
+                    if df is None or len(df.columns) == 0:
+                        st.error(f"❌ No se pudo leer el archivo {archivo_csv.name}. Verifica el formato.")
+                        continue
+                    
+                    # Obtener nombre de la estrategia (nombre del archivo sin extensión)
+                    nombre_estrategia = archivo_csv.name.replace('.csv', '').replace('.CSV', '')
+                    
+                    # Normalizar nombres de columnas (pueden variar, quitar comillas y espacios)
+                    df.columns = df.columns.str.strip().str.strip('"').str.strip("'")
+                    
+                    # Identificar columnas relevantes (buscar variaciones comunes)
+                    profit_col = None
+                    symbol_col = None
+                    balance_col = None
+                    close_type_col = None
+                    open_time_col = None
+                    close_time_col = None
+                    
+                    for col in df.columns:
+                        col_lower = col.lower()
+                        col_normalized = col_lower.replace('/', ' ').replace('_', ' ').replace('-', ' ')
+                        
+                        # Buscar columna de Profit/Loss (más flexible)
+                        # Primero buscar coincidencias exactas o muy cercanas
+                        if ('profit/loss' in col_lower or 'profit-loss' in col_lower or
+                            col_lower == 'profit/loss' or col_lower == 'profit-loss'):
+                            profit_col = col
+                        # Luego buscar variaciones
+                        elif (('profit' in col_normalized and 'loss' in col_normalized) or 
+                              'pnl' in col_normalized or 'beneficio' in col_normalized or
+                              ('profit' in col_normalized and 'factor' not in col_normalized and 'ratio' not in col_normalized) or
+                              ('loss' in col_normalized and 'profit' not in col_normalized and 'drawdown' not in col_normalized)):
+                            if profit_col is None:  # Solo asignar si no se encontró una mejor coincidencia
+                                profit_col = col
+                        elif 'symbol' in col_normalized or 'símbolo' in col_normalized:
+                            symbol_col = col
+                        elif 'balance' in col_normalized:
+                            balance_col = col
+                        elif 'close type' in col_normalized or 'tipo cierre' in col_normalized:
+                            close_type_col = col
+                        elif 'open time' in col_normalized or 'open_time' in col_normalized:
+                            open_time_col = col
+                        elif 'close time' in col_normalized or 'close_time' in col_normalized:
+                            close_time_col = col
+                    
+                    if profit_col is None:
+                        # Mostrar información de debug
+                        st.warning(f"⚠️ No se encontró columna de Profit/Loss en {archivo_csv.name}")
+                        columnas_lista = df.columns.tolist()
+                        if len(columnas_lista) > 20:
+                            st.info(f"Columnas encontradas (primeras 20): {', '.join(columnas_lista[:20])}...")
+                            st.info(f"Total de columnas: {len(columnas_lista)}")
+                        else:
+                            st.info(f"Columnas encontradas: {', '.join(columnas_lista)}")
+                        # Intentar buscar manualmente columnas que contengan "profit" o "loss"
+                        posibles_columnas = [col for col in df.columns if 'profit' in col.lower() or 'loss' in col.lower() or 'pnl' in col.lower()]
+                        if posibles_columnas:
+                            st.info(f"Columnas que contienen 'profit', 'loss' o 'pnl': {', '.join(posibles_columnas)}")
+                        continue
+                    
+                    # Convertir Profit/Loss a numérico
+                    df[profit_col] = pd.to_numeric(df[profit_col], errors='coerce')
+                    df = df.dropna(subset=[profit_col])
+                    
+                    if len(df) == 0:
+                        st.warning(f"⚠️ No hay datos válidos en {archivo_csv.name}")
+                        continue
+                    
+                    # Obtener activo (Symbol)
+                    activo = df[symbol_col].iloc[0] if symbol_col and symbol_col in df.columns else "N/A"
+                    
+                    # Calcular métricas básicas
+                    net_profit = df[profit_col].sum()
+                    
+                    # Profit Factor
+                    ganancias = df[df[profit_col] > 0][profit_col].sum()
+                    perdidas = abs(df[df[profit_col] < 0][profit_col].sum())
+                    profit_factor = ganancias / perdidas if perdidas > 0 else float('inf') if ganancias > 0 else 0
+                    
+                    # Winrate
+                    trades_ganadores = len(df[df[profit_col] > 0])
+                    trades_perdedores = len(df[df[profit_col] < 0])
+                    total_trades = len(df)
+                    winrate = (trades_ganadores / total_trades * 100) if total_trades > 0 else 0
+                    
+                    # AvgWin / AvgLoss
+                    avg_win = df[df[profit_col] > 0][profit_col].mean() if trades_ganadores > 0 else 0
+                    avg_loss = abs(df[df[profit_col] < 0][profit_col].mean()) if trades_perdedores > 0 else 0
+                    
+                    # Max Consecutive Loss
+                    max_consec_loss = 0
+                    current_consec_loss = 0
+                    for profit in df[profit_col]:
+                        if profit < 0:
+                            current_consec_loss += 1
+                            max_consec_loss = max(max_consec_loss, current_consec_loss)
+                        else:
+                            current_consec_loss = 0
+                    
+                    # Calcular Drawdown
+                    # Primero ordenar por tiempo si está disponible
+                    if open_time_col and open_time_col in df.columns:
+                        try:
+                            df[open_time_col] = pd.to_datetime(df[open_time_col], errors='coerce')
+                            df = df.sort_values(by=open_time_col).dropna(subset=[open_time_col])
+                        except:
+                            df = df.sort_index()
+                    else:
+                        df = df.sort_index()
+                    
+                    if balance_col and balance_col in df.columns:
+                        # Calcular drawdown basado en Balance
+                        df[balance_col] = pd.to_numeric(df[balance_col], errors='coerce')
+                        df = df.dropna(subset=[balance_col])
+                        if len(df) > 0:
+                            df['cummax'] = df[balance_col].cummax()
+                            # Drawdown en valor absoluto (dólares)
+                            df['drawdown'] = df['cummax'] - df[balance_col]
+                            max_dd = df['drawdown'].max() if len(df) > 0 else 0
+                        else:
+                            max_dd = 0
+                    else:
+                        # Calcular drawdown basado en equity curve de profit
+                        df['equity'] = df[profit_col].cumsum()
+                        df['cummax'] = df['equity'].cummax()
+                        # Drawdown en valor absoluto (dólares)
+                        df['drawdown'] = df['cummax'] - df['equity']
+                        max_dd = df['drawdown'].max() if len(df) > 0 else 0
+                    
+                    # retdd (Return/Drawdown ratio)
+                    retdd = (net_profit / max_dd) if max_dd > 0 else 0
+                    
+                    # Sharpe Ratio
+                    if len(df) > 1:
+                        returns = df[profit_col].values
+                        mean_return = returns.mean()
+                        std_return = returns.std()
+                        sharpe_ratio = (mean_return / std_return) if std_return > 0 else 0
+                    else:
+                        sharpe_ratio = 0
+                    
+                    # Avg Trade Mensual
+                    if open_time_col and open_time_col in df.columns:
+                        try:
+                            df[open_time_col] = pd.to_datetime(df[open_time_col], errors='coerce')
+                            df = df.dropna(subset=[open_time_col])
+                            if len(df) > 0:
+                                fecha_inicio = df[open_time_col].min()
+                                fecha_fin = df[open_time_col].max()
+                                meses = (fecha_fin - fecha_inicio).days / 30.44  # Promedio de días por mes
+                                avg_trade_mensual = net_profit / meses if meses > 0 else net_profit
+                            else:
+                                avg_trade_mensual = net_profit
+                        except:
+                            avg_trade_mensual = net_profit
+                    else:
+                        avg_trade_mensual = net_profit
+                    
+                    # Calmar Ratio (Return / Max DD)
+                    calmar = (net_profit / max_dd) if max_dd > 0 else 0
+                    
+                    # R Expectancy
+                    if total_trades > 0:
+                        r_expectancy = (winrate / 100 * avg_win) - ((100 - winrate) / 100 * avg_loss)
+                    else:
+                        r_expectancy = 0
+                    
+                    # Agregar resultado
+                    resultados.append({
+                        "Nombre Estrategia": nombre_estrategia,
+                        "Activo": activo,
+                        "retdd": retdd,
+                        "Profit Factor": profit_factor,
+                        "Sharpe Ratio": sharpe_ratio,
+                        "Net Profit": net_profit,
+                        "Max DD": max_dd,
+                        "Avg Trade Mensual": avg_trade_mensual,
+                        "Max Consec Loss": max_consec_loss,
+                        "Winrate %": winrate,
+                        "R Expectancy": r_expectancy,
+                        "Calmar": calmar
+                    })
+                
+                if resultados:
+                    # Crear DataFrame con los resultados
+                    df_resultados = pd.DataFrame(resultados)
+                    
+                    # Formatear columnas numéricas
+                    column_config = {
+                        "Nombre Estrategia": st.column_config.TextColumn("Nombre Estrategia"),
+                        "Activo": st.column_config.TextColumn("Activo"),
+                        "retdd": st.column_config.NumberColumn("retdd", format="%.2f"),
+                        "Profit Factor": st.column_config.NumberColumn("Profit Factor", format="%.2f"),
+                        "Sharpe Ratio": st.column_config.NumberColumn("Sharpe Ratio", format="%.2f"),
+                        "Net Profit": st.column_config.NumberColumn("Net Profit", format="$%.2f"),
+                        "Max DD": st.column_config.NumberColumn("Max DD", format="$%.2f"),
+                        "Avg Trade Mensual": st.column_config.NumberColumn("Avg Trade Mensual", format="$%.2f"),
+                        "Max Consec Loss": st.column_config.NumberColumn("Max Consec Loss", format="%d"),
+                        "Winrate %": st.column_config.NumberColumn("Winrate %", format="%.2f%%"),
+                        "R Expectancy": st.column_config.NumberColumn("R Expectancy", format="$%.2f"),
+                        "Calmar": st.column_config.NumberColumn("Calmar", format="%.2f")
+                    }
+                    
+                    st.dataframe(
+                        df_resultados,
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config=column_config
+                    )
+                else:
+                    st.warning("⚠️ No se pudieron procesar los archivos CSV")
+                    
+            except Exception as e:
+                st.error(f"❌ Error al procesar los archivos CSV: {str(e)}")
+                import traceback
+                st.code(traceback.format_exc())
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    with sub_tab3:
         # Tarjeta de análisis de Prop Firm
         st.markdown("""
         <div class="card">
