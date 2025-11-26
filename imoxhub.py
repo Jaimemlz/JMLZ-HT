@@ -3278,7 +3278,7 @@ with tab1:
                                         niveles_sl = [sl_detected.iloc[0]]
                                     else:
                                         niveles_sl = [perdida_maxima]
-                                
+                            
                                 # Usar el nivel más común como riesgo_ea para compatibilidad (pero usaremos todos los niveles)
                                 riesgo_ea = niveles_sl[0] if len(niveles_sl) > 0 else perdidas.max()
                                 
@@ -5556,6 +5556,29 @@ with tab1:
                     # retdd (Return/Drawdown ratio)
                     retdd = (net_profit / max_dd) if max_dd > 0 else 0
                     
+                    # Ulcer Index
+                    # Calcular drawdown porcentual para Ulcer Index usando la equity curve
+                    if balance_col and balance_col in df.columns:
+                        # Si tenemos balance, usamos balance como equity
+                        equity_for_ui = df[balance_col]
+                    else:
+                        # Si no, usamos la equity curve calculada
+                        equity_for_ui = df['equity'] if 'equity' in df.columns else df[profit_col].cumsum()
+                    
+                    # Calcular máximo acumulado de la equity
+                    cummax_equity = equity_for_ui.cummax()
+                    # Drawdown porcentual: (cummax - equity) / cummax * 100 (siempre positivo)
+                    # Evitar división por cero
+                    cummax_safe = cummax_equity.replace(0, 1)
+                    dd_pct = ((cummax_equity - equity_for_ui) / cummax_safe * 100).fillna(0)
+                    # Solo considerar drawdowns (valores positivos)
+                    dd_pct_positive = dd_pct.clip(lower=0)
+                    # Ulcer Index = sqrt(sum(dd_pct^2) / n)
+                    if len(df) > 0:
+                        ulcer_index = np.sqrt((dd_pct_positive ** 2).sum() / len(df))
+                    else:
+                        ulcer_index = 0
+                    
                     # Sharpe Ratio
                     if len(df) > 1:
                         returns = df[profit_col].values
@@ -5609,6 +5632,7 @@ with tab1:
                         "Avg Trade Mensual": avg_trade_mensual,
                         "Max Consec Loss": max_consec_loss,
                         "Winrate %": winrate,
+                        "Ulcer Index": ulcer_index,
                         "R Expectancy R": r_expectancy_r,  # Guardar valor R
                         "R Expectancy $": r_expectancy_dollar,  # Guardar valor en dólares
                         "Calmar": calmar
@@ -5633,7 +5657,7 @@ with tab1:
                         "Nombre Estrategia", "Activo", "retdd", 
                         "Profit Factor", "Sharpe Ratio", "Net Profit", "Max DD", 
                         "Avg Trade Mensual", "Max Consec Loss", 
-                        "Winrate %", "R Expectancy", "Calmar"
+                        "Winrate %", "Ulcer Index", "R Expectancy", "Calmar"
                     ]
                     df_resultados = df_resultados[column_order]
                     
@@ -5668,7 +5692,8 @@ with tab1:
                         "Avg Trade Mensual": st.column_config.NumberColumn("Avg Trade Mensual", format="$%.2f"),
                         "Max Consec Loss": st.column_config.NumberColumn("Max Consec Loss", format="%d"),
                         "Winrate %": st.column_config.NumberColumn("Winrate %", format="%.2f%%"),
-                        "R Expectancy": st.column_config.TextColumn("R Expectancy", help="Rentabilidad por trade ajustada al riesgo. Cuanto mayor, mejor (valores >0.25 R son buenos). Se muestra en formato R (decimal) y en dólares entre paréntesis."),
+                        "Ulcer Index": st.column_config.NumberColumn("Ulcer Index", format="%.2f", help="Ulcer Index:\n\nMide la profundidad y duración de los drawdowns en la equity curve.\n\nCuanto menor sea el valor, mejor. Un valor bajo indica drawdowns pequeños y cortos.\n\nInterpretación:\n• < 5: Excelente - Drawdowns muy controlados\n• 5 - 10: Bueno - Drawdowns moderados\n• 10 - 20: Aceptable - Drawdowns considerables\n• > 20: Alto - Drawdowns profundos y prolongados\n\nSe calcula como la raíz cuadrada del promedio de los drawdowns porcentuales al cuadrado."),
+                        "R Expectancy": st.column_config.TextColumn("R Expectancy", help="R Expectancy (Expectativa en R):\n\nMide la rentabilidad esperada por trade ajustada al riesgo unitario.\n\nEl valor R representa cuántas veces el riesgo esperas ganar por cada trade.\n\nInterpretación:\n• > 1.0 R: Excelente - Ganas más de 1 vez el riesgo por trade\n• 0.5 - 1.0 R: Muy bueno - Estrategias muy rentables\n• 0.25 - 0.5 R: Bueno - Estrategias rentables\n• 0.0 - 0.25 R: Aceptable - Expectativa positiva pero baja\n• < 0.0: Negativo - No rentable a largo plazo\n\nSe muestra en formato R (decimal) y en dólares entre paréntesis."),
                         "Calmar": st.column_config.NumberColumn("Calmar", format="%.2f", help="Calmar Ratio (Return / Max Drawdown):\n\n🟢 > 3.0: Excelente - Ratio excepcional, muy raro en trading real. Ideal para prop firms y fondeos.\n\n🟠 2.0 - 3.0: Muy bueno - Estrategias robustas y consistentes con excelente gestión de riesgo.\n\n🟡 1.0 - 2.0: Aceptable - Nivel estándar para estrategias operativas normales.\n\n🔴 < 1.0: Débil - El riesgo de drawdown es demasiado alto comparado con la rentabilidad obtenida.\n\nMide la relación entre rentabilidad y drawdown máximo. Valores más altos indican mejor eficiencia riesgo-rendimiento.")
                     }
                     
