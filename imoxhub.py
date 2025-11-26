@@ -5582,14 +5582,20 @@ with tab1:
                     else:
                         avg_trade_mensual = net_profit
                     
-                    # Calmar Ratio (Return / Max DD)
-                    calmar = (net_profit / max_dd) if max_dd > 0 else 0
+                    # Calmar Ratio (Return / Max DD) - dividir por 10 para mostrar en decimales
+                    calmar_raw = (net_profit / max_dd) if max_dd > 0 else 0
+                    calmar = calmar_raw / 10  # Dividir por 10 para mostrar 2.7 en lugar de 27.50
                     
                     # R Expectancy
-                    if total_trades > 0:
-                        r_expectancy = (winrate / 100 * avg_win) - ((100 - winrate) / 100 * avg_loss)
+                    # Calcular valor R (usando avg_loss como R) y valor en dólares
+                    if total_trades > 0 and avg_loss > 0:
+                        # Valor R: (winrate/100 * avg_win/avg_loss) - ((100-winrate)/100 * 1)
+                        r_expectancy_r = (winrate / 100 * (avg_win / avg_loss)) - ((100 - winrate) / 100 * 1)
+                        # Valor en dólares: (winrate/100 * avg_win) - ((100-winrate)/100 * avg_loss)
+                        r_expectancy_dollar = (winrate / 100 * avg_win) - ((100 - winrate) / 100 * avg_loss)
                     else:
-                        r_expectancy = 0
+                        r_expectancy_r = 0
+                        r_expectancy_dollar = 0
                     
                     # Agregar resultado
                     resultados.append({
@@ -5603,7 +5609,8 @@ with tab1:
                         "Avg Trade Mensual": avg_trade_mensual,
                         "Max Consec Loss": max_consec_loss,
                         "Winrate %": winrate,
-                        "R Expectancy": r_expectancy,
+                        "R Expectancy R": r_expectancy_r,  # Guardar valor R
+                        "R Expectancy $": r_expectancy_dollar,  # Guardar valor en dólares
                         "Calmar": calmar
                     })
                 
@@ -5611,7 +5618,45 @@ with tab1:
                     # Crear DataFrame con los resultados
                     df_resultados = pd.DataFrame(resultados)
                     
-                    # Formatear columnas numéricas
+                    # Formatear R Expectancy para mostrar valor R y valor en $ entre paréntesis
+                    df_resultados["R Expectancy Formatted"] = df_resultados.apply(
+                        lambda row: f"{row['R Expectancy R']:.2f} (${row['R Expectancy $']:.2f})",
+                        axis=1
+                    )
+                    
+                    # Eliminar columnas auxiliares y renombrar
+                    df_resultados = df_resultados.drop(columns=["R Expectancy R", "R Expectancy $"])
+                    df_resultados = df_resultados.rename(columns={"R Expectancy Formatted": "R Expectancy"})
+                    
+                    # Definir el orden de las columnas
+                    column_order = [
+                        "Nombre Estrategia", "Activo", "retdd", 
+                        "Profit Factor", "Sharpe Ratio", "Net Profit", "Max DD", 
+                        "Avg Trade Mensual", "Max Consec Loss", 
+                        "Winrate %", "R Expectancy", "Calmar"
+                    ]
+                    df_resultados = df_resultados[column_order]
+                    
+                    # Ordenar por retdd de forma descendente (mayor a menor)
+                    df_resultados = df_resultados.sort_values(by='retdd', ascending=False)
+                    
+                    # Función para estilizar Calmar según umbrales (igual que en "estrategias por mes")
+                    def estilizar_calmar(valor):
+                        if isinstance(valor, (int, float)):
+                            if valor >= 3.0:
+                                return 'background-color: #28a745'  # Verde (Excelente)
+                            elif valor >= 2.0:
+                                return 'background-color: #fd7e14'  # Naranja (Muy bueno)
+                            elif valor >= 1.0:
+                                return 'background-color: #ffc107'  # Amarillo (Aceptable)
+                            else:
+                                return 'background-color: #dc3545'  # Rojo (Débil)
+                        return ''
+                    
+                    # Aplicar estilo solo a la columna Calmar
+                    styled_df = df_resultados.style.applymap(estilizar_calmar, subset=['Calmar'])
+                    
+                    # Formatear columnas numéricas con tooltips en los títulos
                     column_config = {
                         "Nombre Estrategia": st.column_config.TextColumn("Nombre Estrategia"),
                         "Activo": st.column_config.TextColumn("Activo"),
@@ -5623,12 +5668,12 @@ with tab1:
                         "Avg Trade Mensual": st.column_config.NumberColumn("Avg Trade Mensual", format="$%.2f"),
                         "Max Consec Loss": st.column_config.NumberColumn("Max Consec Loss", format="%d"),
                         "Winrate %": st.column_config.NumberColumn("Winrate %", format="%.2f%%"),
-                        "R Expectancy": st.column_config.NumberColumn("R Expectancy", format="$%.2f"),
-                        "Calmar": st.column_config.NumberColumn("Calmar", format="%.2f")
+                        "R Expectancy": st.column_config.TextColumn("R Expectancy", help="Rentabilidad por trade ajustada al riesgo. Cuanto mayor, mejor (valores >0.25 R son buenos). Se muestra en formato R (decimal) y en dólares entre paréntesis."),
+                        "Calmar": st.column_config.NumberColumn("Calmar", format="%.2f", help="Calmar Ratio (Return / Max Drawdown):\n\n🟢 > 3.0: Excelente - Ratio excepcional, muy raro en trading real. Ideal para prop firms y fondeos.\n\n🟠 2.0 - 3.0: Muy bueno - Estrategias robustas y consistentes con excelente gestión de riesgo.\n\n🟡 1.0 - 2.0: Aceptable - Nivel estándar para estrategias operativas normales.\n\n🔴 < 1.0: Débil - El riesgo de drawdown es demasiado alto comparado con la rentabilidad obtenida.\n\nMide la relación entre rentabilidad y drawdown máximo. Valores más altos indican mejor eficiencia riesgo-rendimiento.")
                     }
                     
                     st.dataframe(
-                        df_resultados,
+                        styled_df,
                         use_container_width=True,
                         hide_index=True,
                         column_config=column_config
