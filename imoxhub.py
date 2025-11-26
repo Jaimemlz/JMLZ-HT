@@ -2171,7 +2171,7 @@ st.markdown("""
     /* Asegurar que el contenido dentro de stMain se centre horizontalmente */
     .stMain > div {
         width: 100% !important;
-        max-width: 1200px !important;
+        max-width: 1500px !important;
         display: flex !important;
         flex-direction: column !important;
         align-items: center !important;
