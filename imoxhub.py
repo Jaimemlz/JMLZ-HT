@@ -5579,6 +5579,23 @@ with tab1:
                     else:
                         ulcer_index = 0
                     
+                    # Z-score
+                    # Mide la consistencia estadística de los resultados
+                    # Z-score = (winrate_observado - winrate_esperado) / error_estándar
+                    # Donde winrate_esperado = 50% (asumiendo trading aleatorio)
+                    if total_trades > 0:
+                        winrate_observado = winrate / 100.0  # Convertir a decimal (0-1)
+                        winrate_esperado = 0.5  # 50% para trading aleatorio
+                        # Error estándar de la proporción: sqrt(p*(1-p)/n)
+                        # Usamos winrate_esperado para el cálculo del error estándar
+                        error_estandar = np.sqrt(winrate_esperado * (1 - winrate_esperado) / total_trades)
+                        if error_estandar > 0:
+                            z_score = (winrate_observado - winrate_esperado) / error_estandar
+                        else:
+                            z_score = 0
+                    else:
+                        z_score = 0
+                    
                     # Sharpe Ratio
                     if len(df) > 1:
                         returns = df[profit_col].values
@@ -5633,6 +5650,7 @@ with tab1:
                         "Max Consec Loss": max_consec_loss,
                         "Winrate %": winrate,
                         "Ulcer Index": ulcer_index,
+                        "Z-score": z_score,
                         "R Expectancy R": r_expectancy_r,  # Guardar valor R
                         "R Expectancy $": r_expectancy_dollar,  # Guardar valor en dólares
                         "Calmar": calmar
@@ -5657,7 +5675,7 @@ with tab1:
                         "Nombre Estrategia", "Activo", "retdd", 
                         "Profit Factor", "Sharpe Ratio", "Net Profit", "Max DD", 
                         "Avg Trade Mensual", "Max Consec Loss", 
-                        "Winrate %", "Ulcer Index", "R Expectancy", "Calmar"
+                        "Winrate %", "Ulcer Index", "Z-score", "R Expectancy", "Calmar"
                     ]
                     df_resultados = df_resultados[column_order]
                     
@@ -5693,6 +5711,7 @@ with tab1:
                         "Max Consec Loss": st.column_config.NumberColumn("Max Consec Loss", format="%d"),
                         "Winrate %": st.column_config.NumberColumn("Winrate %", format="%.2f%%"),
                         "Ulcer Index": st.column_config.NumberColumn("Ulcer Index", format="%.2f", help="Ulcer Index:\n\nMide la profundidad y duración de los drawdowns en la equity curve.\n\nCuanto menor sea el valor, mejor. Un valor bajo indica drawdowns pequeños y cortos.\n\nInterpretación:\n• < 5: Excelente - Drawdowns muy controlados\n• 5 - 10: Bueno - Drawdowns moderados\n• 10 - 20: Aceptable - Drawdowns considerables\n• > 20: Alto - Drawdowns profundos y prolongados\n\nSe calcula como la raíz cuadrada del promedio de los drawdowns porcentuales al cuadrado."),
+                        "Z-score": st.column_config.NumberColumn("Z-score", format="%.2f", help="Z-score:\n\nMide la consistencia estadística del winrate comparado con un winrate esperado del 50% (trading aleatorio).\n\nIndica si el winrate observado es estadísticamente significativo o si está dentro del rango esperado por azar.\n\nInterpretación:\n• > 2.0: Muy significativo - Winrate muy superior al 50%, alta consistencia\n• 1.0 - 2.0: Significativo - Winrate superior al 50%, buena consistencia\n• -1.0 - 1.0: Normal - Winrate cercano al 50%, resultados dentro del rango esperado\n• < -1.0: Por debajo - Winrate inferior al 50%, menor consistencia\n\nUn Z-score positivo alto indica que la estrategia tiene un winrate consistentemente mejor que el esperado por azar."),
                         "R Expectancy": st.column_config.TextColumn("R Expectancy", help="R Expectancy (Expectativa en R):\n\nMide la rentabilidad esperada por trade ajustada al riesgo unitario.\n\nEl valor R representa cuántas veces el riesgo esperas ganar por cada trade.\n\nInterpretación:\n• > 1.0 R: Excelente - Ganas más de 1 vez el riesgo por trade\n• 0.5 - 1.0 R: Muy bueno - Estrategias muy rentables\n• 0.25 - 0.5 R: Bueno - Estrategias rentables\n• 0.0 - 0.25 R: Aceptable - Expectativa positiva pero baja\n• < 0.0: Negativo - No rentable a largo plazo\n\nSe muestra en formato R (decimal) y en dólares entre paréntesis."),
                         "Calmar": st.column_config.NumberColumn("Calmar", format="%.2f", help="Calmar Ratio (Return / Max Drawdown):\n\n🟢 > 3.0: Excelente - Ratio excepcional, muy raro en trading real. Ideal para prop firms y fondeos.\n\n🟠 2.0 - 3.0: Muy bueno - Estrategias robustas y consistentes con excelente gestión de riesgo.\n\n🟡 1.0 - 2.0: Aceptable - Nivel estándar para estrategias operativas normales.\n\n🔴 < 1.0: Débil - El riesgo de drawdown es demasiado alto comparado con la rentabilidad obtenida.\n\nMide la relación entre rentabilidad y drawdown máximo. Valores más altos indican mejor eficiencia riesgo-rendimiento.")
                     }
