@@ -2171,7 +2171,7 @@ st.markdown("""
     /* Asegurar que el contenido dentro de stMain se centre horizontalmente */
     .stMain > div {
         width: 100% !important;
-        max-width: 1500px !important;
+        max-width: 1700px !important;
         display: flex !important;
         flex-direction: column !important;
         align-items: center !important;
@@ -3424,6 +3424,16 @@ with tab1:
                                 
                             # Calcular total de trades
                             total_trades = len(ordenado)
+                            
+                            # Calcular métricas mensuales
+                            ordenado['Mes'] = ordenado['Open'].dt.to_period('M')
+                            beneficios_mensuales = ordenado.groupby('Mes')['Beneficio'].sum()
+                            
+                            total_meses = len(beneficios_mensuales)
+                            meses_rentables = len(beneficios_mensuales[beneficios_mensuales >= 0])
+                            
+                            # Calcular % meses rentables
+                            pct_meses_rentables = (meses_rentables / total_meses * 100) if total_meses > 0 else 0
                                 
                             analisis_data.append({
                                 "Nombre": ea,
@@ -3438,7 +3448,8 @@ with tab1:
                                 "TSP": int(tsp),  # Trailing Stop Positivo
                                 "TSL": int(tsl),  # Trailing Stop Loss
                                 "Max Consec Loss": int(max_consec_loss),
-                                "Avg Trade Mensual": round(avg_trades_mes, 1)
+                                "Avg Trade Mensual": round(avg_trades_mes, 1),
+                                "% Meses Rentables": round(pct_meses_rentables, 1)
                             })
                         except Exception as e:
                             st.error(f"Error procesando estrategia {ea} - {simbolo}: {str(e)}")
@@ -3521,6 +3532,11 @@ with tab1:
                                 "Avg Trade Mensual",
                                 help="Promedio de trades por mes",
                                 format="%.1f"
+                            ),
+                            "% Meses Rentables": st.column_config.NumberColumn(
+                                "% Meses Rentables",
+                                help="Porcentaje de meses con beneficio >= 0",
+                                format="%.1f%%"
                             )
                     }
                     
@@ -5741,6 +5757,27 @@ with tab1:
                                 except:
                                     holding_time_hours = 0
                     
+                    # Calcular métricas mensuales
+                    pct_meses_rentables = 0
+                    
+                    if open_time_col and open_time_col in df.columns:
+                        try:
+                            df_mes = df.copy()
+                            df_mes[open_time_col] = pd.to_datetime(df_mes[open_time_col], errors='coerce')
+                            df_mes = df_mes.dropna(subset=[open_time_col])
+                            
+                            if len(df_mes) > 0:
+                                df_mes['Mes'] = df_mes[open_time_col].dt.to_period('M')
+                                beneficios_mensuales = df_mes.groupby('Mes')[profit_col].sum()
+                                
+                                total_meses = len(beneficios_mensuales)
+                                meses_rentables = len(beneficios_mensuales[beneficios_mensuales >= 0])
+                                
+                                # Calcular % meses rentables
+                                pct_meses_rentables = (meses_rentables / total_meses * 100) if total_meses > 0 else 0
+                        except:
+                            pass
+                    
                     # Agregar resultado
                     resultados.append({
                         "Nombre Estrategia": nombre_estrategia,
@@ -5759,7 +5796,8 @@ with tab1:
                         "R Expectancy $": r_expectancy_dollar,  # Guardar valor en dólares
                         "Calmar": calmar,
                         "R-squared": r_squared,
-                        "Holding Time": holding_time_hours
+                        "Holding Time": holding_time_hours,
+                        "% Meses Rentables": round(pct_meses_rentables, 1)
                     })
                 
                 if resultados:
@@ -5782,7 +5820,7 @@ with tab1:
                         "Profit Factor", "Sharpe Ratio", "Net Profit", "Max DD", 
                         "Avg Trade Mensual", "Max Consec Loss", 
                         "Winrate %", "Ulcer Index", "Z-score", "R Expectancy", "Calmar",
-                        "R-squared", "Holding Time"
+                        "R-squared", "Holding Time", "% Meses Rentables"
                     ]
                     df_resultados = df_resultados[column_order]
                     
@@ -5822,7 +5860,8 @@ with tab1:
                         "R Expectancy": st.column_config.TextColumn("R Expectancy", help="R Expectancy (Expectativa en R):\n\nMide la rentabilidad esperada por trade ajustada al riesgo unitario.\n\nEl valor R representa cuántas veces el riesgo esperas ganar por cada trade.\n\nInterpretación:\n• > 1.0 R: Excelente - Ganas más de 1 vez el riesgo por trade\n• 0.5 - 1.0 R: Muy bueno - Estrategias muy rentables\n• 0.25 - 0.5 R: Bueno - Estrategias rentables\n• 0.0 - 0.25 R: Aceptable - Expectativa positiva pero baja\n• < 0.0: Negativo - No rentable a largo plazo\n\nSe muestra en formato R (decimal) y en dólares entre paréntesis."),
                         "Calmar": st.column_config.NumberColumn("Calmar", format="%.2f", help="Calmar Ratio (Return / Max Drawdown):\n\n🟢 > 3.0: Excelente - Ratio excepcional, muy raro en trading real. Ideal para prop firms y fondeos.\n\n🟠 2.0 - 3.0: Muy bueno - Estrategias robustas y consistentes con excelente gestión de riesgo.\n\n🟡 1.0 - 2.0: Aceptable - Nivel estándar para estrategias operativas normales.\n\n🔴 < 1.0: Débil - El riesgo de drawdown es demasiado alto comparado con la rentabilidad obtenida.\n\nMide la relación entre rentabilidad y drawdown máximo. Valores más altos indican mejor eficiencia riesgo-rendimiento."),
                         "R-squared": st.column_config.NumberColumn("R-squared", format="%.4f", help="R-squared (Smoothness de la curva de capital):\n\nMide qué tan suave y consistente es la curva de equity. Indica qué tan bien se ajusta la curva de capital a una línea recta (tendencia).\n\nDiferencia con R Expectancy:\n• R Expectancy: Te dice cuánto podrías ganar por trade asumiendo X riesgo → clave para rentabilidad.\n• R-squared: Te dice qué tan suave es la curva de beneficios → clave para robustez/consistencia.\n\nInterpretación:\n• > 0.95: Excelente - Curva muy suave, alta consistencia\n• 0.90 - 0.95: Muy bueno - Curva suave, buena consistencia\n• 0.80 - 0.90: Bueno - Curva aceptablemente suave\n• 0.70 - 0.80: Aceptable - Curva con algunas variaciones\n• < 0.70: Bajo - Curva con muchas variaciones, menor consistencia\n\nUna estrategia ideal tiene: R Expectancy alta + R² alto."),
-                        "Holding Time": st.column_config.NumberColumn("Holding Time", format="%.2f", help="Holding Time (Duración media de las operaciones):\n\nMide el tiempo promedio que las operaciones permanecen abiertas antes de cerrarse.\n\nSe muestra en horas.\n\nInterpretación:\n• Valores bajos (< 1 hora): Operaciones muy cortas, scalping\n• Valores medios (1-24 horas): Operaciones intradía\n• Valores altos (> 24 horas): Operaciones de swing o posición\n\nÚtil para entender el estilo de trading de la estrategia y evaluar la exposición al riesgo temporal.")
+                        "Holding Time": st.column_config.NumberColumn("Holding Time", format="%.2f", help="Holding Time (Duración media de las operaciones):\n\nMide el tiempo promedio que las operaciones permanecen abiertas antes de cerrarse.\n\nSe muestra en horas.\n\nInterpretación:\n• Valores bajos (< 1 hora): Operaciones muy cortas, scalping\n• Valores medios (1-24 horas): Operaciones intradía\n• Valores altos (> 24 horas): Operaciones de swing o posición\n\nÚtil para entender el estilo de trading de la estrategia y evaluar la exposición al riesgo temporal."),
+                        "% Meses Rentables": st.column_config.NumberColumn("% Meses Rentables", format="%.1f%%", help="Porcentaje de meses con beneficio >= 0")
                     }
                     
                     st.dataframe(
