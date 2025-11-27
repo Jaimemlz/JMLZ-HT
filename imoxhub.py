@@ -4122,24 +4122,19 @@ with tab1:
                                                     
                                                     # Escala de colores: < 0.4 verde, 0.4-0.7 naranja, > 0.7 rojo
                                                     colorscale_custom = [
-                                                        [0,    '#90EE90'],   # Verde para valores < 0.4
-                                                        [0.4,  '#90EE90'],   # Verde hasta 0.4
-                                                        [0.4,  '#FFA655'],   # Naranja desde 0.4
-                                                        [0.7,  '#FFA655'],   # Naranja hasta 0.7
-                                                        [0.7,  '#FFB6C1'],   # Rojo desde 0.7
-                                                        [1,    '#FFB6C1']    # Rojo para valores > 0.7
+                                                        [0,    '#48F94A'],   # Verde para valores < 0.4
+                                                        [0.4,  '#48F94A'],   # Verde hasta 0.4
+                                                        [0.4,  '#F98948'],   # Naranja desde 0.4
+                                                        [0.7,  '#F98948'],   # Naranja hasta 0.7
+                                                        [0.7,  '#F93636'],   # Rojo desde 0.7
+                                                        [1,    '#F93636']    # Rojo para valores > 0.7
                                                     ]
                                                     
-                                                    # Función para obtener el color de borde basado en el valor
+                                                    # Función para obtener el color de borde (todos los bordes del mismo color)
                                                     def obtener_color_borde(valor):
                                                         if pd.isna(valor):
                                                             return None
-                                                        if valor < 0.4:
-                                                            return '#5EE45E'  # Verde oscuro
-                                                        elif valor < 0.7:
-                                                            return '#FFA655'  # Naranja
-                                                        else:
-                                                            return '#FF4B4B'  # Rojo oscuro
+                                                        return '#d5d5da'  # Todos los bordes del mismo color
                                                     
                                                     # Añadir bordes de colores a cada celda usando shapes
                                                     shapes = []
@@ -4185,8 +4180,11 @@ with tab1:
                                                         ygap=2   # Espacio vertical entre celdas
                                                     ))
                                                     
+                                                    # Crear título con leyenda de colores
+                                                    titulo_con_leyenda = f"Matriz de Correlación - {activo.upper()}                    🟢 < 0.4    🟠 0.4-0.7    🔴 > 0.7"
+                                                    
                                                     fig_heatmap.update_layout(
-                                                        title=f"Matriz de Correlación - {activo.upper()}",
+                                                        title=titulo_con_leyenda,
                                                         width=600,
                                                         height=600,
                                                         margin=dict(l=80, r=20, t=60, b=60),  # Margen izquierdo más amplio para separar del borde
@@ -4743,24 +4741,19 @@ with tab1:
                                                     
                                                     # Escala de colores: < 0.4 verde, 0.4-0.7 naranja, > 0.7 rojo
                                                     colorscale_custom = [
-                                                        [0,    '#90EE90'],   # Verde para valores < 0.4
-                                                        [0.4,  '#90EE90'],   # Verde hasta 0.4
-                                                        [0.4,  '#FFA655'],   # Naranja desde 0.4
-                                                        [0.7,  '#FFA655'],   # Naranja hasta 0.7
-                                                        [0.7,  '#FFB6C1'],   # Rojo desde 0.7
-                                                        [1,    '#FFB6C1']    # Rojo para valores > 0.7
+                                                        [0,    '#46D285'],   # Verde para valores < 0.4
+                                                        [0.4,  '#46D285'],   # Verde hasta 0.4
+                                                        [0.4,  '#FBBE5B'],   # Naranja desde 0.4
+                                                        [0.7,  '#FBBE5B'],   # Naranja hasta 0.7
+                                                        [0.7,  '#FA5A5A'],   # Rojo desde 0.7
+                                                        [1,    '#FA5A5A']    # Rojo para valores > 0.7
                                                     ]
                                                     
-                                                    # Función para obtener el color de borde basado en el valor
+                                                    # Función para obtener el color de borde (todos los bordes del mismo color)
                                                     def obtener_color_borde(valor):
                                                         if pd.isna(valor):
                                                             return None
-                                                        if valor < 0.4:
-                                                            return '#5EE45E'  # Verde oscuro
-                                                        elif valor < 0.7:
-                                                            return '#FFA655'  # Naranja
-                                                        else:
-                                                            return '#FF4B4B'  # Rojo oscuro
+                                                        return '#d5d5da'  # Todos los bordes del mismo color
                                                     
                                                     # Añadir bordes de colores a cada celda usando shapes
                                                     shapes = []
@@ -4806,8 +4799,11 @@ with tab1:
                                                         ygap=2   # Espacio vertical entre celdas
                                                     ))
                                                     
+                                                    # Crear título con leyenda de colores
+                                                    titulo_con_leyenda = f"Matriz de Correlación - {activo.upper()}                    🟢 < 0.4    🟠 0.4-0.7    🔴 > 0.7"
+                                                    
                                                     fig_heatmap.update_layout(
-                                                        title=f"Matriz de Correlación - {activo.upper()}",
+                                                        title=titulo_con_leyenda,
                                                         width=600,
                                                         height=600,
                                                         margin=dict(l=80, r=20, t=60, b=60),  # Margen izquierdo más amplio para separar del borde
