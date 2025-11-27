@@ -3288,7 +3288,7 @@ with tab1:
                                 tsp = 0  # Trailing Stop Positivo
                                 tsl = 0  # Trailing Stop Loss
                                 perdidas_nulas = 0
-                                
+                            
                                 # Margen de tolerancia (15% para considerar múltiples niveles)
                                 margen_tolerancia = riesgo_ea * 0.15
                                 
@@ -3331,56 +3331,56 @@ with tab1:
                                     
                                     return False
                             
-                                for _, trade in ordenado.iterrows():
-                                    beneficio = trade['Beneficio']
-                                    tipo_cierre = trade.get('TipoCierre')
+                            for _, trade in ordenado.iterrows():
+                                beneficio = trade['Beneficio']
+                                tipo_cierre = trade.get('TipoCierre')
                                     
-                                    # Si el HTML tiene información explícita de [sl] o [tp], usarla PERO validar con el beneficio
-                                    if tipo_cierre == 'SL':
-                                        # [sl] en HTML: verificar si es pérdida o ganancia
-                                        if beneficio < 0:
-                                            # [sl] con pérdida: verificar si es SL directo o TSL
-                                            perdida_abs = abs(beneficio)
-                                            if es_sl_directo(perdida_abs):
-                                                # SL directo: pérdida que alcanzó alguno de los SL esperados
-                                                sl_directos += 1
-                                            else:
-                                                # TSL: pérdida menor que los SL esperados (trailing stop activó antes)
-                                                sl_trailing += 1
-                                                tsl += 1  # Trailing Stop Loss
-                                        elif beneficio > 0:
-                                            # [sl] en HTML pero con ganancia: es un Trailing Stop Positivo
+                                # Si el HTML tiene información explícita de [sl] o [tp], usarla PERO validar con el beneficio
+                                if tipo_cierre == 'SL':
+                                    # [sl] en HTML: verificar si es pérdida o ganancia
+                                    if beneficio < 0:
+                                        # [sl] con pérdida: verificar si es SL directo o TSL
+                                        perdida_abs = abs(beneficio)
+                                        if es_sl_directo(perdida_abs):
+                                            # SL directo: pérdida que alcanzó alguno de los SL esperados
+                                            sl_directos += 1
+                                        else:
+                                            # TSL: pérdida menor que los SL esperados (trailing stop activó antes)
+                                            sl_trailing += 1
+                                            tsl += 1  # Trailing Stop Loss
+                                    elif beneficio > 0:
+                                        # [sl] en HTML pero con ganancia: es un Trailing Stop Positivo
+                                        sl_trailing += 1
+                                        tsp += 1  # Trailing Stop Positivo
+                                    else:
+                                        # Break-even con [sl]: TSL
+                                        sl_trailing += 1
+                                        tsl += 1
+                                elif tipo_cierre == 'TP':
+                                    # [tp] en HTML: confiamos en el HTML, es un TP real
+                                    # Se contará abajo para mantener claridad
+                                    pass
+                                else:
+                                    # Si no hay información explícita, usar la lógica de cálculo
+                                    if beneficio < 0:  # Pérdida
+                                        perdida_abs = abs(beneficio)
+                                        if es_sl_directo(perdida_abs):
+                                            sl_directos += 1
+                                        else:
+                                            sl_trailing += 1
+                                            tsl += 1  # Trailing Stop Loss
+                                    elif beneficio > 0:  # Ganancia
+                                        if es_tp_real(trade):
+                                            # TP real (tocó el TP)
+                                            pass  # se contará abajo para mantener claridad
+                                        else:
+                                            # TS positivo (o cierre manual en ganancia que no tocó TP)
                                             sl_trailing += 1
                                             tsp += 1  # Trailing Stop Positivo
-                                        else:
-                                            # Break-even con [sl]: TSL
-                                            sl_trailing += 1
-                                            tsl += 1
-                                    elif tipo_cierre == 'TP':
-                                        # [tp] en HTML: confiamos en el HTML, es un TP real
-                                        # Se contará abajo para mantener claridad
-                                        pass
                                     else:
-                                        # Si no hay información explícita, usar la lógica de cálculo
-                                        if beneficio < 0:  # Pérdida
-                                            perdida_abs = abs(beneficio)
-                                            if es_sl_directo(perdida_abs):
-                                                sl_directos += 1
-                                            else:
-                                                sl_trailing += 1
-                                                tsl += 1  # Trailing Stop Loss
-                                        elif beneficio > 0:  # Ganancia
-                                            if es_tp_real(trade):
-                                                # TP real (tocó el TP)
-                                                pass  # se contará abajo para mantener claridad
-                                            else:
-                                                # TS positivo (o cierre manual en ganancia que no tocó TP)
-                                                sl_trailing += 1
-                                                tsp += 1  # Trailing Stop Positivo
-                                        else:
-                                            # Break-even -> lo consideramos TS (sin ganancia ni pérdida, lo contamos como TSL)
-                                            sl_trailing += 1
-                                            tsl += 1
+                                        # Break-even -> lo consideramos TS (sin ganancia ni pérdida, lo contamos como TSL)
+                                        sl_trailing += 1
+                                        tsl += 1
                             else:
                                 # No hay pérdidas, no podemos calcular el riesgo
                                 riesgo_ea = 0
@@ -3394,22 +3394,22 @@ with tab1:
                             net_profit = ordenado['Beneficio'].sum()
                             ganancias_totales = ordenado[ordenado['Beneficio'] > 0]['Beneficio'].sum()
                             perdidas_totales = abs(ordenado[ordenado['Beneficio'] < 0]['Beneficio'].sum())
-                            
+                                
                             # Profit Factor
                             profit_factor = ganancias_totales / perdidas_totales if perdidas_totales > 0 else float('inf')
-                            
+                                
                             # Max Drawdown
                             max_dd = calcular_max_drawdown(ordenado['Beneficio'])
-                            
+                                
                             # Return on Drawdown (ratio, no porcentaje)
                             ret_dd = net_profit / abs(max_dd) if max_dd != 0 else 0
-                            
+                                
                             # Max Consecutive Loss
                             max_consec_loss = calcular_max_consecutive_loss(ordenado['Beneficio'])
-                            
+                                
                             # Avg Trades per Month
                             avg_trades_mes = calcular_avg_trades_por_mes(ordenado)
-                            
+                                
                             # Contar TP reales (cierre exactamente en TP, no TS positivo)
                             # Si el HTML tiene [tp], confiamos en eso directamente
                             if 'TipoCierre' in ordenado.columns:
@@ -3421,10 +3421,10 @@ with tab1:
                                 tp_trades = tp_explicitos + tp_por_calculo
                             else:
                                 tp_trades = int(ordenado.apply(es_tp_real, axis=1).sum())
-                            
+                                
                             # Calcular total de trades
                             total_trades = len(ordenado)
-                            
+                                
                             analisis_data.append({
                                 "Nombre": ea,
                                 "Activo": simbolo.upper(),  # Agregar columna de activo
@@ -3526,10 +3526,10 @@ with tab1:
                     
                     if not df_analisis.empty and 'retDD' in df_analisis.columns:
                         st.dataframe(
-                            df_analisis,
-                            use_container_width=True,
-                            column_config=column_config_analisis,
-                            hide_index=True
+                        df_analisis,
+                        use_container_width=True,
+                        column_config=column_config_analisis,
+                        hide_index=True
                         )
                     else:
                         st.warning("⚠️ No se pudo generar la tabla de análisis. Verifica que los archivos contengan datos válidos.")
@@ -3544,9 +3544,9 @@ with tab1:
                     
                     with col_titulo:
                         st.markdown("""
-                        <div>
-                            <h4>Combinar Estrategias</h4>
-                        </div>
+                            <div>
+                                <h4>Combinar Estrategias</h4>
+                            </div>
                         """, unsafe_allow_html=True)
                         
                     with col_fechas:
@@ -3602,7 +3602,7 @@ with tab1:
                     if estrategias_seleccionadas:
                         if st.button("Ver Estadísticas Combinadas", use_container_width=True):
                             try:
-                                # Filtrar el dataframe original por las estrategias seleccionadas
+                                # Filtrar# Filtrar el dataframe original por las estrategias seleccionadas
                                 # Extraer EA y Símbolo de las estrategias seleccionadas
                                 estrategias_filtradas = []
                                 for estrategia_sel in estrategias_seleccionadas:
@@ -4398,13 +4398,13 @@ with tab1:
                                             "Trades": st.column_config.NumberColumn(
                                                 "Trades",
                                                 help="Total de trades realizados",
-                                                format="%d"
-                                            ),
-                                            "TP": st.column_config.NumberColumn(
-                                                "TP",
-                                                help="Trades con TP (Take Profit)",
-                                                format="%d"
-                                            ),
+                                    format="%d"
+                                ),
+                                "TP": st.column_config.NumberColumn(
+                                    "TP",
+                                    help="Trades con TP (Take Profit)",
+                                    format="%d"
+                                ),
                                             "SL": st.column_config.NumberColumn(
                                                 "SL",
                                                 help="Trades con SL directo",
@@ -4418,19 +4418,19 @@ with tab1:
                                             "TSL": st.column_config.NumberColumn(
                                                 "TSL",
                                                 help="Trailing Stop Loss (trades con pérdida menor al SL directo)",
-                                                format="%d"
-                                            ),
-                                            "Max Consec Loss": st.column_config.NumberColumn(
-                                                "Max Consec Loss",
-                                                help="Máxima racha de pérdidas consecutivas",
-                                                format="%d"
-                                            ),
-                                            "Avg Trade Mensual": st.column_config.NumberColumn(
-                                                "Avg Trade Mensual",
-                                                help="Promedio de trades por mes",
-                                                format="%.1f"
-                                            )
-                                        }
+                                    format="%d"
+                                ),
+                                "Max Consec Loss": st.column_config.NumberColumn(
+                                    "Max Consec Loss",
+                                    help="Máxima racha de pérdidas consecutivas",
+                                    format="%d"
+                                ),
+                                "Avg Trade Mensual": st.column_config.NumberColumn(
+                                    "Avg Trade Mensual",
+                                    help="Promedio de trades por mes",
+                                    format="%.1f"
+                            )
+                            }
                                         
                                         st.dataframe(
                                             df_stats_comb,
@@ -4742,61 +4742,61 @@ with tab1:
                                                         column_config=column_config_matriz,
                                                         hide_index=False
                                                     )
-                                            
-                                            # Preparar datos de cada estrategia individual
-                                            df_combinado['Fecha'] = df_combinado['Close'].dt.date
-                                            
-                                            fig_comb = go.Figure()
-                                            
-                                            # Agregar línea para cada estrategia individual (EA + Símbolo)
-                                            for ea_nombre, activo in estrategias_filtradas:
-                                                df_ea = df_combinado[(df_combinado['EA'] == ea_nombre) & (df_combinado['Símbolo'].str.lower() == activo)].copy()
-                                                if len(df_ea) > 0:
-                                                    df_ea['Fecha'] = df_ea['Close'].dt.date
-                                                    df_ea = df_ea.sort_values('Fecha')
-                                                    beneficios_ea = df_ea.groupby('Fecha')['Beneficio'].sum().reset_index()
-                                                    beneficios_ea = beneficios_ea.sort_values('Fecha')
-                                                    beneficios_ea['Beneficio_acumulado'] = beneficios_ea['Beneficio'].cumsum()
-                                                    
-                                                    nombre_leyenda = f"{ea_nombre} - {activo.upper()}"
-                                                    fig_comb.add_trace(go.Scatter(
-                                                        x=beneficios_ea['Fecha'],
-                                                        y=beneficios_ea['Beneficio_acumulado'],
-                                                        mode='lines+markers',
-                                                        name=nombre_leyenda,
-                                                        line=dict(width=2),
-                                                        marker=dict(size=4)
-                                                    ))
-                                            
-                                            # Calcular y agregar línea del conjunto combinado
-                                            beneficios_combinados = df_combinado.groupby('Fecha')['Beneficio'].sum().reset_index()
-                                            beneficios_combinados = beneficios_combinados.sort_values('Fecha')
-                                            beneficios_combinados['Beneficio_acumulado'] = beneficios_combinados['Beneficio'].cumsum()
-                                            
-                                            fig_comb.add_trace(go.Scatter(
-                                                x=beneficios_combinados['Fecha'],
-                                                y=beneficios_combinados['Beneficio_acumulado'],
-                                                mode='lines+markers',
-                                                name='Combinado',
-                                                line=dict(width=3, color='#FF6B6B', dash='dash'),
-                                                marker=dict(size=5)
-                                            ))
-                                            
-                                            fig_comb.update_layout(
-                                                xaxis_title="Fecha",
-                                                yaxis_title="Beneficio Acumulado ($)",
-                                                hovermode='x unified',
-                                                showlegend=True,
-                                                legend=dict(
-                                                    orientation="h",
-                                                    yanchor="bottom",
-                                                    y=1.02,
-                                                    xanchor="right",
-                                                    x=1
-                                                )
+                                        
+                                        # Preparar datos de cada estrategia individual
+                                        df_combinado['Fecha'] = df_combinado['Close'].dt.date
+                                        
+                                        fig_comb = go.Figure()
+                                        
+                                        # Agregar línea para cada estrategia individual (EA + Símbolo)
+                                        for ea_nombre, activo in estrategias_filtradas:
+                                            df_ea = df_combinado[(df_combinado['EA'] == ea_nombre) & (df_combinado['Símbolo'].str.lower() == activo)].copy()
+                                            if len(df_ea) > 0:
+                                                df_ea['Fecha'] = df_ea['Close'].dt.date
+                                                df_ea = df_ea.sort_values('Fecha')
+                                                beneficios_ea = df_ea.groupby('Fecha')['Beneficio'].sum().reset_index()
+                                                beneficios_ea = beneficios_ea.sort_values('Fecha')
+                                                beneficios_ea['Beneficio_acumulado'] = beneficios_ea['Beneficio'].cumsum()
+                                                
+                                                nombre_leyenda = f"{ea_nombre} - {activo.upper()}"
+                                                fig_comb.add_trace(go.Scatter(
+                                                    x=beneficios_ea['Fecha'],
+                                                    y=beneficios_ea['Beneficio_acumulado'],
+                                                    mode='lines+markers',
+                                                    name=nombre_leyenda,
+                                                    line=dict(width=2),
+                                                    marker=dict(size=4)
+                                                ))
+                                        
+                                        # Calcular y agregar línea del conjunto combinado
+                                        beneficios_combinados = df_combinado.groupby('Fecha')['Beneficio'].sum().reset_index()
+                                        beneficios_combinados = beneficios_combinados.sort_values('Fecha')
+                                        beneficios_combinados['Beneficio_acumulado'] = beneficios_combinados['Beneficio'].cumsum()
+                                        
+                                        fig_comb.add_trace(go.Scatter(
+                                            x=beneficios_combinados['Fecha'],
+                                            y=beneficios_combinados['Beneficio_acumulado'],
+                                            mode='lines+markers',
+                                            name='Combinado',
+                                            line=dict(width=3, color='#FF6B6B', dash='dash'),
+                                            marker=dict(size=5)
+                                        ))
+                                        
+                                        fig_comb.update_layout(
+                                            xaxis_title="Fecha",
+                                            yaxis_title="Beneficio Acumulado ($)",
+                                            hovermode='x unified',
+                                            showlegend=True,
+                                            legend=dict(
+                                                orientation="h",
+                                                yanchor="bottom",
+                                                y=1.02,
+                                                xanchor="right",
+                                                x=1
                                             )
-                                            
-                                            st.plotly_chart(fig_comb, use_container_width=True)
+                                        )
+                                        
+                                        st.plotly_chart(fig_comb, use_container_width=True)
                             except Exception as e:
                                 st.error(f"❌ Error al procesar las estadísticas combinadas: {str(e)}")
                                 import traceback
@@ -5147,7 +5147,7 @@ with tab1:
                     with analisis_tab2:
                         # Crear selector de EA para trades con cálculo de retDD
                         grupos_ordenados = df.groupby(["EA", "Símbolo"]).agg(Beneficio_total=('Beneficio', 'sum')).reset_index()
-                        
+
                         # Calcular retDD para cada grupo
                         ret_dd_list = []
                         for _, row in grupos_ordenados.iterrows():
@@ -5637,6 +5637,110 @@ with tab1:
                         r_expectancy_r = 0
                         r_expectancy_dollar = 0
                     
+                    # R-squared (Smoothness de la curva de capital)
+                    # Mide qué tan suave es la curva de equity (qué tan bien se ajusta a una línea recta)
+                    if len(df) > 1:
+                        # Obtener la equity curve
+                        if balance_col and balance_col in df.columns:
+                            equity_curve = df[balance_col].values
+                        else:
+                            equity_curve = df['equity'].values if 'equity' in df.columns else df[profit_col].cumsum().values
+                        
+                        # Crear variable X (número de trade: 0, 1, 2, ..., n-1)
+                        x = np.arange(len(equity_curve))
+                        
+                        # Calcular regresión lineal: equity = a + b*x
+                        # R² = 1 - (SS_res / SS_tot)
+                        # Donde SS_res = sum((y - y_pred)^2) y SS_tot = sum((y - y_mean)^2)
+                        if len(equity_curve) > 1:
+                            # Calcular coeficientes de regresión lineal
+                            x_mean = x.mean()
+                            y_mean = equity_curve.mean()
+                            
+                            # Calcular pendiente y ordenada al origen
+                            numerator = ((x - x_mean) * (equity_curve - y_mean)).sum()
+                            denominator = ((x - x_mean) ** 2).sum()
+                            
+                            if denominator > 0:
+                                slope = numerator / denominator
+                                intercept = y_mean - slope * x_mean
+                                
+                                # Calcular valores predichos
+                                y_pred = intercept + slope * x
+                                
+                                # Calcular R²
+                                ss_res = ((equity_curve - y_pred) ** 2).sum()
+                                ss_tot = ((equity_curve - y_mean) ** 2).sum()
+                                
+                                if ss_tot > 0:
+                                    r_squared = 1 - (ss_res / ss_tot)
+                                else:
+                                    r_squared = 0
+                            else:
+                                r_squared = 0
+                        else:
+                            r_squared = 0
+                    else:
+                        r_squared = 0
+                    
+                    # Holding Time (Media de duración de las operaciones)
+                    holding_time_hours = 0
+                    if open_time_col and close_time_col and open_time_col in df.columns and close_time_col in df.columns:
+                        try:
+                            # Intentar parsear las fechas
+                            df_time = df.copy()
+                            df_time[open_time_col] = pd.to_datetime(df_time[open_time_col], errors='coerce')
+                            df_time[close_time_col] = pd.to_datetime(df_time[close_time_col], errors='coerce')
+                            df_time = df_time.dropna(subset=[open_time_col, close_time_col])
+                            
+                            if len(df_time) > 0:
+                                # Calcular diferencia de tiempo
+                                time_diff = df_time[close_time_col] - df_time[open_time_col]
+                                # Convertir a horas
+                                holding_time_hours = time_diff.dt.total_seconds().sum() / 3600.0 / len(df_time)
+                        except:
+                            # Si falla, intentar con columna "Time in trade" si existe
+                            time_in_trade_col = None
+                            for col in df.columns:
+                                if 'time' in col.lower() and 'trade' in col.lower():
+                                    time_in_trade_col = col
+                                    break
+                            
+                            if time_in_trade_col and time_in_trade_col in df.columns:
+                                try:
+                                    # Parsear formato como "1h 30m", "32m 0s", etc.
+                                    def parse_time_in_trade(time_str):
+                                        if pd.isna(time_str) or time_str == '':
+                                            return 0
+                                        time_str = str(time_str).strip()
+                                        hours = 0
+                                        minutes = 0
+                                        seconds = 0
+                                        
+                                        # Buscar horas
+                                        if 'h' in time_str:
+                                            h_part = time_str.split('h')[0]
+                                            hours = float(h_part.strip())
+                                            time_str = time_str.split('h', 1)[1]
+                                        
+                                        # Buscar minutos
+                                        if 'm' in time_str:
+                                            m_part = time_str.split('m')[0]
+                                            minutes = float(m_part.strip())
+                                            time_str = time_str.split('m', 1)[1]
+                                        
+                                        # Buscar segundos
+                                        if 's' in time_str:
+                                            s_part = time_str.split('s')[0]
+                                            seconds = float(s_part.strip())
+                                        
+                                        return hours + minutes / 60.0 + seconds / 3600.0
+                                    
+                                    holding_times = df[time_in_trade_col].apply(parse_time_in_trade)
+                                    holding_time_hours = holding_times.mean() if len(holding_times) > 0 else 0
+                                except:
+                                    holding_time_hours = 0
+                    
                     # Agregar resultado
                     resultados.append({
                         "Nombre Estrategia": nombre_estrategia,
@@ -5653,7 +5757,9 @@ with tab1:
                         "Z-score": z_score,
                         "R Expectancy R": r_expectancy_r,  # Guardar valor R
                         "R Expectancy $": r_expectancy_dollar,  # Guardar valor en dólares
-                        "Calmar": calmar
+                        "Calmar": calmar,
+                        "R-squared": r_squared,
+                        "Holding Time": holding_time_hours
                     })
                 
                 if resultados:
@@ -5675,7 +5781,8 @@ with tab1:
                         "Nombre Estrategia", "Activo", "retdd", 
                         "Profit Factor", "Sharpe Ratio", "Net Profit", "Max DD", 
                         "Avg Trade Mensual", "Max Consec Loss", 
-                        "Winrate %", "Ulcer Index", "Z-score", "R Expectancy", "Calmar"
+                        "Winrate %", "Ulcer Index", "Z-score", "R Expectancy", "Calmar",
+                        "R-squared", "Holding Time"
                     ]
                     df_resultados = df_resultados[column_order]
                     
@@ -5713,7 +5820,9 @@ with tab1:
                         "Ulcer Index": st.column_config.NumberColumn("Ulcer Index", format="%.2f", help="Ulcer Index:\n\nMide la profundidad y duración de los drawdowns en la equity curve.\n\nCuanto menor sea el valor, mejor. Un valor bajo indica drawdowns pequeños y cortos.\n\nInterpretación:\n• < 5: Excelente - Drawdowns muy controlados\n• 5 - 10: Bueno - Drawdowns moderados\n• 10 - 20: Aceptable - Drawdowns considerables\n• > 20: Alto - Drawdowns profundos y prolongados\n\nSe calcula como la raíz cuadrada del promedio de los drawdowns porcentuales al cuadrado."),
                         "Z-score": st.column_config.NumberColumn("Z-score", format="%.2f", help="Z-score:\n\nMide la consistencia estadística del winrate comparado con un winrate esperado del 50% (trading aleatorio).\n\nIndica si el winrate observado es estadísticamente significativo o si está dentro del rango esperado por azar.\n\nInterpretación:\n• > 2.0: Muy significativo - Winrate muy superior al 50%, alta consistencia\n• 1.0 - 2.0: Significativo - Winrate superior al 50%, buena consistencia\n• -1.0 - 1.0: Normal - Winrate cercano al 50%, resultados dentro del rango esperado\n• < -1.0: Por debajo - Winrate inferior al 50%, menor consistencia\n\nUn Z-score positivo alto indica que la estrategia tiene un winrate consistentemente mejor que el esperado por azar."),
                         "R Expectancy": st.column_config.TextColumn("R Expectancy", help="R Expectancy (Expectativa en R):\n\nMide la rentabilidad esperada por trade ajustada al riesgo unitario.\n\nEl valor R representa cuántas veces el riesgo esperas ganar por cada trade.\n\nInterpretación:\n• > 1.0 R: Excelente - Ganas más de 1 vez el riesgo por trade\n• 0.5 - 1.0 R: Muy bueno - Estrategias muy rentables\n• 0.25 - 0.5 R: Bueno - Estrategias rentables\n• 0.0 - 0.25 R: Aceptable - Expectativa positiva pero baja\n• < 0.0: Negativo - No rentable a largo plazo\n\nSe muestra en formato R (decimal) y en dólares entre paréntesis."),
-                        "Calmar": st.column_config.NumberColumn("Calmar", format="%.2f", help="Calmar Ratio (Return / Max Drawdown):\n\n🟢 > 3.0: Excelente - Ratio excepcional, muy raro en trading real. Ideal para prop firms y fondeos.\n\n🟠 2.0 - 3.0: Muy bueno - Estrategias robustas y consistentes con excelente gestión de riesgo.\n\n🟡 1.0 - 2.0: Aceptable - Nivel estándar para estrategias operativas normales.\n\n🔴 < 1.0: Débil - El riesgo de drawdown es demasiado alto comparado con la rentabilidad obtenida.\n\nMide la relación entre rentabilidad y drawdown máximo. Valores más altos indican mejor eficiencia riesgo-rendimiento.")
+                        "Calmar": st.column_config.NumberColumn("Calmar", format="%.2f", help="Calmar Ratio (Return / Max Drawdown):\n\n🟢 > 3.0: Excelente - Ratio excepcional, muy raro en trading real. Ideal para prop firms y fondeos.\n\n🟠 2.0 - 3.0: Muy bueno - Estrategias robustas y consistentes con excelente gestión de riesgo.\n\n🟡 1.0 - 2.0: Aceptable - Nivel estándar para estrategias operativas normales.\n\n🔴 < 1.0: Débil - El riesgo de drawdown es demasiado alto comparado con la rentabilidad obtenida.\n\nMide la relación entre rentabilidad y drawdown máximo. Valores más altos indican mejor eficiencia riesgo-rendimiento."),
+                        "R-squared": st.column_config.NumberColumn("R-squared", format="%.4f", help="R-squared (Smoothness de la curva de capital):\n\nMide qué tan suave y consistente es la curva de equity. Indica qué tan bien se ajusta la curva de capital a una línea recta (tendencia).\n\nDiferencia con R Expectancy:\n• R Expectancy: Te dice cuánto podrías ganar por trade asumiendo X riesgo → clave para rentabilidad.\n• R-squared: Te dice qué tan suave es la curva de beneficios → clave para robustez/consistencia.\n\nInterpretación:\n• > 0.95: Excelente - Curva muy suave, alta consistencia\n• 0.90 - 0.95: Muy bueno - Curva suave, buena consistencia\n• 0.80 - 0.90: Bueno - Curva aceptablemente suave\n• 0.70 - 0.80: Aceptable - Curva con algunas variaciones\n• < 0.70: Bajo - Curva con muchas variaciones, menor consistencia\n\nUna estrategia ideal tiene: R Expectancy alta + R² alto."),
+                        "Holding Time": st.column_config.NumberColumn("Holding Time", format="%.2f", help="Holding Time (Duración media de las operaciones):\n\nMide el tiempo promedio que las operaciones permanecen abiertas antes de cerrarse.\n\nSe muestra en horas.\n\nInterpretación:\n• Valores bajos (< 1 hora): Operaciones muy cortas, scalping\n• Valores medios (1-24 horas): Operaciones intradía\n• Valores altos (> 24 horas): Operaciones de swing o posición\n\nÚtil para entender el estilo de trading de la estrategia y evaluar la exposición al riesgo temporal.")
                     }
                     
                     st.dataframe(
@@ -6949,7 +7058,7 @@ if is_admin:
     with tab4:
         st.markdown("""
         <div class="card">
-            <div class="card-title">Administración de Usuarios</div>
+                <div class="card-title">Administración de Usuarios</div>
         """, unsafe_allow_html=True)
         
         st.markdown("### Crear Nuevo Usuario")
