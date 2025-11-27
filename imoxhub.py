@@ -4120,15 +4120,55 @@ with tab1:
                                                                 text_row.append("N/A")
                                                         text_matrix.append(text_row)
                                                     
-                                                    # Escala de colores profesional: rojo para alta correlación, verde suave para baja
-                                                    # Colores corporativos y profesionales
+                                                    # Escala de colores: < 0.4 verde, 0.4-0.7 naranja, > 0.7 rojo
                                                     colorscale_custom = [
-                                                        [0,    '#1b5e20'],
-                                                        [0.25, '#2e7d32'],
-                                                        [0.5,  '#fb8c00'],   # Naranja puro
-                                                        [0.75, '#f4511e'],   # Naranja rojizo
-                                                        [1,    '#c62828']      # Rojo más intenso para máxima correlación      # Rojo más intenso para máxima correlación
+                                                        [0,    '#90EE90'],   # Verde para valores < 0.4
+                                                        [0.4,  '#90EE90'],   # Verde hasta 0.4
+                                                        [0.4,  '#FFA655'],   # Naranja desde 0.4
+                                                        [0.7,  '#FFA655'],   # Naranja hasta 0.7
+                                                        [0.7,  '#FFB6C1'],   # Rojo desde 0.7
+                                                        [1,    '#FFB6C1']    # Rojo para valores > 0.7
                                                     ]
+                                                    
+                                                    # Función para obtener el color de borde basado en el valor
+                                                    def obtener_color_borde(valor):
+                                                        if pd.isna(valor):
+                                                            return None
+                                                        if valor < 0.4:
+                                                            return '#5EE45E'  # Verde oscuro
+                                                        elif valor < 0.7:
+                                                            return '#FFA655'  # Naranja
+                                                        else:
+                                                            return '#FF4B4B'  # Rojo oscuro
+                                                    
+                                                    # Añadir bordes de colores a cada celda usando shapes
+                                                    shapes = []
+                                                    n = len(eas)
+                                                    for i in range(n):
+                                                        for j in range(n):
+                                                            valor = matriz_correlacion[i, j]
+                                                            if not pd.isna(valor):
+                                                                color_borde = obtener_color_borde(valor)
+                                                                if color_borde:
+                                                                    # Usar las etiquetas de las estrategias como coordenadas
+                                                                    x0 = eas[j] if j > 0 else eas[0]
+                                                                    x1 = eas[j] if j < n-1 else eas[n-1]
+                                                                    y0 = eas[i] if i > 0 else eas[0]
+                                                                    y1 = eas[i] if i < n-1 else eas[n-1]
+                                                                    
+                                                                    # Crear rectángulo para el borde usando coordenadas de categorías
+                                                                    shapes.append(dict(
+                                                                        type="rect",
+                                                                        xref="x",
+                                                                        yref="y",
+                                                                        x0=j - 0.5,
+                                                                        y0=i - 0.5,
+                                                                        x1=j + 0.5,
+                                                                        y1=i + 0.5,
+                                                                        line=dict(color=color_borde, width=2),
+                                                                        fillcolor="rgba(0,0,0,0)",  # Transparente, solo borde
+                                                                        layer="above"
+                                                                    ))
                                                     
                                                     fig_heatmap = go.Figure(data=go.Heatmap(
                                                         z=matriz_correlacion,
@@ -4140,7 +4180,9 @@ with tab1:
                                                         text=text_matrix,
                                                         texttemplate="%{text}",
                                                         textfont={"size": 13},  # Texto gris/negro por defecto (mejor contraste con fondos claros)
-                                                        colorbar=dict(title="Correlación")
+                                                        colorbar=dict(title="Correlación"),
+                                                        xgap=2,  # Espacio horizontal entre celdas
+                                                        ygap=2   # Espacio vertical entre celdas
                                                     ))
                                                     
                                                     fig_heatmap.update_layout(
@@ -4151,7 +4193,8 @@ with tab1:
                                                         plot_bgcolor='#f8f9fa',  # Fondo del área del gráfico
                                                         paper_bgcolor='#f8f9fa',  # Fondo del papel/contenedor
                                                         xaxis=dict(showgrid=False, zeroline=False, showline=False),  # Quitar líneas y bordes del eje X
-                                                        yaxis=dict(showgrid=False, zeroline=False, showline=False)   # Quitar líneas y bordes del eje Y
+                                                        yaxis=dict(showgrid=False, zeroline=False, showline=False),  # Quitar líneas y bordes del eje Y
+                                                        shapes=shapes
                                                     )
                                                     
                                                     st.plotly_chart(fig_heatmap, use_container_width=True)
@@ -4698,15 +4741,55 @@ with tab1:
                                                                 text_row.append("N/A")
                                                         text_matrix.append(text_row)
                                                     
-                                                    # Escala de colores profesional: rojo para alta correlación, verde suave para baja
-                                                    # Colores adaptados para contraste con texto gris/negro por defecto
+                                                    # Escala de colores: < 0.4 verde, 0.4-0.7 naranja, > 0.7 rojo
                                                     colorscale_custom = [
-                                                        [0,    '#a5d6a7'],   # Verde claro para valores bajos (buen contraste con texto negro)
-                                                        [0.25, '#81c784'],   # Verde medio claro
-                                                        [0.5,  '#ffb74d'],   # Naranja claro
-                                                        [0.75, '#ff8a65'],   # Naranja rojizo claro
-                                                        [1,    '#e57373']    # Rojo claro para máxima correlación (buen contraste)
+                                                        [0,    '#90EE90'],   # Verde para valores < 0.4
+                                                        [0.4,  '#90EE90'],   # Verde hasta 0.4
+                                                        [0.4,  '#FFA655'],   # Naranja desde 0.4
+                                                        [0.7,  '#FFA655'],   # Naranja hasta 0.7
+                                                        [0.7,  '#FFB6C1'],   # Rojo desde 0.7
+                                                        [1,    '#FFB6C1']    # Rojo para valores > 0.7
                                                     ]
+                                                    
+                                                    # Función para obtener el color de borde basado en el valor
+                                                    def obtener_color_borde(valor):
+                                                        if pd.isna(valor):
+                                                            return None
+                                                        if valor < 0.4:
+                                                            return '#5EE45E'  # Verde oscuro
+                                                        elif valor < 0.7:
+                                                            return '#FFA655'  # Naranja
+                                                        else:
+                                                            return '#FF4B4B'  # Rojo oscuro
+                                                    
+                                                    # Añadir bordes de colores a cada celda usando shapes
+                                                    shapes = []
+                                                    n = len(eas)
+                                                    for i in range(n):
+                                                        for j in range(n):
+                                                            valor = matriz_correlacion[i, j]
+                                                            if not pd.isna(valor):
+                                                                color_borde = obtener_color_borde(valor)
+                                                                if color_borde:
+                                                                    # Usar las etiquetas de las estrategias como coordenadas
+                                                                    x0 = eas[j] if j > 0 else eas[0]
+                                                                    x1 = eas[j] if j < n-1 else eas[n-1]
+                                                                    y0 = eas[i] if i > 0 else eas[0]
+                                                                    y1 = eas[i] if i < n-1 else eas[n-1]
+                                                                    
+                                                                    # Crear rectángulo para el borde usando coordenadas de categorías
+                                                                    shapes.append(dict(
+                                                                        type="rect",
+                                                                        xref="x",
+                                                                        yref="y",
+                                                                        x0=j - 0.5,
+                                                                        y0=i - 0.5,
+                                                                        x1=j + 0.5,
+                                                                        y1=i + 0.5,
+                                                                        line=dict(color=color_borde, width=2),
+                                                                        fillcolor="rgba(0,0,0,0)",  # Transparente, solo borde
+                                                                        layer="above"
+                                                                    ))
                                                     
                                                     fig_heatmap = go.Figure(data=go.Heatmap(
                                                         z=matriz_correlacion,
@@ -4718,7 +4801,9 @@ with tab1:
                                                         text=text_matrix,
                                                         texttemplate="%{text}",
                                                         textfont={"size": 13},  # Texto gris/negro por defecto (mejor contraste con fondos claros)
-                                                        colorbar=dict(title="Correlación")
+                                                        colorbar=dict(title="Correlación"),
+                                                        xgap=2,  # Espacio horizontal entre celdas
+                                                        ygap=2   # Espacio vertical entre celdas
                                                     ))
                                                     
                                                     fig_heatmap.update_layout(
@@ -4729,7 +4814,8 @@ with tab1:
                                                         plot_bgcolor='#f8f9fa',  # Fondo del área del gráfico
                                                         paper_bgcolor='#f8f9fa',  # Fondo del papel/contenedor
                                                         xaxis=dict(showgrid=False, zeroline=False, showline=False),  # Quitar líneas y bordes del eje X
-                                                        yaxis=dict(showgrid=False, zeroline=False, showline=False)   # Quitar líneas y bordes del eje Y
+                                                        yaxis=dict(showgrid=False, zeroline=False, showline=False),  # Quitar líneas y bordes del eje Y
+                                                        shapes=shapes
                                                     )
                                                     
                                                     st.plotly_chart(fig_heatmap, use_container_width=True)
