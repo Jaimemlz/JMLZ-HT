@@ -4175,7 +4175,7 @@ with tab1:
                                                         text=text_matrix,
                                                         texttemplate="%{text}",
                                                         textfont={"size": 13},  # Texto gris/negro por defecto (mejor contraste con fondos claros)
-                                                        colorbar=dict(title="Correlación"),
+                                                        showscale=False,  # Ocultar la leyenda (colorbar)
                                                         xgap=2,  # Espacio horizontal entre celdas
                                                         ygap=2   # Espacio vertical entre celdas
                                                     ))
@@ -4794,13 +4794,13 @@ with tab1:
                                                         text=text_matrix,
                                                         texttemplate="%{text}",
                                                         textfont={"size": 13},  # Texto gris/negro por defecto (mejor contraste con fondos claros)
-                                                        colorbar=dict(title="Correlación"),
+                                                        showscale=False,  # Ocultar la leyenda (colorbar)
                                                         xgap=2,  # Espacio horizontal entre celdas
                                                         ygap=2   # Espacio vertical entre celdas
                                                     ))
                                                     
                                                     # Crear título con leyenda de colores
-                                                    titulo_con_leyenda = f"Matriz de Correlación - {activo.upper()}                    🟢 < 0.4    🟠 0.4-0.7    🔴 > 0.7"
+                                                    titulo_con_leyenda = f"Matriz de Correlación - {activo.upper()}                    🟢 < 0.4    🟠 0.4 - 0.7    🔴 > 0.7"
                                                     
                                                     fig_heatmap.update_layout(
                                                         title=titulo_con_leyenda,
