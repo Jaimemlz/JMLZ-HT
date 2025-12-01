@@ -2482,7 +2482,7 @@ st.markdown("""
     
 
 
-    .st-dv.st-fv {
+    .st-dv.st-fv, .st-bv.st-g5 {
         background-color: #495057 !important;
     }
 
@@ -5963,12 +5963,15 @@ with tab1:
                         column_config=column_config
                     )
                     
-                    # Sección de Combinar Estrategias
+                    # Sección de Crear Portafolio
                     if len(resultados) > 1:
-                        st.markdown("---")
+                        # Inicializar session_state para portafolios
+                        if 'portafolios_ea' not in st.session_state:
+                            st.session_state.portafolios_ea = {}
+                        
                         st.markdown("""
                         <div style="margin-top: 2rem; margin-bottom: 1rem;">
-                            <h4>Combinar Estrategias</h4>
+                            <h4>Crear Portafolio</h4>
                         </div>
                         """, unsafe_allow_html=True)
                         
@@ -5976,15 +5979,31 @@ with tab1:
                         df_resultados['Estrategia_Completa'] = df_resultados['Nombre Estrategia'] + ' - ' + df_resultados['Activo']
                         nombres_estrategias = df_resultados['Estrategia_Completa'].tolist()
                         
-                        estrategias_seleccionadas = st.multiselect(
-                            "Selecciona las estrategias que deseas combinar:",
-                            options=nombres_estrategias,
-                            default=[],
-                            help="Selecciona una o más estrategias para ver sus estadísticas combinadas"
+                        # Formulario para crear nuevo portafolio
+                        nombre_portafolio = st.text_input(
+                            "Nombre del portafolio:",
+                            key="nombre_portafolio_nuevo",
+                            help="Ingresa un nombre único para identificar este portafolio"
                         )
                         
-                        if estrategias_seleccionadas:
-                            if st.button("Ver Estadísticas Combinadas", use_container_width=True):
+                        estrategias_seleccionadas = st.multiselect(
+                            "Selecciona las estrategias que deseas incluir:",
+                            options=nombres_estrategias,
+                            default=[],
+                            key="estrategias_portafolio_nuevo",
+                            help="Selecciona una o más estrategias para incluir en el portafolio"
+                        )
+                        
+                        crear_portafolio = st.button("Crear Portafolio", use_container_width=True)
+                        
+                        if crear_portafolio:
+                            if not nombre_portafolio or nombre_portafolio.strip() == "":
+                                st.error("⚠️ Por favor, ingresa un nombre para el portafolio.")
+                            elif nombre_portafolio in st.session_state.portafolios_ea:
+                                st.error(f"⚠️ Ya existe un portafolio con el nombre '{nombre_portafolio}'. Por favor, elige otro nombre.")
+                            elif not estrategias_seleccionadas:
+                                st.error("⚠️ Por favor, selecciona al menos una estrategia.")
+                            else:
                                 try:
                                     # Filtrar los datos de las estrategias seleccionadas
                                     estrategias_filtradas = []
@@ -5998,217 +6017,237 @@ with tab1:
                                     
                                     if not estrategias_filtradas:
                                         st.error("No se pudieron extraer las estrategias seleccionadas. Verifica el formato.")
-                                        st.stop()
-                                    
-                                    # Combinar los DataFrames de las estrategias seleccionadas
-                                    dfs_combinados = []
-                                    for nombre, activo in estrategias_filtradas:
-                                        for datos_estrategia in datos_estrategias:
-                                            if datos_estrategia['nombre'] == nombre and datos_estrategia['activo'] == activo:
-                                                dfs_combinados.append(datos_estrategia['df'].copy())
-                                                break
-                                    
-                                    if not dfs_combinados:
-                                        st.warning("No se encontraron datos para las estrategias seleccionadas.")
-                                        st.stop()
-                                    
-                                    # Concatenar todos los DataFrames
-                                    df_combinado = pd.concat(dfs_combinados, ignore_index=True)
-                                    
-                                    # Obtener las columnas comunes (usar las del primer DataFrame)
-                                    profit_col = datos_estrategias[0]['profit_col']
-                                    open_time_col = datos_estrategias[0]['open_time_col']
-                                    
-                                    # Ordenar por tiempo si está disponible
-                                    if open_time_col and open_time_col in df_combinado.columns:
-                                        try:
-                                            df_combinado[open_time_col] = pd.to_datetime(df_combinado[open_time_col], errors='coerce')
-                                            df_combinado = df_combinado.sort_values(by=open_time_col).dropna(subset=[open_time_col])
-                                        except:
-                                            df_combinado = df_combinado.sort_index()
                                     else:
-                                        df_combinado = df_combinado.sort_index()
-                                    
-                                    # Calcular todas las métricas combinadas (similar al código individual)
-                                    net_profit_comb = df_combinado[profit_col].sum()
-                                    
-                                    # Profit Factor
-                                    ganancias_comb = df_combinado[df_combinado[profit_col] > 0][profit_col].sum()
-                                    perdidas_comb = abs(df_combinado[df_combinado[profit_col] < 0][profit_col].sum())
-                                    profit_factor_comb = ganancias_comb / perdidas_comb if perdidas_comb > 0 else float('inf') if ganancias_comb > 0 else 0
-                                    
-                                    # Winrate
-                                    trades_ganadores_comb = len(df_combinado[df_combinado[profit_col] > 0])
-                                    trades_perdedores_comb = len(df_combinado[df_combinado[profit_col] < 0])
-                                    total_trades_comb = len(df_combinado)
-                                    winrate_comb = (trades_ganadores_comb / total_trades_comb * 100) if total_trades_comb > 0 else 0
-                                    
-                                    # AvgWin / AvgLoss
-                                    avg_win_comb = df_combinado[df_combinado[profit_col] > 0][profit_col].mean() if trades_ganadores_comb > 0 else 0
-                                    avg_loss_comb = abs(df_combinado[df_combinado[profit_col] < 0][profit_col].mean()) if trades_perdedores_comb > 0 else 0
-                                    
-                                    # Max Consecutive Loss
-                                    max_consec_loss_comb = 0
-                                    current_consec_loss = 0
-                                    for profit in df_combinado[profit_col]:
-                                        if profit < 0:
-                                            current_consec_loss += 1
-                                            max_consec_loss_comb = max(max_consec_loss_comb, current_consec_loss)
+                                        # Combinar los DataFrames de las estrategias seleccionadas
+                                        dfs_combinados = []
+                                        for nombre, activo in estrategias_filtradas:
+                                            for datos_estrategia in datos_estrategias:
+                                                if datos_estrategia['nombre'] == nombre and datos_estrategia['activo'] == activo:
+                                                    dfs_combinados.append(datos_estrategia['df'].copy())
+                                                    break
+                                        
+                                        if not dfs_combinados:
+                                            st.warning("No se encontraron datos para las estrategias seleccionadas.")
                                         else:
+                                            # Concatenar todos los DataFrames
+                                            df_combinado = pd.concat(dfs_combinados, ignore_index=True)
+                                            
+                                            # Obtener las columnas comunes (usar las del primer DataFrame)
+                                            profit_col = datos_estrategias[0]['profit_col']
+                                            open_time_col = datos_estrategias[0]['open_time_col']
+                                            
+                                            # Ordenar por tiempo si está disponible
+                                            if open_time_col and open_time_col in df_combinado.columns:
+                                                try:
+                                                    df_combinado[open_time_col] = pd.to_datetime(df_combinado[open_time_col], errors='coerce')
+                                                    df_combinado = df_combinado.sort_values(by=open_time_col).dropna(subset=[open_time_col])
+                                                except:
+                                                    df_combinado = df_combinado.sort_index()
+                                            else:
+                                                df_combinado = df_combinado.sort_index()
+                                            
+                                            # Calcular todas las métricas combinadas
+                                            net_profit_comb = df_combinado[profit_col].sum()
+                                            
+                                            # Profit Factor
+                                            ganancias_comb = df_combinado[df_combinado[profit_col] > 0][profit_col].sum()
+                                            perdidas_comb = abs(df_combinado[df_combinado[profit_col] < 0][profit_col].sum())
+                                            profit_factor_comb = ganancias_comb / perdidas_comb if perdidas_comb > 0 else float('inf') if ganancias_comb > 0 else 0
+                                            
+                                            # Winrate
+                                            trades_ganadores_comb = len(df_combinado[df_combinado[profit_col] > 0])
+                                            trades_perdedores_comb = len(df_combinado[df_combinado[profit_col] < 0])
+                                            total_trades_comb = len(df_combinado)
+                                            winrate_comb = (trades_ganadores_comb / total_trades_comb * 100) if total_trades_comb > 0 else 0
+                                            
+                                            # AvgWin / AvgLoss
+                                            avg_win_comb = df_combinado[df_combinado[profit_col] > 0][profit_col].mean() if trades_ganadores_comb > 0 else 0
+                                            avg_loss_comb = abs(df_combinado[df_combinado[profit_col] < 0][profit_col].mean()) if trades_perdedores_comb > 0 else 0
+                                            
+                                            # Max Consecutive Loss
+                                            max_consec_loss_comb = 0
                                             current_consec_loss = 0
-                                    
-                                    # Calcular Drawdown
-                                    df_combinado['equity'] = df_combinado[profit_col].cumsum()
-                                    df_combinado['cummax'] = df_combinado['equity'].cummax()
-                                    df_combinado['drawdown'] = df_combinado['cummax'] - df_combinado['equity']
-                                    max_dd_comb = df_combinado['drawdown'].max() if len(df_combinado) > 0 else 0
-                                    
-                                    # retdd
-                                    retdd_comb = (net_profit_comb / max_dd_comb) if max_dd_comb > 0 else 0
-                                    
-                                    # Ulcer Index
-                                    equity_for_ui_comb = df_combinado['equity']
-                                    cummax_equity_comb = equity_for_ui_comb.cummax()
-                                    cummax_safe_comb = cummax_equity_comb.replace(0, 1)
-                                    dd_pct_comb = ((cummax_equity_comb - equity_for_ui_comb) / cummax_safe_comb * 100).fillna(0)
-                                    dd_pct_positive_comb = dd_pct_comb.clip(lower=0)
-                                    if len(df_combinado) > 0:
-                                        ulcer_index_comb = np.sqrt((dd_pct_positive_comb ** 2).sum() / len(df_combinado))
-                                    else:
-                                        ulcer_index_comb = 0
-                                    
-                                    # Z-score
-                                    if total_trades_comb > 0:
-                                        winrate_observado_comb = winrate_comb / 100.0
-                                        winrate_esperado_comb = 0.5
-                                        error_estandar_comb = np.sqrt(winrate_esperado_comb * (1 - winrate_esperado_comb) / total_trades_comb)
-                                        if error_estandar_comb > 0:
-                                            z_score_comb = (winrate_observado_comb - winrate_esperado_comb) / error_estandar_comb
-                                        else:
-                                            z_score_comb = 0
-                                    else:
-                                        z_score_comb = 0
-                                    
-                                    # Sharpe Ratio
-                                    if len(df_combinado) > 1:
-                                        returns_comb = df_combinado[profit_col].values
-                                        mean_return_comb = returns_comb.mean()
-                                        std_return_comb = returns_comb.std()
-                                        sharpe_ratio_comb = (mean_return_comb / std_return_comb) if std_return_comb > 0 else 0
-                                    else:
-                                        sharpe_ratio_comb = 0
-                                    
-                                    # Avg Trade Mensual
-                                    if open_time_col and open_time_col in df_combinado.columns:
-                                        try:
-                                            fecha_inicio_comb = df_combinado[open_time_col].min()
-                                            fecha_fin_comb = df_combinado[open_time_col].max()
-                                            meses_comb = (fecha_fin_comb - fecha_inicio_comb).days / 30.44
-                                            avg_trade_mensual_comb = net_profit_comb / meses_comb if meses_comb > 0 else net_profit_comb
-                                        except:
-                                            avg_trade_mensual_comb = net_profit_comb
-                                    else:
-                                        avg_trade_mensual_comb = net_profit_comb
-                                    
-                                    # Calmar Ratio
-                                    calmar_raw_comb = (net_profit_comb / max_dd_comb) if max_dd_comb > 0 else 0
-                                    calmar_comb = calmar_raw_comb / 10
-                                    
-                                    # R Expectancy
-                                    if total_trades_comb > 0 and avg_loss_comb > 0:
-                                        r_expectancy_r_comb = (winrate_comb / 100 * (avg_win_comb / avg_loss_comb)) - ((100 - winrate_comb) / 100 * 1)
-                                        r_expectancy_dollar_comb = (winrate_comb / 100 * avg_win_comb) - ((100 - winrate_comb) / 100 * avg_loss_comb)
-                                    else:
-                                        r_expectancy_r_comb = 0
-                                        r_expectancy_dollar_comb = 0
-                                    
-                                    # R-squared
-                                    if len(df_combinado) > 1:
-                                        equity_curve_comb = df_combinado['equity'].values
-                                        x_comb = np.arange(len(equity_curve_comb))
-                                        if len(equity_curve_comb) > 1:
-                                            x_mean_comb = x_comb.mean()
-                                            y_mean_comb = equity_curve_comb.mean()
-                                            numerator_comb = ((x_comb - x_mean_comb) * (equity_curve_comb - y_mean_comb)).sum()
-                                            denominator_comb = ((x_comb - x_mean_comb) ** 2).sum()
-                                            if denominator_comb > 0:
-                                                slope_comb = numerator_comb / denominator_comb
-                                                intercept_comb = y_mean_comb - slope_comb * x_mean_comb
-                                                y_pred_comb = intercept_comb + slope_comb * x_comb
-                                                ss_res_comb = ((equity_curve_comb - y_pred_comb) ** 2).sum()
-                                                ss_tot_comb = ((equity_curve_comb - y_mean_comb) ** 2).sum()
-                                                if ss_tot_comb > 0:
-                                                    r_squared_comb = 1 - (ss_res_comb / ss_tot_comb)
+                                            for profit in df_combinado[profit_col]:
+                                                if profit < 0:
+                                                    current_consec_loss += 1
+                                                    max_consec_loss_comb = max(max_consec_loss_comb, current_consec_loss)
+                                                else:
+                                                    current_consec_loss = 0
+                                            
+                                            # Calcular Drawdown
+                                            df_combinado['equity'] = df_combinado[profit_col].cumsum()
+                                            df_combinado['cummax'] = df_combinado['equity'].cummax()
+                                            df_combinado['drawdown'] = df_combinado['cummax'] - df_combinado['equity']
+                                            max_dd_comb = df_combinado['drawdown'].max() if len(df_combinado) > 0 else 0
+                                            
+                                            # retdd
+                                            retdd_comb = (net_profit_comb / max_dd_comb) if max_dd_comb > 0 else 0
+                                            
+                                            # Ulcer Index
+                                            equity_for_ui_comb = df_combinado['equity']
+                                            cummax_equity_comb = equity_for_ui_comb.cummax()
+                                            cummax_safe_comb = cummax_equity_comb.replace(0, 1)
+                                            dd_pct_comb = ((cummax_equity_comb - equity_for_ui_comb) / cummax_safe_comb * 100).fillna(0)
+                                            dd_pct_positive_comb = dd_pct_comb.clip(lower=0)
+                                            if len(df_combinado) > 0:
+                                                ulcer_index_comb = np.sqrt((dd_pct_positive_comb ** 2).sum() / len(df_combinado))
+                                            else:
+                                                ulcer_index_comb = 0
+                                            
+                                            # Z-score
+                                            if total_trades_comb > 0:
+                                                winrate_observado_comb = winrate_comb / 100.0
+                                                winrate_esperado_comb = 0.5
+                                                error_estandar_comb = np.sqrt(winrate_esperado_comb * (1 - winrate_esperado_comb) / total_trades_comb)
+                                                if error_estandar_comb > 0:
+                                                    z_score_comb = (winrate_observado_comb - winrate_esperado_comb) / error_estandar_comb
+                                                else:
+                                                    z_score_comb = 0
+                                            else:
+                                                z_score_comb = 0
+                                            
+                                            # Sharpe Ratio
+                                            if len(df_combinado) > 1:
+                                                returns_comb = df_combinado[profit_col].values
+                                                mean_return_comb = returns_comb.mean()
+                                                std_return_comb = returns_comb.std()
+                                                sharpe_ratio_comb = (mean_return_comb / std_return_comb) if std_return_comb > 0 else 0
+                                            else:
+                                                sharpe_ratio_comb = 0
+                                            
+                                            # Avg Trade Mensual
+                                            if open_time_col and open_time_col in df_combinado.columns:
+                                                try:
+                                                    fecha_inicio_comb = df_combinado[open_time_col].min()
+                                                    fecha_fin_comb = df_combinado[open_time_col].max()
+                                                    meses_comb = (fecha_fin_comb - fecha_inicio_comb).days / 30.44
+                                                    avg_trade_mensual_comb = net_profit_comb / meses_comb if meses_comb > 0 else net_profit_comb
+                                                except:
+                                                    avg_trade_mensual_comb = net_profit_comb
+                                            else:
+                                                avg_trade_mensual_comb = net_profit_comb
+                                            
+                                            # Calmar Ratio
+                                            calmar_raw_comb = (net_profit_comb / max_dd_comb) if max_dd_comb > 0 else 0
+                                            calmar_comb = calmar_raw_comb / 10
+                                            
+                                            # R Expectancy
+                                            if total_trades_comb > 0 and avg_loss_comb > 0:
+                                                r_expectancy_r_comb = (winrate_comb / 100 * (avg_win_comb / avg_loss_comb)) - ((100 - winrate_comb) / 100 * 1)
+                                                r_expectancy_dollar_comb = (winrate_comb / 100 * avg_win_comb) - ((100 - winrate_comb) / 100 * avg_loss_comb)
+                                            else:
+                                                r_expectancy_r_comb = 0
+                                                r_expectancy_dollar_comb = 0
+                                            
+                                            # R-squared
+                                            if len(df_combinado) > 1:
+                                                equity_curve_comb = df_combinado['equity'].values
+                                                x_comb = np.arange(len(equity_curve_comb))
+                                                if len(equity_curve_comb) > 1:
+                                                    x_mean_comb = x_comb.mean()
+                                                    y_mean_comb = equity_curve_comb.mean()
+                                                    numerator_comb = ((x_comb - x_mean_comb) * (equity_curve_comb - y_mean_comb)).sum()
+                                                    denominator_comb = ((x_comb - x_mean_comb) ** 2).sum()
+                                                    if denominator_comb > 0:
+                                                        slope_comb = numerator_comb / denominator_comb
+                                                        intercept_comb = y_mean_comb - slope_comb * x_mean_comb
+                                                        y_pred_comb = intercept_comb + slope_comb * x_comb
+                                                        ss_res_comb = ((equity_curve_comb - y_pred_comb) ** 2).sum()
+                                                        ss_tot_comb = ((equity_curve_comb - y_mean_comb) ** 2).sum()
+                                                        if ss_tot_comb > 0:
+                                                            r_squared_comb = 1 - (ss_res_comb / ss_tot_comb)
+                                                        else:
+                                                            r_squared_comb = 0
+                                                    else:
+                                                        r_squared_comb = 0
                                                 else:
                                                     r_squared_comb = 0
                                             else:
                                                 r_squared_comb = 0
-                                        else:
-                                            r_squared_comb = 0
-                                    else:
-                                        r_squared_comb = 0
+                                            
+                                            # Holding Time (simplificado, usar 0 si no hay datos)
+                                            holding_time_hours_comb = 0
+                                            
+                                            # % Meses Rentables
+                                            pct_meses_rentables_comb = 0
+                                            if open_time_col and open_time_col in df_combinado.columns:
+                                                try:
+                                                    df_mes_comb = df_combinado.copy()
+                                                    df_mes_comb['Mes'] = df_mes_comb[open_time_col].dt.to_period('M')
+                                                    beneficios_mensuales_comb = df_mes_comb.groupby('Mes')[profit_col].sum()
+                                                    total_meses_comb = len(beneficios_mensuales_comb)
+                                                    meses_rentables_comb = len(beneficios_mensuales_comb[beneficios_mensuales_comb >= 0])
+                                                    pct_meses_rentables_comb = (meses_rentables_comb / total_meses_comb * 100) if total_meses_comb > 0 else 0
+                                                except:
+                                                    pass
+                                            
+                                            # Crear DataFrame con las métricas combinadas
+                                            resultado_comb = {
+                                                "Nombre Estrategia": nombre_portafolio,
+                                                "Activo": "Múltiples",
+                                                "retdd": retdd_comb,
+                                                "Profit Factor": profit_factor_comb,
+                                                "Sharpe Ratio": sharpe_ratio_comb,
+                                                "Net Profit": net_profit_comb,
+                                                "Max DD": max_dd_comb,
+                                                "Avg Trade Mensual": avg_trade_mensual_comb,
+                                                "Max Consec Loss": max_consec_loss_comb,
+                                                "Winrate %": winrate_comb,
+                                                "Ulcer Index": ulcer_index_comb,
+                                                "Z-score": z_score_comb,
+                                                "R Expectancy": f"{r_expectancy_r_comb:.2f} (${r_expectancy_dollar_comb:.2f})",
+                                                "Calmar": calmar_comb,
+                                                "R-squared": r_squared_comb,
+                                                "Holding Time": holding_time_hours_comb,
+                                                "% Meses Rentables": round(pct_meses_rentables_comb, 1)
+                                            }
+                                            
+                                            df_resultado_comb = pd.DataFrame([resultado_comb])
+                                            
+                                            # Guardar el portafolio en session_state
+                                            st.session_state.portafolios_ea[nombre_portafolio] = {
+                                                'resultado': resultado_comb,
+                                                'estrategias': estrategias_seleccionadas,
+                                                'df_resultado': df_resultado_comb
+                                            }
+                                            
+                                            st.success(f"✅ Portafolio '{nombre_portafolio}' creado exitosamente!")
+                                            st.rerun()
+                                
+                                except Exception as e:
+                                    st.error(f"❌ Error al crear el portafolio: {str(e)}")
+                                    import traceback
+                                    st.code(traceback.format_exc())
+                        
+                        # Mostrar portafolios creados
+                        if st.session_state.portafolios_ea:
+                            st.markdown("""
+                            <div style="margin-top: 2rem; margin-bottom: 1rem;">
+                                <h4>Portafolios Creados</h4>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            # Crear lista de portafolios para mostrar
+                            for nombre_portafolio, datos_portafolio in st.session_state.portafolios_ea.items():
+                                with st.expander(f"📊 {nombre_portafolio}", expanded=False):
+                                    # Mostrar estrategias incluidas
+                                    st.markdown(f"**Estrategias:** {', '.join(datos_portafolio['estrategias'])}")
                                     
-                                    # Holding Time (simplificado, usar 0 si no hay datos)
-                                    holding_time_hours_comb = 0
+                                    # Botón para eliminar portafolio
+                                    if st.button(f"🗑️ Eliminar Portafolio", key=f"eliminar_{nombre_portafolio}"):
+                                        del st.session_state.portafolios_ea[nombre_portafolio]
+                                        st.rerun()
                                     
-                                    # % Meses Rentables
-                                    pct_meses_rentables_comb = 0
-                                    if open_time_col and open_time_col in df_combinado.columns:
-                                        try:
-                                            df_mes_comb = df_combinado.copy()
-                                            df_mes_comb['Mes'] = df_mes_comb[open_time_col].dt.to_period('M')
-                                            beneficios_mensuales_comb = df_mes_comb.groupby('Mes')[profit_col].sum()
-                                            total_meses_comb = len(beneficios_mensuales_comb)
-                                            meses_rentables_comb = len(beneficios_mensuales_comb[beneficios_mensuales_comb >= 0])
-                                            pct_meses_rentables_comb = (meses_rentables_comb / total_meses_comb * 100) if total_meses_comb > 0 else 0
-                                        except:
-                                            pass
-                                    
-                                    # Crear DataFrame con las métricas combinadas
-                                    resultado_comb = {
-                                        "Nombre Estrategia": "Combinado",
-                                        "Activo": "Múltiples",
-                                        "retdd": retdd_comb,
-                                        "Profit Factor": profit_factor_comb,
-                                        "Sharpe Ratio": sharpe_ratio_comb,
-                                        "Net Profit": net_profit_comb,
-                                        "Max DD": max_dd_comb,
-                                        "Avg Trade Mensual": avg_trade_mensual_comb,
-                                        "Max Consec Loss": max_consec_loss_comb,
-                                        "Winrate %": winrate_comb,
-                                        "Ulcer Index": ulcer_index_comb,
-                                        "Z-score": z_score_comb,
-                                        "R Expectancy": f"{r_expectancy_r_comb:.2f} (${r_expectancy_dollar_comb:.2f})",
-                                        "Calmar": calmar_comb,
-                                        "R-squared": r_squared_comb,
-                                        "Holding Time": holding_time_hours_comb,
-                                        "% Meses Rentables": round(pct_meses_rentables_comb, 1)
-                                    }
-                                    
-                                    df_resultado_comb = pd.DataFrame([resultado_comb])
-                                    
-                                    # Aplicar estilo a Calmar
-                                    styled_df_comb = df_resultado_comb.style.applymap(estilizar_calmar, subset=['Calmar'])
-                                    
-                                    # Mostrar tabla combinada
-                                    st.markdown("""
-                                    <div style="margin-top: 2rem; margin-bottom: 1rem;">
-                                        <h4>Estadísticas Combinadas</h4>
-                                        <p><strong>Estrategias:</strong> {}</p>
-                                    </div>
-                                    """.format(" | ".join(estrategias_seleccionadas)), unsafe_allow_html=True)
+                                    # Mostrar tabla del portafolio
+                                    df_resultado_portafolio = datos_portafolio['df_resultado']
+                                    styled_df_portafolio = df_resultado_portafolio.style.applymap(estilizar_calmar, subset=['Calmar'])
                                     
                                     st.dataframe(
-                                        styled_df_comb,
+                                        styled_df_portafolio,
                                         use_container_width=True,
                                         hide_index=True,
                                         column_config=column_config
                                     )
-                                    
-                                except Exception as e:
-                                    st.error(f"❌ Error al procesar las estadísticas combinadas: {str(e)}")
-                                    import traceback
-                                    st.code(traceback.format_exc())
                 else:
                     st.warning("⚠️ No se pudieron procesar los archivos CSV")
                     
