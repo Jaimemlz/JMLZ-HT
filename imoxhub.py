@@ -5801,9 +5801,64 @@ with tab1:
                     else:
                         avg_trade_mensual = net_profit
                     
-                    # Calmar Ratio (Return / Max DD) - dividir por 10 para mostrar en decimales
-                    calmar_raw = (net_profit / max_dd) if max_dd > 0 else 0
-                    calmar = calmar_raw / 10  # Dividir por 10 para mostrar 2.7 en lugar de 27.50
+                    # Calmar Ratio (CAGR / Max DD %)
+                    # MetaTrader calcula usando CAGR anualizado dividido por max drawdown porcentual
+                    if max_dd > 0:
+                        # Obtener balance inicial y final si está disponible
+                        balance_inicial_calmar = None
+                        balance_final_calmar = None
+                        if balance_col and balance_col in df.columns:
+                            df_balance_calmar = df.copy()
+                            df_balance_calmar[balance_col] = pd.to_numeric(df_balance_calmar[balance_col], errors='coerce')
+                            df_balance_calmar = df_balance_calmar.dropna(subset=[balance_col])
+                            if len(df_balance_calmar) > 0:
+                                # Ordenar por tiempo si está disponible
+                                if open_time_col and open_time_col in df_balance_calmar.columns:
+                                    df_balance_calmar[open_time_col] = pd.to_datetime(df_balance_calmar[open_time_col], errors='coerce')
+                                    df_balance_calmar = df_balance_calmar.sort_values(open_time_col).dropna(subset=[open_time_col])
+                                
+                                balance_inicial_calmar = df_balance_calmar[balance_col].iloc[0] - df_balance_calmar[profit_col].iloc[0]
+                                balance_final_calmar = df_balance_calmar[balance_col].iloc[-1]
+                                
+                                # Calcular período en años
+                                if open_time_col and open_time_col in df_balance_calmar.columns:
+                                    fecha_inicio_calmar = df_balance_calmar[open_time_col].iloc[0]
+                                    fecha_fin_calmar = df_balance_calmar[open_time_col].iloc[-1]
+                                    dias_totales_calmar = (fecha_fin_calmar - fecha_inicio_calmar).days
+                                    años_calmar = dias_totales_calmar / 365.25
+                                else:
+                                    años_calmar = 1  # Default a 1 año si no hay fechas
+                                
+                                if balance_inicial_calmar > 0 and balance_final_calmar > 0 and años_calmar > 0:
+                                    # Calcular CAGR (Compound Annual Growth Rate)
+                                    # CAGR = ((Valor Final / Valor Inicial) ^ (1 / años)) - 1
+                                    ratio_valor = balance_final_calmar / balance_inicial_calmar
+                                    if ratio_valor > 0:
+                                        cagr = (ratio_valor ** (1 / años_calmar) - 1) * 100  # En porcentaje
+                                    else:
+                                        cagr = 0
+                                    
+                                    # Calcular max drawdown porcentual
+                                    df_calmar = df_balance_calmar.copy()
+                                    df_calmar['cummax'] = df_calmar[balance_col].cummax()
+                                    # Drawdown porcentual máximo
+                                    df_calmar['dd_pct'] = ((df_calmar['cummax'] - df_calmar[balance_col]) / df_calmar['cummax'] * 100).fillna(0)
+                                    max_dd_pct = df_calmar['dd_pct'].max()
+                                    
+                                    if max_dd_pct > 0:
+                                        calmar = cagr / max_dd_pct
+                                    else:
+                                        calmar = 0
+                                else:
+                                    # Fallback: usar valores absolutos
+                                    calmar = (net_profit / max_dd) if max_dd > 0 else 0
+                            else:
+                                calmar = 0
+                        else:
+                            # Si no hay balance, usar cálculo simple
+                            calmar = (net_profit / max_dd) if max_dd > 0 else 0
+                    else:
+                        calmar = 0
                     
                     # R Expectancy
                     # Calcular valor R (usando avg_loss como R) y valor en dólares
@@ -6283,9 +6338,70 @@ with tab1:
                                             else:
                                                 avg_trade_mensual_comb = net_profit_comb
                                             
-                                            # Calmar Ratio
-                                            calmar_raw_comb = (net_profit_comb / max_dd_comb) if max_dd_comb > 0 else 0
-                                            calmar_comb = calmar_raw_comb / 10
+                                            # Calmar Ratio (CAGR / Max DD %)
+                                            # MetaTrader calcula usando CAGR anualizado dividido por max drawdown porcentual
+                                            if max_dd_comb > 0:
+                                                # Obtener balance inicial y final si está disponible
+                                                balance_inicial_calmar_comb = None
+                                                balance_final_calmar_comb = None
+                                                balance_col_comb_calmar = None
+                                                for col in df_combinado.columns:
+                                                    if col.lower() == 'balance':
+                                                        balance_col_comb_calmar = col
+                                                        break
+                                                
+                                                if balance_col_comb_calmar and balance_col_comb_calmar in df_combinado.columns:
+                                                    df_balance_calmar_comb = df_combinado.copy()
+                                                    df_balance_calmar_comb[balance_col_comb_calmar] = pd.to_numeric(df_balance_calmar_comb[balance_col_comb_calmar], errors='coerce')
+                                                    df_balance_calmar_comb = df_balance_calmar_comb.dropna(subset=[balance_col_comb_calmar])
+                                                    if len(df_balance_calmar_comb) > 0:
+                                                        # Ordenar por tiempo si está disponible
+                                                        if open_time_col and open_time_col in df_balance_calmar_comb.columns:
+                                                            df_balance_calmar_comb[open_time_col] = pd.to_datetime(df_balance_calmar_comb[open_time_col], errors='coerce')
+                                                            df_balance_calmar_comb = df_balance_calmar_comb.sort_values(open_time_col).dropna(subset=[open_time_col])
+                                                        
+                                                        balance_inicial_calmar_comb = df_balance_calmar_comb[balance_col_comb_calmar].iloc[0] - df_balance_calmar_comb[profit_col].iloc[0]
+                                                        balance_final_calmar_comb = df_balance_calmar_comb[balance_col_comb_calmar].iloc[-1]
+                                                        
+                                                        # Calcular período en años
+                                                        if open_time_col and open_time_col in df_balance_calmar_comb.columns:
+                                                            fecha_inicio_calmar_comb = df_balance_calmar_comb[open_time_col].iloc[0]
+                                                            fecha_fin_calmar_comb = df_balance_calmar_comb[open_time_col].iloc[-1]
+                                                            dias_totales_calmar_comb = (fecha_fin_calmar_comb - fecha_inicio_calmar_comb).days
+                                                            años_calmar_comb = dias_totales_calmar_comb / 365.25
+                                                        else:
+                                                            años_calmar_comb = 1  # Default a 1 año si no hay fechas
+                                                        
+                                                        if balance_inicial_calmar_comb > 0 and balance_final_calmar_comb > 0 and años_calmar_comb > 0:
+                                                            # Calcular CAGR (Compound Annual Growth Rate)
+                                                            # CAGR = ((Valor Final / Valor Inicial) ^ (1 / años)) - 1
+                                                            ratio_valor_comb = balance_final_calmar_comb / balance_inicial_calmar_comb
+                                                            if ratio_valor_comb > 0:
+                                                                cagr_comb = (ratio_valor_comb ** (1 / años_calmar_comb) - 1) * 100  # En porcentaje
+                                                            else:
+                                                                cagr_comb = 0
+                                                            
+                                                            # Calcular max drawdown porcentual
+                                                            df_calmar_comb = df_balance_calmar_comb.copy()
+                                                            df_calmar_comb['cummax'] = df_calmar_comb[balance_col_comb_calmar].cummax()
+                                                            # Drawdown porcentual máximo
+                                                            df_calmar_comb['dd_pct'] = ((df_calmar_comb['cummax'] - df_calmar_comb[balance_col_comb_calmar]) / df_calmar_comb['cummax'] * 100).fillna(0)
+                                                            max_dd_pct_comb = df_calmar_comb['dd_pct'].max()
+                                                            
+                                                            if max_dd_pct_comb > 0:
+                                                                calmar_comb = cagr_comb / max_dd_pct_comb
+                                                            else:
+                                                                calmar_comb = 0
+                                                        else:
+                                                            # Fallback: usar valores absolutos
+                                                            calmar_comb = (net_profit_comb / max_dd_comb) if max_dd_comb > 0 else 0
+                                                    else:
+                                                        calmar_comb = 0
+                                                else:
+                                                    # Si no hay balance, usar cálculo simple
+                                                    calmar_comb = (net_profit_comb / max_dd_comb) if max_dd_comb > 0 else 0
+                                            else:
+                                                calmar_comb = 0
                                             
                                             # R Expectancy
                                             if total_trades_comb > 0 and avg_loss_comb > 0:
