@@ -6230,13 +6230,14 @@ with tab1:
                             # Crear lista de portafolios para mostrar
                             for nombre_portafolio, datos_portafolio in st.session_state.portafolios_ea.items():
                                 with st.expander(f"📊 {nombre_portafolio}", expanded=False):
-                                    # Mostrar estrategias incluidas
-                                    st.markdown(f"**Estrategias:** {', '.join(datos_portafolio['estrategias'])}")
-                                    
-                                    # Botón para eliminar portafolio
-                                    if st.button(f"🗑️ Eliminar Portafolio", key=f"eliminar_{nombre_portafolio}"):
-                                        del st.session_state.portafolios_ea[nombre_portafolio]
-                                        st.rerun()
+                                    # Mostrar estrategias incluidas con botón de eliminar a la derecha
+                                    col_estrategias, col_eliminar = st.columns([4, 1])
+                                    with col_estrategias:
+                                        st.markdown(f"**Estrategias:** {', '.join(datos_portafolio['estrategias'])}")
+                                    with col_eliminar:
+                                        if st.button(f"Eliminar", key=f"eliminar_{nombre_portafolio}", use_container_width=True):
+                                            del st.session_state.portafolios_ea[nombre_portafolio]
+                                            st.rerun()
                                     
                                     # Mostrar tabla del portafolio
                                     df_resultado_portafolio = datos_portafolio['df_resultado']
