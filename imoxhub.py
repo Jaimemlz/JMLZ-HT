@@ -6479,15 +6479,27 @@ with tab1:
                             
                             # Selector de KPIs
                             st.markdown("**Selecciona los KPIs a utilizar:**")
+                            
+                            # Inicializar selector_kpis en session_state ANTES del widget si no existe
+                            # Esto es crítico: el valor debe estar en session_state antes de crear el widget
+                            if 'selector_kpis' not in st.session_state:
+                                valor_inicial = st.session_state.kpis_seleccionados if 'kpis_seleccionados' in st.session_state else ['retdd', 'sharpe', 'max_consec_loss', 'winrate']
+                                st.session_state.selector_kpis = valor_inicial.copy() if isinstance(valor_inicial, list) else list(valor_inicial)
+                            
+                            # Crear el multiselect - cuando usas key, Streamlit lee y escribe en session_state automáticamente
+                            # NO usar default ni value cuando tienes key - deja que Streamlit maneje el estado
                             kpis_seleccionados = st.multiselect(
                                 "KPIs",
                                 options=list(kpis_disponibles.keys()),
-                                default=st.session_state.kpis_seleccionados,
                                 format_func=lambda x: kpis_disponibles[x],
                                 key="selector_kpis"
                             )
                             
-                            # Actualizar session_state
+                            # El valor actualizado está automáticamente en st.session_state.selector_kpis
+                            # Usar ese valor directamente
+                            kpis_seleccionados = st.session_state.selector_kpis
+                            
+                            # Sincronizar con kpis_seleccionados para uso posterior
                             st.session_state.kpis_seleccionados = kpis_seleccionados
                             
                             # Mostrar sliders solo para KPIs seleccionados
@@ -6611,11 +6623,6 @@ with tab1:
                         
                         # Mostrar portafolios creados
                         if st.session_state.portafolios_ea:
-                            st.markdown("""
-                            <div style="margin-top: 2rem; margin-bottom: 1rem;">
-                                <h4>Portafolios Creados</h4>
-                            </div>
-                            """, unsafe_allow_html=True)
                             
                             # Ordenar portafolios por score (si existe)
                             portafolios_ordenados = list(st.session_state.portafolios_ea.items())
@@ -6632,9 +6639,9 @@ with tab1:
                                 
                                 # Mostrar nombre con score
                                 if score is not None:
-                                    nombre_con_score = f"📊 {nombre_portafolio} - Score: {score:.2f}"
+                                    nombre_con_score = f"{nombre_portafolio} - Score: {score:.2f}"
                                 else:
-                                    nombre_con_score = f"📊 {nombre_portafolio}"
+                                    nombre_con_score = nombre_portafolio
                                 
                                 with st.expander(nombre_con_score, expanded=False):
                                     # Mostrar estrategias incluidas con botón de eliminar a la derecha
