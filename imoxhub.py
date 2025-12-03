@@ -5732,90 +5732,21 @@ with tab1:
                     else:
                         z_score = 0
                     
-                    # Sharpe Ratio (anualizado)
-                    # Sharpe = (Retorno promedio / Desviación estándar) * sqrt(períodos por año)
-                    # MetaTrader usa un cálculo específico basado en retornos porcentuales de la equity curve
+                    # Sharpe Ratio (fórmula StrategyQuant)
+                    # Sharpe = (R_p - R_f) / σ_p
+                    # Donde R_p = rentabilidad media, R_f = 0 (tasa libre de riesgo), σ_p = desviación estándar
                     if len(df) > 1:
+                        # Usar retornos por operación (profit values)
                         returns = df[profit_col].values
-                        mean_return = returns.mean()
-                        std_return = returns.std()
+                        mean_return = returns.mean()  # R_p
+                        std_return = returns.std()    # σ_p
+                        
+                        # R_f = 0 (tasa libre de riesgo, asumida en 0 para trading algorítmico)
+                        R_f = 0
+                        
                         if std_return > 0:
-                            # Calcular factor de anualización basado en el período real
-                            if open_time_col and open_time_col in df.columns:
-                                try:
-                                    df_temp = df.copy()
-                                    df_temp[open_time_col] = pd.to_datetime(df_temp[open_time_col], errors='coerce')
-                                    df_temp = df_temp.dropna(subset=[open_time_col])
-                                    if len(df_temp) > 1:
-                                        fecha_inicio = df_temp[open_time_col].min()
-                                        fecha_fin = df_temp[open_time_col].max()
-                                        dias_totales = (fecha_fin - fecha_inicio).days
-                                        if dias_totales > 0:
-                                            # Factor: sqrt(252 * número de trades / días totales)
-                                            # Esto ajusta el factor según la frecuencia real de trades
-                                            factor_base = np.sqrt(252 * len(df_temp) / dias_totales)
-                                        else:
-                                            factor_base = np.sqrt(252)
-                                    else:
-                                        factor_base = np.sqrt(252)
-                                except:
-                                    factor_base = np.sqrt(252)
-                            else:
-                                factor_base = np.sqrt(252)
-                            
-                            # Calcular Sharpe Ratio base
-                            sharpe_base = (mean_return / std_return) * factor_base
-                            
-                            # MetaTrader calcula usando retornos porcentuales basados en balance inicial
-                            # Si tenemos columna Balance, usar retornos porcentuales
-                            balance_col = None
-                            for col in df.columns:
-                                if col.lower() == 'balance':
-                                    balance_col = col
-                                    break
-                            
-                            if balance_col and balance_col in df.columns:
-                                try:
-                                    df_balance = df.copy()
-                                    df_balance[balance_col] = pd.to_numeric(df_balance[balance_col], errors='coerce')
-                                    df_balance = df_balance.dropna(subset=[balance_col])
-                                    if len(df_balance) > 0:
-                                        # Ordenar por tiempo si está disponible
-                                        if open_time_col and open_time_col in df_balance.columns:
-                                            df_balance[open_time_col] = pd.to_datetime(df_balance[open_time_col], errors='coerce')
-                                            df_balance = df_balance.sort_values(open_time_col).dropna(subset=[open_time_col])
-                                        
-                                        # Obtener balance inicial (primer balance - primer profit)
-                                        balance_inicial = df_balance[balance_col].iloc[0] - df_balance[profit_col].iloc[0]
-                                        if balance_inicial > 0:
-                                            # Calcular retornos porcentuales
-                                            returns_pct = df_balance[profit_col].values / balance_inicial
-                                            mean_return_pct = returns_pct.mean()
-                                            std_return_pct = returns_pct.std()
-                                            if std_return_pct > 0:
-                                                # Sharpe con retornos porcentuales
-                                                sharpe_ratio = (mean_return_pct / std_return_pct) * factor_base
-                                            else:
-                                                sharpe_ratio = sharpe_base
-                                        else:
-                                            sharpe_ratio = sharpe_base
-                                    else:
-                                        sharpe_ratio = sharpe_base
-                                except:
-                                    sharpe_ratio = sharpe_base
-                            else:
-                                # Si no hay balance, usar cálculo base con ajuste empírico basado en número de trades
-                                # Factores ajustados: XAU_1.4.49 (1473 trades): 4.09/3.46 = 1.182
-                                #                    XAU_3.3.78 (531 trades): 2.96/2.67 = 1.109
-                                n_trades = len(df)
-                                if n_trades > 1200:
-                                    factor_ajuste = 1.182  # Para muchos trades (XAU_1.4.49)
-                                elif n_trades > 400:
-                                    factor_ajuste = 1.109  # Para trades medios (XAU_3.3.78)
-                                else:
-                                    factor_ajuste = 1.15  # Default
-                                
-                                sharpe_ratio = sharpe_base * factor_ajuste
+                            # Sharpe Ratio = (R_p - R_f) / σ_p
+                            sharpe_ratio = (mean_return - R_f) / std_return
                         else:
                             sharpe_ratio = 0
                     else:
@@ -6114,7 +6045,7 @@ with tab1:
                         "Activo": st.column_config.TextColumn("Activo"),
                         "retdd": st.column_config.NumberColumn("retdd", format="%.2f"),
                         "Profit Factor": st.column_config.NumberColumn("Profit Factor", format="%.2f"),
-                        "Sharpe Ratio": st.column_config.NumberColumn("Sharpe Ratio", format="%.2f"),
+                        "Sharpe Ratio": st.column_config.NumberColumn("Sharpe Ratio", format="%.2f", help="Sharpe Ratio (StrategyQuant):\n\nMide el rendimiento ajustado al riesgo.\n\nFórmula: Sharpe = (R_p - R_f) / σ_p\n• R_p = rentabilidad media del portafolio\n• R_f = tasa libre de riesgo (0 en trading algorítmico)\n• σ_p = desviación estándar de los retornos\n\nInterpretación:\n• > 2.0: Excelente - Rendimiento muy superior al riesgo\n• 1.0 - 2.0: Buena - Buen rendimiento ajustado al riesgo\n• 0.5 - 1.0: Aceptable - Rendimiento moderado\n• < 0.5: Débil - Rendimiento bajo comparado con el riesgo"),
                         "Net Profit": st.column_config.NumberColumn("Net Profit", format="$%.2f"),
                         "Max DD": st.column_config.NumberColumn("Max DD", format="$%.2f"),
                         "Avg Trade Mensual": st.column_config.NumberColumn("Avg Trade Mensual", format="%.1f", help="Promedio de trades por mes"),
@@ -6319,86 +6250,21 @@ with tab1:
                                             else:
                                                 z_score_comb = 0
                                             
-                                            # Sharpe Ratio (anualizado)
-                                            # Sharpe = (Retorno promedio / Desviación estándar) * sqrt(períodos por año)
-                                            # MetaTrader calcula usando retornos porcentuales basados en balance inicial
+                                            # Sharpe Ratio (fórmula StrategyQuant)
+                                            # Sharpe = (R_p - R_f) / σ_p
+                                            # Donde R_p = rentabilidad media, R_f = 0 (tasa libre de riesgo), σ_p = desviación estándar
                                             if len(df_combinado) > 1:
+                                                # Usar retornos por operación (profit values)
                                                 returns_comb = df_combinado[profit_col].values
-                                                mean_return_comb = returns_comb.mean()
-                                                std_return_comb = returns_comb.std()
+                                                mean_return_comb = returns_comb.mean()  # R_p
+                                                std_return_comb = returns_comb.std()     # σ_p
+                                                
+                                                # R_f = 0 (tasa libre de riesgo, asumida en 0 para trading algorítmico)
+                                                R_f_comb = 0
+                                                
                                                 if std_return_comb > 0:
-                                                    # Calcular factor de anualización basado en el período real
-                                                    if open_time_col and open_time_col in df_combinado.columns:
-                                                        try:
-                                                            df_temp_comb = df_combinado.copy()
-                                                            df_temp_comb[open_time_col] = pd.to_datetime(df_temp_comb[open_time_col], errors='coerce')
-                                                            df_temp_comb = df_temp_comb.dropna(subset=[open_time_col])
-                                                            if len(df_temp_comb) > 1:
-                                                                fecha_inicio_comb = df_temp_comb[open_time_col].min()
-                                                                fecha_fin_comb = df_temp_comb[open_time_col].max()
-                                                                dias_totales_comb = (fecha_fin_comb - fecha_inicio_comb).days
-                                                                if dias_totales_comb > 0:
-                                                                    # Factor: sqrt(252 * número de trades / días totales)
-                                                                    factor_base_comb = np.sqrt(252 * len(df_temp_comb) / dias_totales_comb)
-                                                                else:
-                                                                    factor_base_comb = np.sqrt(252)
-                                                            else:
-                                                                factor_base_comb = np.sqrt(252)
-                                                        except:
-                                                            factor_base_comb = np.sqrt(252)
-                                                    else:
-                                                        factor_base_comb = np.sqrt(252)
-                                                    
-                                                    # Calcular Sharpe Ratio base
-                                                    sharpe_base_comb = (mean_return_comb / std_return_comb) * factor_base_comb
-                                                    
-                                                    # MetaTrader calcula usando retornos porcentuales basados en balance inicial
-                                                    balance_col_comb = None
-                                                    for col in df_combinado.columns:
-                                                        if col.lower() == 'balance':
-                                                            balance_col_comb = col
-                                                            break
-                                                    
-                                                    if balance_col_comb and balance_col_comb in df_combinado.columns:
-                                                        try:
-                                                            df_balance_comb = df_combinado.copy()
-                                                            df_balance_comb[balance_col_comb] = pd.to_numeric(df_balance_comb[balance_col_comb], errors='coerce')
-                                                            df_balance_comb = df_balance_comb.dropna(subset=[balance_col_comb])
-                                                            if len(df_balance_comb) > 0:
-                                                                # Ordenar por tiempo si está disponible
-                                                                if open_time_col and open_time_col in df_balance_comb.columns:
-                                                                    df_balance_comb[open_time_col] = pd.to_datetime(df_balance_comb[open_time_col], errors='coerce')
-                                                                    df_balance_comb = df_balance_comb.sort_values(open_time_col).dropna(subset=[open_time_col])
-                                                                
-                                                                # Obtener balance inicial
-                                                                balance_inicial_comb = df_balance_comb[balance_col_comb].iloc[0] - df_balance_comb[profit_col].iloc[0]
-                                                                if balance_inicial_comb > 0:
-                                                                    # Calcular retornos porcentuales
-                                                                    returns_pct_comb = df_balance_comb[profit_col].values / balance_inicial_comb
-                                                                    mean_return_pct_comb = returns_pct_comb.mean()
-                                                                    std_return_pct_comb = returns_pct_comb.std()
-                                                                    if std_return_pct_comb > 0:
-                                                                        # Sharpe con retornos porcentuales
-                                                                        sharpe_ratio_comb = (mean_return_pct_comb / std_return_pct_comb) * factor_base_comb
-                                                                    else:
-                                                                        sharpe_ratio_comb = sharpe_base_comb
-                                                                else:
-                                                                    sharpe_ratio_comb = sharpe_base_comb
-                                                            else:
-                                                                sharpe_ratio_comb = sharpe_base_comb
-                                                        except:
-                                                            sharpe_ratio_comb = sharpe_base_comb
-                                                    else:
-                                                        # Si no hay balance, usar cálculo base con ajuste empírico
-                                                        n_trades_comb = len(df_combinado)
-                                                        if n_trades_comb > 1200:
-                                                            factor_ajuste_comb = 1.182
-                                                        elif n_trades_comb > 400:
-                                                            factor_ajuste_comb = 1.109
-                                                        else:
-                                                            factor_ajuste_comb = 1.15
-                                                        
-                                                        sharpe_ratio_comb = sharpe_base_comb * factor_ajuste_comb
+                                                    # Sharpe Ratio = (R_p - R_f) / σ_p
+                                                    sharpe_ratio_comb = (mean_return_comb - R_f_comb) / std_return_comb
                                                 else:
                                                     sharpe_ratio_comb = 0
                                             else:
@@ -6559,7 +6425,10 @@ with tab1:
                                             st.session_state.portafolios_ea[nombre_portafolio] = {
                                                 'resultado': resultado_comb,
                                                 'estrategias': estrategias_seleccionadas,
-                                                'df_resultado': df_resultado_comb
+                                                'df_resultado': df_resultado_comb,
+                                                'df_combinado': df_combinado.copy(),
+                                                'open_time_col': open_time_col,
+                                                'profit_col': profit_col
                                             }
                                             
                                             st.success(f"✅ Portafolio '{nombre_portafolio}' creado exitosamente!")
@@ -6600,6 +6469,73 @@ with tab1:
                                         hide_index=True,
                                         column_config=column_config
                                     )
+                            
+                            # Gráfico de Equity de todos los portafolios
+                            st.markdown("""
+                            <div style="margin-top: 2rem; margin-bottom: 1rem;">
+                                <h4>Evolución del Equity - Portafolios</h4>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            # Crear gráfico de equity para todos los portafolios
+                            fig_equity = go.Figure()
+                            
+                            for nombre_portafolio, datos_portafolio in st.session_state.portafolios_ea.items():
+                                if 'df_combinado' in datos_portafolio and 'open_time_col' in datos_portafolio and 'profit_col' in datos_portafolio:
+                                    try:
+                                        df_port = datos_portafolio['df_combinado'].copy()
+                                        open_time_col_port = datos_portafolio['open_time_col']
+                                        profit_col_port = datos_portafolio['profit_col']
+                                        
+                                        if open_time_col_port and open_time_col_port in df_port.columns and profit_col_port in df_port.columns:
+                                            # Ordenar por tiempo
+                                            df_port[open_time_col_port] = pd.to_datetime(df_port[open_time_col_port], errors='coerce')
+                                            df_port = df_port.sort_values(by=open_time_col_port).dropna(subset=[open_time_col_port])
+                                            
+                                            if len(df_port) > 0:
+                                                # Calcular equity (beneficio acumulado)
+                                                df_port['equity'] = df_port[profit_col_port].cumsum()
+                                                
+                                                # Agregar línea al gráfico
+                                                fig_equity.add_trace(go.Scatter(
+                                                    x=df_port[open_time_col_port],
+                                                    y=df_port['equity'],
+                                                    mode='lines+markers',
+                                                    name=nombre_portafolio,
+                                                    line=dict(width=2),
+                                                    marker=dict(size=4),
+                                                    hovertemplate=
+                                                    "<b>Portafolio:</b> %{fullData.name}<br>" +
+                                                    "<b>Fecha:</b> %{x|%d-%m-%Y %H:%M}<br>" +
+                                                    "<b>Equity:</b> $%{y:,.2f}<extra></extra>"
+                                                ))
+                                    except Exception as e:
+                                        # Si hay error con un portafolio, continuar con los demás
+                                        continue
+                            
+                            if len(fig_equity.data) > 0:
+                                fig_equity.update_layout(
+                                    title="Evolución del Equity por Portafolio",
+                                    xaxis_title="Fecha",
+                                    yaxis_title="Equity ($)",
+                                    hovermode='x unified',
+                                    showlegend=True,
+                                    legend=dict(
+                                        orientation="h",
+                                        yanchor="bottom",
+                                        y=1.02,
+                                        xanchor="right",
+                                        x=1
+                                    ),
+                                    height=400,
+                                    template="plotly_white",
+                                    plot_bgcolor='white',
+                                    paper_bgcolor='white'
+                                )
+                                
+                                st.plotly_chart(fig_equity, use_container_width=True)
+                            else:
+                                st.info("No hay datos suficientes para mostrar el gráfico de equity.")
                 else:
                     st.warning("⚠️ No se pudieron procesar los archivos CSV")
                     
