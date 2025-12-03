@@ -1683,21 +1683,6 @@ if not st.session_state.logged_in:
 
 # Si es primer login, mostrar formulario para establecer contraseña
 if st.session_state.first_login:
-    st.markdown("""
-    <style>
-    .password-setup-container {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        padding: 2rem;
-        min-height: 400px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div class="password-setup-container">
-    """, unsafe_allow_html=True)
     
     st.warning("⚠️ **Primer acceso detectado** - Por favor establece tu contraseña para continuar")
     
