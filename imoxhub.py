@@ -5784,7 +5784,8 @@ with tab1:
                     else:
                         sharpe_ratio = 0
                     
-                    # Avg Trade Mensual
+                    # Avg Trade Mensual (número promedio de trades por mes)
+                    total_trades = len(df)
                     if open_time_col and open_time_col in df.columns:
                         try:
                             df[open_time_col] = pd.to_datetime(df[open_time_col], errors='coerce')
@@ -5793,13 +5794,13 @@ with tab1:
                                 fecha_inicio = df[open_time_col].min()
                                 fecha_fin = df[open_time_col].max()
                                 meses = (fecha_fin - fecha_inicio).days / 30.44  # Promedio de días por mes
-                                avg_trade_mensual = net_profit / meses if meses > 0 else net_profit
+                                avg_trade_mensual = total_trades / meses if meses > 0 else total_trades
                             else:
-                                avg_trade_mensual = net_profit
+                                avg_trade_mensual = total_trades
                         except:
-                            avg_trade_mensual = net_profit
+                            avg_trade_mensual = total_trades
                     else:
-                        avg_trade_mensual = net_profit
+                        avg_trade_mensual = total_trades
                     
                     # Calmar Ratio (CAGR / Max DD %)
                     # MetaTrader calcula usando CAGR anualizado dividido por max drawdown porcentual
@@ -6079,7 +6080,7 @@ with tab1:
                         "Sharpe Ratio": st.column_config.NumberColumn("Sharpe Ratio", format="%.2f"),
                         "Net Profit": st.column_config.NumberColumn("Net Profit", format="$%.2f"),
                         "Max DD": st.column_config.NumberColumn("Max DD", format="$%.2f"),
-                        "Avg Trade Mensual": st.column_config.NumberColumn("Avg Trade Mensual", format="$%.2f"),
+                        "Avg Trade Mensual": st.column_config.NumberColumn("Avg Trade Mensual", format="%.1f", help="Promedio de trades por mes"),
                         "Max Consec Loss": st.column_config.NumberColumn("Max Consec Loss", format="%d"),
                         "Winrate %": st.column_config.NumberColumn("Winrate %", format="%.2f%%"),
                         "Ulcer Index": st.column_config.NumberColumn("Ulcer Index", format="%.2f", help="Ulcer Index:\n\nMide la profundidad y duración de los drawdowns en la equity curve.\n\nCuanto menor sea el valor, mejor. Un valor bajo indica drawdowns pequeños y cortos.\n\nInterpretación:\n• < 5: Excelente - Drawdowns muy controlados\n• 5 - 10: Bueno - Drawdowns moderados\n• 10 - 20: Aceptable - Drawdowns considerables\n• > 20: Alto - Drawdowns profundos y prolongados\n\nSe calcula como la raíz cuadrada del promedio de los drawdowns porcentuales al cuadrado."),
@@ -6326,17 +6327,18 @@ with tab1:
                                             else:
                                                 sharpe_ratio_comb = 0
                                             
-                                            # Avg Trade Mensual
+                                            # Avg Trade Mensual (número promedio de trades por mes)
+                                            total_trades_comb = len(df_combinado)
                                             if open_time_col and open_time_col in df_combinado.columns:
                                                 try:
                                                     fecha_inicio_comb = df_combinado[open_time_col].min()
                                                     fecha_fin_comb = df_combinado[open_time_col].max()
                                                     meses_comb = (fecha_fin_comb - fecha_inicio_comb).days / 30.44
-                                                    avg_trade_mensual_comb = net_profit_comb / meses_comb if meses_comb > 0 else net_profit_comb
+                                                    avg_trade_mensual_comb = total_trades_comb / meses_comb if meses_comb > 0 else total_trades_comb
                                                 except:
-                                                    avg_trade_mensual_comb = net_profit_comb
+                                                    avg_trade_mensual_comb = total_trades_comb
                                             else:
-                                                avg_trade_mensual_comb = net_profit_comb
+                                                avg_trade_mensual_comb = total_trades_comb
                                             
                                             # Calmar Ratio (CAGR / Max DD %)
                                             # MetaTrader calcula usando CAGR anualizado dividido por max drawdown porcentual
