@@ -5678,18 +5678,55 @@ with tab1:
                     else:
                         ulcer_index = 0
                     
-                    # Z-score
-                    # Mide la consistencia estadística de los resultados
-                    # Z-score = (winrate_observado - winrate_esperado) / error_estándar
-                    # Donde winrate_esperado = 50% (asumiendo trading aleatorio)
+                    # Z-score (fórmula StrategyQuant basada en runs)
+                    # Mide la aleatoriedad de las secuencias de ganancias y pérdidas
                     if total_trades > 0:
-                        winrate_observado = winrate / 100.0  # Convertir a decimal (0-1)
-                        winrate_esperado = 0.5  # 50% para trading aleatorio
-                        # Error estándar de la proporción: sqrt(p*(1-p)/n)
-                        # Usamos winrate_esperado para el cálculo del error estándar
-                        error_estandar = np.sqrt(winrate_esperado * (1 - winrate_esperado) / total_trades)
-                        if error_estandar > 0:
-                            z_score = (winrate_observado - winrate_esperado) / error_estandar
+                        # N = número total de operaciones
+                        N = total_trades
+                        # W = número de operaciones ganadoras
+                        W = trades_ganadores
+                        # L = número de operaciones perdedoras
+                        L = trades_perdedores
+                        # P = probabilidad de ganar
+                        P = W / N if N > 0 else 0
+                        
+                        # Calcular R = número total de runs (rachas)
+                        # Un run es una secuencia consecutiva de ganancias o pérdidas
+                        if len(df) > 0:
+                            # Ordenar por tiempo si está disponible para asegurar orden correcto
+                            df_zscore = df.copy()
+                            if open_time_col and open_time_col in df_zscore.columns:
+                                try:
+                                    df_zscore[open_time_col] = pd.to_datetime(df_zscore[open_time_col], errors='coerce')
+                                    df_zscore = df_zscore.sort_values(open_time_col).dropna(subset=[open_time_col])
+                                except:
+                                    pass
+                            
+                            # Crear secuencia de ganancias (1) y pérdidas (0)
+                            profits = df_zscore[profit_col].values
+                            secuencia = [1 if p > 0 else 0 for p in profits]
+                            
+                            # Contar runs: cada cambio en la secuencia es un nuevo run
+                            R = 1  # Siempre hay al menos 1 run
+                            for i in range(1, len(secuencia)):
+                                if secuencia[i] != secuencia[i-1]:
+                                    R += 1
+                        else:
+                            R = 0
+                        
+                        # Calcular Z-score solo si hay suficientes datos
+                        if N > 1 and P > 0 and P < 1:
+                            # E(R) = 1 + 2 * (N-1) * P * (1-P)
+                            E_R = 1 + 2 * (N - 1) * P * (1 - P)
+                            
+                            # Var(R) = 2 * (N-1) * P * (1-P) * (2*P*(1-P))
+                            Var_R = 2 * (N - 1) * P * (1 - P) * (2 * P * (1 - P))
+                            
+                            # Z = (R - E(R)) / sqrt(Var(R))
+                            if Var_R > 0:
+                                z_score = (R - E_R) / np.sqrt(Var_R)
+                            else:
+                                z_score = 0
                         else:
                             z_score = 0
                     else:
@@ -6084,7 +6121,7 @@ with tab1:
                         "Max Consec Loss": st.column_config.NumberColumn("Max Consec Loss", format="%d"),
                         "Winrate %": st.column_config.NumberColumn("Winrate %", format="%.2f%%"),
                         "Ulcer Index": st.column_config.NumberColumn("Ulcer Index", format="%.2f", help="Ulcer Index:\n\nMide la profundidad y duración de los drawdowns en la equity curve.\n\nCuanto menor sea el valor, mejor. Un valor bajo indica drawdowns pequeños y cortos.\n\nInterpretación:\n• < 5: Excelente - Drawdowns muy controlados\n• 5 - 10: Bueno - Drawdowns moderados\n• 10 - 20: Aceptable - Drawdowns considerables\n• > 20: Alto - Drawdowns profundos y prolongados\n\nSe calcula como la raíz cuadrada del promedio de los drawdowns porcentuales al cuadrado."),
-                        "Z-score": st.column_config.NumberColumn("Z-score", format="%.2f", help="Z-score:\n\nMide la consistencia estadística del winrate comparado con un winrate esperado del 50% (trading aleatorio).\n\nIndica si el winrate observado es estadísticamente significativo o si está dentro del rango esperado por azar.\n\nInterpretación:\n• > 2.0: Muy significativo - Winrate muy superior al 50%, alta consistencia\n• 1.0 - 2.0: Significativo - Winrate superior al 50%, buena consistencia\n• -1.0 - 1.0: Normal - Winrate cercano al 50%, resultados dentro del rango esperado\n• < -1.0: Por debajo - Winrate inferior al 50%, menor consistencia\n\nUn Z-score positivo alto indica que la estrategia tiene un winrate consistentemente mejor que el esperado por azar."),
+                        "Z-score": st.column_config.NumberColumn("Z-score", format="%.2f", help="Z-score (StrategyQuant):\n\nMide la aleatoriedad de las secuencias de ganancias y pérdidas basado en el número de runs (rachas).\n\nUn Z-score cercano a 0 indica que las secuencias son aleatorias (patrón normal).\nUn Z-score positivo alto indica que hay menos runs de lo esperado (más agrupación de resultados similares).\nUn Z-score negativo indica que hay más runs de lo esperado (más alternancia entre ganancias y pérdidas).\n\nInterpretación:\n• |Z| < 1.0: Secuencia aleatoria normal - Patrón esperado en trading\n• |Z| 1.0 - 2.0: Ligeramente no aleatorio - Puede indicar agrupación o alternancia\n• |Z| > 2.0: Significativamente no aleatorio - Patrón claro de agrupación o alternancia\n\nFórmula: Z = (R - E(R)) / sqrt(Var(R)) donde R es el número de runs observados."),
                         "R Expectancy": st.column_config.TextColumn("R Expectancy", help="R Expectancy (Expectativa en R):\n\nMide la rentabilidad esperada por trade ajustada al riesgo unitario.\n\nEl valor R representa cuántas veces el riesgo esperas ganar por cada trade.\n\nInterpretación:\n• > 1.0 R: Excelente - Ganas más de 1 vez el riesgo por trade\n• 0.5 - 1.0 R: Muy bueno - Estrategias muy rentables\n• 0.25 - 0.5 R: Bueno - Estrategias rentables\n• 0.0 - 0.25 R: Aceptable - Expectativa positiva pero baja\n• < 0.0: Negativo - No rentable a largo plazo\n\nSe muestra en formato R (decimal) y en dólares entre paréntesis."),
                         "Calmar": st.column_config.NumberColumn("Calmar", format="%.2f", help="Calmar Ratio (Return / Max Drawdown):\n\n🟢 > 3.0: Excelente - Ratio excepcional, muy raro en trading real. Ideal para prop firms y fondeos.\n\n🟠 2.0 - 3.0: Muy bueno - Estrategias robustas y consistentes con excelente gestión de riesgo.\n\n🟡 1.0 - 2.0: Aceptable - Nivel estándar para estrategias operativas normales.\n\n🔴 < 1.0: Débil - El riesgo de drawdown es demasiado alto comparado con la rentabilidad obtenida.\n\nMide la relación entre rentabilidad y drawdown máximo. Valores más altos indican mejor eficiencia riesgo-rendimiento."),
                         "R-squared": st.column_config.NumberColumn("R-squared", format="%.4f", help="R-squared (Smoothness de la curva de capital):\n\nMide qué tan suave y consistente es la curva de equity. Indica qué tan bien se ajusta la curva de capital a una línea recta (tendencia).\n\nDiferencia con R Expectancy:\n• R Expectancy: Te dice cuánto podrías ganar por trade asumiendo X riesgo → clave para rentabilidad.\n• R-squared: Te dice qué tan suave es la curva de beneficios → clave para robustez/consistencia.\n\nInterpretación:\n• > 0.95: Excelente - Curva muy suave, alta consistencia\n• 0.90 - 0.95: Muy bueno - Curva suave, buena consistencia\n• 0.80 - 0.90: Bueno - Curva aceptablemente suave\n• 0.70 - 0.80: Aceptable - Curva con algunas variaciones\n• < 0.70: Bajo - Curva con muchas variaciones, menor consistencia\n\nUna estrategia ideal tiene: R Expectancy alta + R² alto."),
@@ -6230,13 +6267,53 @@ with tab1:
                                             else:
                                                 ulcer_index_comb = 0
                                             
-                                            # Z-score
+                                            # Z-score (fórmula StrategyQuant basada en runs)
                                             if total_trades_comb > 0:
-                                                winrate_observado_comb = winrate_comb / 100.0
-                                                winrate_esperado_comb = 0.5
-                                                error_estandar_comb = np.sqrt(winrate_esperado_comb * (1 - winrate_esperado_comb) / total_trades_comb)
-                                                if error_estandar_comb > 0:
-                                                    z_score_comb = (winrate_observado_comb - winrate_esperado_comb) / error_estandar_comb
+                                                # N = número total de operaciones
+                                                N_comb = total_trades_comb
+                                                # W = número de operaciones ganadoras
+                                                W_comb = trades_ganadores_comb
+                                                # L = número de operaciones perdedoras
+                                                L_comb = trades_perdedores_comb
+                                                # P = probabilidad de ganar
+                                                P_comb = W_comb / N_comb if N_comb > 0 else 0
+                                                
+                                                # Calcular R = número total de runs (rachas)
+                                                if len(df_combinado) > 0:
+                                                    # Ordenar por tiempo si está disponible
+                                                    df_zscore_comb = df_combinado.copy()
+                                                    if open_time_col and open_time_col in df_zscore_comb.columns:
+                                                        try:
+                                                            df_zscore_comb[open_time_col] = pd.to_datetime(df_zscore_comb[open_time_col], errors='coerce')
+                                                            df_zscore_comb = df_zscore_comb.sort_values(open_time_col).dropna(subset=[open_time_col])
+                                                        except:
+                                                            pass
+                                                    
+                                                    # Crear secuencia de ganancias (1) y pérdidas (0)
+                                                    profits_comb = df_zscore_comb[profit_col].values
+                                                    secuencia_comb = [1 if p > 0 else 0 for p in profits_comb]
+                                                    
+                                                    # Contar runs: cada cambio en la secuencia es un nuevo run
+                                                    R_comb = 1  # Siempre hay al menos 1 run
+                                                    for i in range(1, len(secuencia_comb)):
+                                                        if secuencia_comb[i] != secuencia_comb[i-1]:
+                                                            R_comb += 1
+                                                else:
+                                                    R_comb = 0
+                                                
+                                                # Calcular Z-score solo si hay suficientes datos
+                                                if N_comb > 1 and P_comb > 0 and P_comb < 1:
+                                                    # E(R) = 1 + 2 * (N-1) * P * (1-P)
+                                                    E_R_comb = 1 + 2 * (N_comb - 1) * P_comb * (1 - P_comb)
+                                                    
+                                                    # Var(R) = 2 * (N-1) * P * (1-P) * (2*P*(1-P))
+                                                    Var_R_comb = 2 * (N_comb - 1) * P_comb * (1 - P_comb) * (2 * P_comb * (1 - P_comb))
+                                                    
+                                                    # Z = (R - E(R)) / sqrt(Var(R))
+                                                    if Var_R_comb > 0:
+                                                        z_score_comb = (R_comb - E_R_comb) / np.sqrt(Var_R_comb)
+                                                    else:
+                                                        z_score_comb = 0
                                                 else:
                                                     z_score_comb = 0
                                             else:
