@@ -6439,6 +6439,162 @@ with tab1:
                                     import traceback
                                     st.code(traceback.format_exc())
                         
+                        # Sección de KPIs y Ranking de Portafolios
+                        if st.session_state.portafolios_ea and len(st.session_state.portafolios_ea) > 0:
+                            st.markdown("""
+                            <div style="margin-top: 2rem; margin-bottom: 1rem;">
+                                <h4>KPIs y Ranking de Portafolios</h4>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            # Inicializar pesos en session_state si no existen
+                            if 'pesos_kpis' not in st.session_state:
+                                st.session_state.pesos_kpis = {
+                                    'retdd': 25.0,
+                                    'sharpe': 25.0,
+                                    'max_consec_loss': 25.0,
+                                    'winrate': 25.0
+                                }
+                            
+                            # Sliders para ajustar pesos de KPIs
+                            st.markdown("**Ajusta los pesos de cada KPI (debe sumar 100%):**")
+                            
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                peso_retdd = st.slider(
+                                    "RetDD (%)",
+                                    min_value=0.0,
+                                    max_value=100.0,
+                                    value=st.session_state.pesos_kpis['retdd'],
+                                    step=1.0,
+                                    key="peso_retdd"
+                                )
+                                
+                                peso_sharpe = st.slider(
+                                    "Sharpe Ratio (%)",
+                                    min_value=0.0,
+                                    max_value=100.0,
+                                    value=st.session_state.pesos_kpis['sharpe'],
+                                    step=1.0,
+                                    key="peso_sharpe"
+                                )
+                            
+                            with col2:
+                                peso_max_consec_loss = st.slider(
+                                    "Max Consec Loss (%)",
+                                    min_value=0.0,
+                                    max_value=100.0,
+                                    value=st.session_state.pesos_kpis['max_consec_loss'],
+                                    step=1.0,
+                                    key="peso_max_consec_loss"
+                                )
+                                
+                                peso_winrate = st.slider(
+                                    "Winrate (%)",
+                                    min_value=0.0,
+                                    max_value=100.0,
+                                    value=st.session_state.pesos_kpis['winrate'],
+                                    step=1.0,
+                                    key="peso_winrate"
+                                )
+                            
+                            # Calcular suma total
+                            suma_pesos = peso_retdd + peso_sharpe + peso_max_consec_loss + peso_winrate
+                            
+                            # Mostrar suma y validación
+                            if abs(suma_pesos - 100.0) < 0.01:
+                                st.success(f"✅ Suma total: {suma_pesos:.1f}%")
+                            else:
+                                diferencia = 100.0 - suma_pesos
+                                st.warning(f"⚠️ Suma total: {suma_pesos:.1f}% (falta {diferencia:.1f}% para llegar a 100%)")
+                            
+                            # Normalizar pesos si no suman 100%
+                            if suma_pesos > 0:
+                                factor_normalizacion = 100.0 / suma_pesos
+                                peso_retdd_norm = peso_retdd * factor_normalizacion
+                                peso_sharpe_norm = peso_sharpe * factor_normalizacion
+                                peso_max_consec_loss_norm = peso_max_consec_loss * factor_normalizacion
+                                peso_winrate_norm = peso_winrate * factor_normalizacion
+                            else:
+                                peso_retdd_norm = 0
+                                peso_sharpe_norm = 0
+                                peso_max_consec_loss_norm = 0
+                                peso_winrate_norm = 0
+                            
+                            # Calcular scores para cada portafolio
+                            portafolios_scores = []
+                            
+                            for nombre_portafolio, datos_portafolio in st.session_state.portafolios_ea.items():
+                                resultado = datos_portafolio['resultado']
+                                
+                                # Obtener valores de KPIs
+                                retdd_val = resultado.get('retdd', 0)
+                                sharpe_val = resultado.get('Sharpe Ratio', 0)
+                                max_consec_loss_val = resultado.get('Max Consec Loss', 0)
+                                winrate_val = resultado.get('Winrate %', 0)
+                                
+                                # Normalizar valores a escala 0-100
+                                # Para retdd, sharpe, winrate: valores más altos son mejores
+                                # Para max_consec_loss: valores más bajos son mejores (invertir)
+                                
+                                # Encontrar min y max de cada KPI entre todos los portafolios
+                                retdd_values = [d['resultado'].get('retdd', 0) for d in st.session_state.portafolios_ea.values()]
+                                sharpe_values = [d['resultado'].get('Sharpe Ratio', 0) for d in st.session_state.portafolios_ea.values()]
+                                max_consec_loss_values = [d['resultado'].get('Max Consec Loss', 0) for d in st.session_state.portafolios_ea.values()]
+                                winrate_values = [d['resultado'].get('Winrate %', 0) for d in st.session_state.portafolios_ea.values()]
+                                
+                                # Normalizar retdd (0-100, más alto es mejor)
+                                if max(retdd_values) > min(retdd_values):
+                                    retdd_normalizado = ((retdd_val - min(retdd_values)) / (max(retdd_values) - min(retdd_values))) * 100
+                                else:
+                                    retdd_normalizado = 50.0  # Si todos son iguales, dar 50
+                                
+                                # Normalizar sharpe (0-100, más alto es mejor)
+                                if max(sharpe_values) > min(sharpe_values):
+                                    sharpe_normalizado = ((sharpe_val - min(sharpe_values)) / (max(sharpe_values) - min(sharpe_values))) * 100
+                                else:
+                                    sharpe_normalizado = 50.0
+                                
+                                # Normalizar max_consec_loss (0-100, más bajo es mejor, invertir)
+                                if max(max_consec_loss_values) > min(max_consec_loss_values):
+                                    max_consec_loss_normalizado = ((max(max_consec_loss_values) - max_consec_loss_val) / (max(max_consec_loss_values) - min(max_consec_loss_values))) * 100
+                                else:
+                                    max_consec_loss_normalizado = 50.0
+                                
+                                # Normalizar winrate (0-100, más alto es mejor)
+                                if max(winrate_values) > min(winrate_values):
+                                    winrate_normalizado = ((winrate_val - min(winrate_values)) / (max(winrate_values) - min(winrate_values))) * 100
+                                else:
+                                    winrate_normalizado = 50.0
+                                
+                                # Calcular score ponderado
+                                score = (
+                                    retdd_normalizado * (peso_retdd_norm / 100.0) +
+                                    sharpe_normalizado * (peso_sharpe_norm / 100.0) +
+                                    max_consec_loss_normalizado * (peso_max_consec_loss_norm / 100.0) +
+                                    winrate_normalizado * (peso_winrate_norm / 100.0)
+                                )
+                                
+                                portafolios_scores.append({
+                                    'nombre': nombre_portafolio,
+                                    'score': score,
+                                    'retdd': retdd_val,
+                                    'sharpe': sharpe_val,
+                                    'max_consec_loss': max_consec_loss_val,
+                                    'winrate': winrate_val,
+                                    'retdd_norm': retdd_normalizado,
+                                    'sharpe_norm': sharpe_normalizado,
+                                    'max_consec_loss_norm': max_consec_loss_normalizado,
+                                    'winrate_norm': winrate_normalizado
+                                })
+                            
+                            # Crear diccionario de scores para ordenar portafolios
+                            scores_dict = {p['nombre']: p['score'] for p in portafolios_scores}
+                            
+                            # Guardar scores en session_state para usar al mostrar portafolios
+                            st.session_state.scores_portafolios = scores_dict
+                        
                         # Mostrar portafolios creados
                         if st.session_state.portafolios_ea:
                             st.markdown("""
@@ -6447,9 +6603,26 @@ with tab1:
                             </div>
                             """, unsafe_allow_html=True)
                             
+                            # Ordenar portafolios por score (si existe)
+                            portafolios_ordenados = list(st.session_state.portafolios_ea.items())
+                            if 'scores_portafolios' in st.session_state and st.session_state.scores_portafolios:
+                                portafolios_ordenados.sort(
+                                    key=lambda x: st.session_state.scores_portafolios.get(x[0], 0),
+                                    reverse=True
+                                )
+                            
                             # Crear lista de portafolios para mostrar
-                            for nombre_portafolio, datos_portafolio in st.session_state.portafolios_ea.items():
-                                with st.expander(f"📊 {nombre_portafolio}", expanded=False):
+                            for nombre_portafolio, datos_portafolio in portafolios_ordenados:
+                                # Obtener score si existe
+                                score = st.session_state.scores_portafolios.get(nombre_portafolio, None) if 'scores_portafolios' in st.session_state else None
+                                
+                                # Mostrar nombre con score
+                                if score is not None:
+                                    nombre_con_score = f"📊 {nombre_portafolio} - Score: {score:.2f}"
+                                else:
+                                    nombre_con_score = f"📊 {nombre_portafolio}"
+                                
+                                with st.expander(nombre_con_score, expanded=False):
                                     # Mostrar estrategias incluidas con botón de eliminar a la derecha
                                     col_estrategias, col_eliminar = st.columns([4, 1])
                                     with col_estrategias:
