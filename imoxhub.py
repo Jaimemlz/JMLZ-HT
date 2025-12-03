@@ -6083,9 +6083,26 @@ with tab1:
                         df_resultados['Estrategia_Completa'] = df_resultados['Nombre Estrategia'] + ' - ' + df_resultados['Activo']
                         nombres_estrategias = df_resultados['Estrategia_Completa'].tolist()
                         
+                        # Calcular el siguiente número de portafolio disponible
+                        portafolios_existentes = list(st.session_state.portafolios_ea.keys())
+                        siguiente_numero = 1
+                        while f"Portafolio {siguiente_numero}" in portafolios_existentes:
+                            siguiente_numero += 1
+                        nombre_por_defecto = f"Portafolio {siguiente_numero}"
+                        
+                        # Inicializar el nombre del portafolio en session_state si no existe
+                        # Usar una key diferente para almacenar el valor por defecto
+                        if 'nombre_portafolio_default' not in st.session_state:
+                            st.session_state.nombre_portafolio_default = nombre_por_defecto
+                        else:
+                            # Actualizar el valor por defecto si es necesario
+                            st.session_state.nombre_portafolio_default = nombre_por_defecto
+                        
                         # Formulario para crear nuevo portafolio
+                        # Usar value con el valor por defecto calculado
                         nombre_portafolio = st.text_input(
                             "Nombre del portafolio:",
+                            value=st.session_state.nombre_portafolio_default,
                             key="nombre_portafolio_nuevo",
                             help="Ingresa un nombre único para identificar este portafolio"
                         )
@@ -6432,6 +6449,9 @@ with tab1:
                                             }
                                             
                                             st.success(f"✅ Portafolio '{nombre_portafolio}' creado exitosamente!")
+                                            # Eliminar la key del widget para que se recalcule el siguiente número en el próximo rerun
+                                            if 'nombre_portafolio_nuevo' in st.session_state:
+                                                del st.session_state.nombre_portafolio_nuevo
                                             st.rerun()
                                 
                                 except Exception as e:
@@ -6462,7 +6482,7 @@ with tab1:
                             
                             # Inicializar KPIs seleccionados y pesos en session_state si no existen
                             if 'kpis_seleccionados' not in st.session_state:
-                                st.session_state.kpis_seleccionados = ['retdd', 'sharpe', 'max_consec_loss', 'winrate']
+                                st.session_state.kpis_seleccionados = []
                             
                             if 'pesos_kpis' not in st.session_state:
                                 st.session_state.pesos_kpis = {
@@ -6483,7 +6503,7 @@ with tab1:
                             # Inicializar selector_kpis en session_state ANTES del widget si no existe
                             # Esto es crítico: el valor debe estar en session_state antes de crear el widget
                             if 'selector_kpis' not in st.session_state:
-                                valor_inicial = st.session_state.kpis_seleccionados if 'kpis_seleccionados' in st.session_state else ['retdd', 'sharpe', 'max_consec_loss', 'winrate']
+                                valor_inicial = st.session_state.kpis_seleccionados if 'kpis_seleccionados' in st.session_state else []
                                 st.session_state.selector_kpis = valor_inicial.copy() if isinstance(valor_inicial, list) else list(valor_inicial)
                             
                             # Crear el multiselect - cuando usas key, Streamlit lee y escribe en session_state automáticamente
@@ -6542,7 +6562,7 @@ with tab1:
                                 else:
                                     pesos_norm = {kpi: 0.0 for kpi in kpis_seleccionados}
                             else:
-                                st.warning("⚠️ Por favor, selecciona al menos un KPI para calcular el ranking.")
+                                st.warning("⚠️ Selecciona al menos un KPI para calcular el ranking.")
                                 pesos_norm = {}
                             
                             # Calcular scores para cada portafolio (solo si hay KPIs seleccionados)
