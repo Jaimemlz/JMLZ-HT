@@ -6715,7 +6715,6 @@ with tab1:
                                     
                                     # Ajuste de R (SL) por estrategia
                                     if 'estrategias_info' in datos_portafolio and 'sls_originales' in datos_portafolio:
-                                        st.markdown("---")
                                         st.markdown("**Ajuste de R (Stop Loss) por Estrategia:**")
                                         
                                         estrategias_info = datos_portafolio['estrategias_info']
@@ -6753,7 +6752,7 @@ with tab1:
                                                 # Cuando usas key, Streamlit maneja el estado automáticamente
                                                 # No usar value para evitar conflictos
                                                 nuevo_r = st.number_input(
-                                                    f"{estrategia_key}",
+                                                    f"{estrategia_key}  ($)",
                                                     step=1,
                                                     format="%d",  # Formato entero
                                                     help=f"SL original: ${sl_original:.2f}",
