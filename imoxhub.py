@@ -6125,11 +6125,56 @@ with tab1:
                                         st.error("No se pudieron extraer las estrategias seleccionadas. Verifica el formato.")
                                     else:
                                         # Combinar los DataFrames de las estrategias seleccionadas
+                                        # También calcular y guardar el SL original de cada estrategia
                                         dfs_combinados = []
+                                        sls_originales = {}  # Guardar SL original de cada estrategia
+                                        estrategias_info = []  # Guardar info de cada estrategia (nombre, activo, df, sl_original)
+                                        
                                         for nombre, activo in estrategias_filtradas:
                                             for datos_estrategia in datos_estrategias:
                                                 if datos_estrategia['nombre'] == nombre and datos_estrategia['activo'] == activo:
-                                                    dfs_combinados.append(datos_estrategia['df'].copy())
+                                                    df_estrategia = datos_estrategia['df'].copy()
+                                                    profit_col_estr = datos_estrategia['profit_col']
+                                                    
+                                                    # Calcular SL original (promedio de pérdidas o percentil 90)
+                                                    perdidas = df_estrategia[df_estrategia[profit_col_estr] < 0][profit_col_estr].abs()
+                                                    if len(perdidas) > 0:
+                                                        # Usar el percentil 90 o la pérdida más común
+                                                        sl_original = perdidas.quantile(0.90)
+                                                        # También intentar detectar el modo (valor más común)
+                                                        if len(perdidas) >= 2:
+                                                            # Agrupar pérdidas similares (dentro del 15%)
+                                                            perdidas_sorted = perdidas.sort_values(ascending=False)
+                                                            grupos = []
+                                                            for p in perdidas_sorted.values:
+                                                                encontrado = False
+                                                                for grupo in grupos:
+                                                                    if abs(p - grupo['valor']) / grupo['valor'] <= 0.15:
+                                                                        grupo['count'] += 1
+                                                                        grupo['valor'] = (grupo['valor'] * (grupo['count'] - 1) + p) / grupo['count']
+                                                                        encontrado = True
+                                                                        break
+                                                                if not encontrado:
+                                                                    grupos.append({'valor': p, 'count': 1})
+                                                            if grupos:
+                                                                grupo_mas_comun = max(grupos, key=lambda x: x['count'])
+                                                                sl_original = grupo_mas_comun['valor']
+                                                    else:
+                                                        sl_original = 100.0  # Valor por defecto si no hay pérdidas
+                                                    
+                                                    estrategia_key = f"{nombre} - {activo}"
+                                                    sls_originales[estrategia_key] = sl_original
+                                                    
+                                                    estrategias_info.append({
+                                                        'nombre': nombre,
+                                                        'activo': activo,
+                                                        'key': estrategia_key,
+                                                        'df': df_estrategia,
+                                                        'sl_original': sl_original,
+                                                        'profit_col': profit_col_estr
+                                                    })
+                                                    
+                                                    dfs_combinados.append(df_estrategia)
                                                     break
                                         
                                         if not dfs_combinados:
@@ -6430,8 +6475,19 @@ with tab1:
                                                 'df_resultado': df_resultado_comb,
                                                 'df_combinado': df_combinado.copy(),
                                                 'open_time_col': open_time_col,
-                                                'profit_col': profit_col
+                                                'profit_col': profit_col,
+                                                'estrategias_info': estrategias_info,  # Info detallada de cada estrategia
+                                                'sls_originales': sls_originales  # SLs originales de cada estrategia
                                             }
+                                            
+                                            # Inicializar los R ajustados con los valores originales (ratio = 1.0)
+                                            if 'r_ajustados' not in st.session_state:
+                                                st.session_state.r_ajustados = {}
+                                            if nombre_portafolio not in st.session_state.r_ajustados:
+                                                st.session_state.r_ajustados[nombre_portafolio] = {}
+                                            for estrategia_key in sls_originales.keys():
+                                                if estrategia_key not in st.session_state.r_ajustados[nombre_portafolio]:
+                                                    st.session_state.r_ajustados[nombre_portafolio][estrategia_key] = sls_originales[estrategia_key]
                                             
                                             st.success(f"✅ Portafolio '{nombre_portafolio}' creado exitosamente!")
                                             # Eliminar la key del widget para que se recalcule el siguiente número en el próximo rerun
@@ -6653,7 +6709,216 @@ with tab1:
                                     with col_eliminar:
                                         if st.button(f"Eliminar", key=f"eliminar_{nombre_portafolio}", use_container_width=True):
                                             del st.session_state.portafolios_ea[nombre_portafolio]
+                                            if nombre_portafolio in st.session_state.get('r_ajustados', {}):
+                                                del st.session_state.r_ajustados[nombre_portafolio]
                                             st.rerun()
+                                    
+                                    # Ajuste de R (SL) por estrategia
+                                    if 'estrategias_info' in datos_portafolio and 'sls_originales' in datos_portafolio:
+                                        st.markdown("---")
+                                        st.markdown("**Ajuste de R (Stop Loss) por Estrategia:**")
+                                        
+                                        estrategias_info = datos_portafolio['estrategias_info']
+                                        sls_originales = datos_portafolio['sls_originales']
+                                        
+                                        # Inicializar r_ajustados si no existe
+                                        if 'r_ajustados' not in st.session_state:
+                                            st.session_state.r_ajustados = {}
+                                        if nombre_portafolio not in st.session_state.r_ajustados:
+                                            st.session_state.r_ajustados[nombre_portafolio] = {}
+                                        
+                                        r_ajustados_portafolio = st.session_state.r_ajustados[nombre_portafolio]
+                                        
+                                        # Crear columnas para los sliders (2 columnas)
+                                        num_estrategias = len(estrategias_info)
+                                        num_cols = 2 if num_estrategias > 2 else num_estrategias
+                                        cols_r = st.columns(num_cols)
+                                        
+                                        for idx, estrategia_info in enumerate(estrategias_info):
+                                            estrategia_key = estrategia_info['key']
+                                            sl_original = estrategia_info['sl_original']
+                                            
+                                            # Obtener R actual (o usar el original si no está ajustado)
+                                            r_actual = r_ajustados_portafolio.get(estrategia_key, sl_original)
+                                            
+                                            # Mostrar slider en columna correspondiente
+                                            col_idx = idx % num_cols
+                                            with cols_r[col_idx]:
+                                                widget_key = f"r_{nombre_portafolio}_{estrategia_key}"
+                                                
+                                                # Inicializar el valor en session_state si no existe (como entero)
+                                                if widget_key not in st.session_state:
+                                                    st.session_state[widget_key] = int(round(r_actual))
+                                                
+                                                # Cuando usas key, Streamlit maneja el estado automáticamente
+                                                # No usar value para evitar conflictos
+                                                nuevo_r = st.number_input(
+                                                    f"{estrategia_key}",
+                                                    step=1,
+                                                    format="%d",  # Formato entero
+                                                    help=f"SL original: ${sl_original:.2f}",
+                                                    key=widget_key
+                                                )
+                                                
+                                                # Actualizar r_ajustados_portafolio con el valor del widget
+                                                # Usar el valor de session_state que Streamlit actualiza automáticamente
+                                                r_ajustados_portafolio[estrategia_key] = st.session_state[widget_key]
+                                        
+                                        # Recalcular estadísticas con los R ajustados
+                                        # Multiplicar profits de cada estrategia por el ratio (nuevo_R / SL_original)
+                                        df_combinado_ajustado = pd.DataFrame()
+                                        
+                                        for estrategia_info in estrategias_info:
+                                            estrategia_key = estrategia_info['key']
+                                            df_estrategia = estrategia_info['df'].copy()
+                                            profit_col_estr = estrategia_info['profit_col']
+                                            sl_original = estrategia_info['sl_original']
+                                            
+                                            # Obtener R ajustado desde session_state del widget (valor más actualizado)
+                                            widget_key = f"r_{nombre_portafolio}_{estrategia_key}"
+                                            # Leer directamente desde session_state del widget
+                                            r_ajustado = st.session_state.get(widget_key, r_ajustados_portafolio.get(estrategia_key, sl_original))
+                                            
+                                            # Calcular ratio
+                                            ratio = r_ajustado / sl_original if sl_original > 0 else 1.0
+                                            
+                                            # Multiplicar profits por el ratio
+                                            df_estrategia[profit_col_estr] = df_estrategia[profit_col_estr] * ratio
+                                            
+                                            # Añadir al DataFrame combinado
+                                            if len(df_combinado_ajustado) == 0:
+                                                df_combinado_ajustado = df_estrategia.copy()
+                                            else:
+                                                df_combinado_ajustado = pd.concat([df_combinado_ajustado, df_estrategia], ignore_index=True)
+                                        
+                                        # Ordenar por tiempo si está disponible
+                                        open_time_col = datos_portafolio['open_time_col']
+                                        profit_col = datos_portafolio['profit_col']
+                                        if open_time_col and open_time_col in df_combinado_ajustado.columns:
+                                            try:
+                                                df_combinado_ajustado[open_time_col] = pd.to_datetime(df_combinado_ajustado[open_time_col], errors='coerce')
+                                                df_combinado_ajustado = df_combinado_ajustado.sort_values(by=open_time_col).dropna(subset=[open_time_col])
+                                            except:
+                                                df_combinado_ajustado = df_combinado_ajustado.sort_index()
+                                        else:
+                                            df_combinado_ajustado = df_combinado_ajustado.sort_index()
+                                        
+                                        # Recalcular TODAS las métricas con el DataFrame ajustado
+                                        # (Copiar la lógica completa de cálculo de métricas)
+                                        net_profit_ajustado = df_combinado_ajustado[profit_col].sum()
+                                        
+                                        # Profit Factor
+                                        ganancias_ajustado = df_combinado_ajustado[df_combinado_ajustado[profit_col] > 0][profit_col].sum()
+                                        perdidas_ajustado = abs(df_combinado_ajustado[df_combinado_ajustado[profit_col] < 0][profit_col].sum())
+                                        profit_factor_ajustado = ganancias_ajustado / perdidas_ajustado if perdidas_ajustado > 0 else float('inf') if ganancias_ajustado > 0 else 0
+                                        
+                                        # Winrate
+                                        trades_ganadores_ajustado = len(df_combinado_ajustado[df_combinado_ajustado[profit_col] > 0])
+                                        trades_perdedores_ajustado = len(df_combinado_ajustado[df_combinado_ajustado[profit_col] < 0])
+                                        total_trades_ajustado = len(df_combinado_ajustado)
+                                        winrate_ajustado = (trades_ganadores_ajustado / total_trades_ajustado * 100) if total_trades_ajustado > 0 else 0
+                                        
+                                        # AvgWin / AvgLoss
+                                        avg_win_ajustado = df_combinado_ajustado[df_combinado_ajustado[profit_col] > 0][profit_col].mean() if trades_ganadores_ajustado > 0 else 0
+                                        avg_loss_ajustado = abs(df_combinado_ajustado[df_combinado_ajustado[profit_col] < 0][profit_col].mean()) if trades_perdedores_ajustado > 0 else 0
+                                        
+                                        # Max Consecutive Loss
+                                        max_consec_loss_ajustado = 0
+                                        current_consec_loss = 0
+                                        for profit in df_combinado_ajustado[profit_col]:
+                                            if profit < 0:
+                                                current_consec_loss += 1
+                                                max_consec_loss_ajustado = max(max_consec_loss_ajustado, current_consec_loss)
+                                            else:
+                                                current_consec_loss = 0
+                                        
+                                        # Calcular Drawdown
+                                        df_combinado_ajustado['equity'] = df_combinado_ajustado[profit_col].cumsum()
+                                        df_combinado_ajustado['cummax'] = df_combinado_ajustado['equity'].cummax()
+                                        df_combinado_ajustado['drawdown'] = df_combinado_ajustado['cummax'] - df_combinado_ajustado['equity']
+                                        max_dd_ajustado = df_combinado_ajustado['drawdown'].max() if len(df_combinado_ajustado) > 0 else 0
+                                        
+                                        # retdd
+                                        retdd_ajustado = (net_profit_ajustado / max_dd_ajustado) if max_dd_ajustado > 0 else 0
+                                        
+                                        # Ulcer Index
+                                        equity_for_ui_ajustado = df_combinado_ajustado['equity']
+                                        cummax_equity_ajustado = equity_for_ui_ajustado.cummax()
+                                        cummax_safe_ajustado = cummax_equity_ajustado.replace(0, 1)
+                                        dd_pct_ajustado = ((cummax_equity_ajustado - equity_for_ui_ajustado) / cummax_safe_ajustado * 100).fillna(0)
+                                        dd_pct_positive_ajustado = dd_pct_ajustado.clip(lower=0)
+                                        if len(df_combinado_ajustado) > 0:
+                                            ulcer_index_ajustado = np.sqrt((dd_pct_positive_ajustado ** 2).sum() / len(df_combinado_ajustado))
+                                        else:
+                                            ulcer_index_ajustado = 0
+                                        
+                                        # Sharpe Ratio
+                                        if len(df_combinado_ajustado) > 1:
+                                            returns_ajustado = df_combinado_ajustado[profit_col].values
+                                            mean_return_ajustado = returns_ajustado.mean()
+                                            std_return_ajustado = returns_ajustado.std()
+                                            R_f_ajustado = 0
+                                            if std_return_ajustado > 0:
+                                                sharpe_ratio_ajustado = (mean_return_ajustado - R_f_ajustado) / std_return_ajustado
+                                            else:
+                                                sharpe_ratio_ajustado = 0
+                                        else:
+                                            sharpe_ratio_ajustado = 0
+                                        
+                                        # Calmar Ratio (simplificado)
+                                        calmar_ajustado = (net_profit_ajustado / max_dd_ajustado) if max_dd_ajustado > 0 else 0
+                                        
+                                        # R-squared
+                                        r_squared_ajustado = 0
+                                        if len(df_combinado_ajustado) > 1:
+                                            equity_curve_ajustado = df_combinado_ajustado['equity'].values
+                                            x_ajustado = np.arange(len(equity_curve_ajustado))
+                                            if len(equity_curve_ajustado) > 1:
+                                                x_mean_ajustado = x_ajustado.mean()
+                                                y_mean_ajustado = equity_curve_ajustado.mean()
+                                                numerator_ajustado = ((x_ajustado - x_mean_ajustado) * (equity_curve_ajustado - y_mean_ajustado)).sum()
+                                                denominator_ajustado = ((x_ajustado - x_mean_ajustado) ** 2).sum()
+                                                if denominator_ajustado > 0:
+                                                    slope_ajustado = numerator_ajustado / denominator_ajustado
+                                                    intercept_ajustado = y_mean_ajustado - slope_ajustado * x_mean_ajustado
+                                                    y_pred_ajustado = intercept_ajustado + slope_ajustado * x_ajustado
+                                                    ss_res_ajustado = ((equity_curve_ajustado - y_pred_ajustado) ** 2).sum()
+                                                    ss_tot_ajustado = ((equity_curve_ajustado - y_mean_ajustado) ** 2).sum()
+                                                    if ss_tot_ajustado > 0:
+                                                        r_squared_ajustado = 1 - (ss_res_ajustado / ss_tot_ajustado)
+                                        
+                                        # Actualizar el DataFrame de resultado con todas las métricas ajustadas
+                                        datos_portafolio['df_resultado'].loc[0, 'Net Profit'] = net_profit_ajustado
+                                        datos_portafolio['df_resultado'].loc[0, 'Profit Factor'] = profit_factor_ajustado
+                                        datos_portafolio['df_resultado'].loc[0, 'Winrate %'] = winrate_ajustado
+                                        datos_portafolio['df_resultado'].loc[0, 'Max Consec Loss'] = max_consec_loss_ajustado
+                                        datos_portafolio['df_resultado'].loc[0, 'Max DD'] = max_dd_ajustado
+                                        datos_portafolio['df_resultado'].loc[0, 'retdd'] = retdd_ajustado
+                                        datos_portafolio['df_resultado'].loc[0, 'Ulcer Index'] = ulcer_index_ajustado
+                                        datos_portafolio['df_resultado'].loc[0, 'Sharpe Ratio'] = sharpe_ratio_ajustado
+                                        datos_portafolio['df_resultado'].loc[0, 'Calmar'] = calmar_ajustado
+                                        datos_portafolio['df_resultado'].loc[0, 'R-squared'] = r_squared_ajustado
+                                        
+                                        # Actualizar también el diccionario 'resultado' para que el score se recalcule correctamente
+                                        datos_portafolio['resultado']['Net Profit'] = net_profit_ajustado
+                                        datos_portafolio['resultado']['Profit Factor'] = profit_factor_ajustado
+                                        datos_portafolio['resultado']['Winrate %'] = winrate_ajustado
+                                        datos_portafolio['resultado']['Max Consec Loss'] = max_consec_loss_ajustado
+                                        datos_portafolio['resultado']['Max DD'] = max_dd_ajustado
+                                        datos_portafolio['resultado']['retdd'] = retdd_ajustado
+                                        datos_portafolio['resultado']['Ulcer Index'] = ulcer_index_ajustado
+                                        datos_portafolio['resultado']['Sharpe Ratio'] = sharpe_ratio_ajustado
+                                        datos_portafolio['resultado']['Calmar'] = calmar_ajustado
+                                        datos_portafolio['resultado']['R-squared'] = r_squared_ajustado
+                                        
+                                        # Guardar el DataFrame ajustado para uso futuro
+                                        datos_portafolio['df_combinado_ajustado'] = df_combinado_ajustado
+                                        
+                                        # Forzar recálculo del score en el próximo rerun
+                                        if 'scores_portafolios' in st.session_state:
+                                            # Eliminar el score de este portafolio para forzar recálculo
+                                            if nombre_portafolio in st.session_state.scores_portafolios:
+                                                del st.session_state.scores_portafolios[nombre_portafolio]
                                     
                                     # Mostrar tabla del portafolio
                                     df_resultado_portafolio = datos_portafolio['df_resultado']
