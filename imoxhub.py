@@ -6942,9 +6942,17 @@ with tab1:
                             fig_equity = go.Figure()
                             
                             for nombre_portafolio, datos_portafolio in st.session_state.portafolios_ea.items():
-                                if 'df_combinado' in datos_portafolio and 'open_time_col' in datos_portafolio and 'profit_col' in datos_portafolio:
+                                # Usar df_combinado_ajustado si existe (cuando hay R ajustados), sino usar df_combinado original
+                                if 'df_combinado_ajustado' in datos_portafolio:
+                                    df_a_usar = datos_portafolio['df_combinado_ajustado']
+                                elif 'df_combinado' in datos_portafolio:
+                                    df_a_usar = datos_portafolio['df_combinado']
+                                else:
+                                    continue
+                                
+                                if 'open_time_col' in datos_portafolio and 'profit_col' in datos_portafolio:
                                     try:
-                                        df_port = datos_portafolio['df_combinado'].copy()
+                                        df_port = df_a_usar.copy()
                                         open_time_col_port = datos_portafolio['open_time_col']
                                         profit_col_port = datos_portafolio['profit_col']
                                         
