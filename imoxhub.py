@@ -6482,9 +6482,6 @@ with tab1:
                                     'r_squared': 0.0
                                 }
                             
-                            # Selector de KPIs
-                            st.markdown("**Selecciona los KPIs a utilizar:**")
-                            
                             # Inicializar selector_kpis en session_state ANTES del widget si no existe
                             # Esto es crítico: el valor debe estar en session_state antes de crear el widget
                             if 'selector_kpis' not in st.session_state:
@@ -6494,7 +6491,7 @@ with tab1:
                             # Crear el multiselect - cuando usas key, Streamlit lee y escribe en session_state automáticamente
                             # NO usar default ni value cuando tienes key - deja que Streamlit maneje el estado
                             kpis_seleccionados = st.multiselect(
-                                "KPIs",
+                                "Selecciona los KPIs a utilizar:",
                                 options=list(kpis_disponibles.keys()),
                                 format_func=lambda x: kpis_disponibles[x],
                                 key="selector_kpis"
