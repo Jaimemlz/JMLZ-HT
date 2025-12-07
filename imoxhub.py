@@ -6059,143 +6059,142 @@ with tab1:
                     
                     # Matriz de Correlación de Estrategias (basada en profits)
                     if len(resultados) > 1 and len(datos_estrategias) > 1:
-                        st.markdown("""
-                        <div style="margin-top: 2rem;">
-                            <h4>Matriz de Correlación de Estrategias</h4>
-                            <p style="color: #6c757d; font-size: 0.9em;">Matriz de correlación entre estrategias. Valores cercanos a 1 indican que las estrategias tienen comportamientos similares, valores cercanos a 0 indican comportamientos independientes.</p>
+                        with st.expander("Matriz de Correlación de Timing y Dirección de Entrada", expanded=False):
+                            st.markdown("""
+                            <p style="color: #6c757d; font-size: 0.9em;">Matriz de correlación entre estrategias del mismo activo basada en timing de entrada (hora del día, día de la semana) y dirección de operación (Buy/Sell). Valores cercanos a 1 indican que las estrategias tienen comportamientos similares (o inversos), valores cercanos a 0 indican comportamientos independientes.</p>
+                            <p style="color: #6c757d; font-size: 0.85em; font-style: italic;">Nota: La correlación se calcula comparando el timing de entrada y la dirección de operación (dentro de 7 días), usando el valor absoluto para mostrar solo valores entre 0 y 1. "N/A" aparece cuando no hay suficientes trades coincidentes (mínimo 3 puntos).</p>
                             <p style="color: #6c757d; font-size: 0.9em; margin-top: 0.5rem;">🟢 < 0.4    🟠 0.4 - 0.7    🔴 > 0.7</p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        # Preparar datos para correlación: alinear profits por fecha
-                        estrategias_nombres = []
-                        profits_por_estrategia = {}
-                        
-                        for datos_estrategia in datos_estrategias:
-                            nombre_estrategia = datos_estrategia['nombre']
-                            activo_estrategia = datos_estrategia['activo']
-                            estrategia_key = f"{nombre_estrategia} - {activo_estrategia}"
-                            df_estrategia = datos_estrategia['df'].copy()
-                            profit_col_estr = datos_estrategia['profit_col']
-                            open_time_col_estr = datos_estrategia.get('open_time_col')
+                            """, unsafe_allow_html=True)
                             
-                            # Ordenar por tiempo si está disponible
-                            if open_time_col_estr and open_time_col_estr in df_estrategia.columns:
-                                try:
-                                    df_estrategia[open_time_col_estr] = pd.to_datetime(df_estrategia[open_time_col_estr], errors='coerce')
-                                    df_estrategia = df_estrategia.sort_values(by=open_time_col_estr).dropna(subset=[open_time_col_estr])
-                                    # Agrupar por día y sumar profits
-                                    df_estrategia['fecha'] = df_estrategia[open_time_col_estr].dt.date
-                                    profits_diarios = df_estrategia.groupby('fecha')[profit_col_estr].sum()
-                                except:
-                                    # Si no se puede ordenar por fecha, usar profits en orden
-                                    profits_diarios = pd.Series(df_estrategia[profit_col_estr].values)
-                            else:
-                                # Si no hay fecha, usar profits en orden
-                                profits_diarios = pd.Series(df_estrategia[profit_col_estr].values)
+                            # Preparar datos para correlación: alinear profits por fecha
+                            estrategias_nombres = []
+                            profits_por_estrategia = {}
                             
-                            estrategias_nombres.append(estrategia_key)
-                            profits_por_estrategia[estrategia_key] = profits_diarios
-                        
-                        # Crear DataFrame con todos los profits alineados por fecha
-                        if len(estrategias_nombres) > 1:
-                            # Encontrar todas las fechas únicas
-                            todas_fechas = set()
-                            for profits in profits_por_estrategia.values():
-                                if hasattr(profits, 'index'):
-                                    todas_fechas.update(profits.index)
-                            
-                            # Crear DataFrame con fechas como índice
-                            df_correlacion = pd.DataFrame(index=sorted(todas_fechas))
-                            
-                            # Añadir profits de cada estrategia
-                            for estrategia_key in estrategias_nombres:
-                                profits = profits_por_estrategia[estrategia_key]
-                                if hasattr(profits, 'index'):
-                                    df_correlacion[estrategia_key] = profits
+                            for datos_estrategia in datos_estrategias:
+                                nombre_estrategia = datos_estrategia['nombre']
+                                activo_estrategia = datos_estrategia['activo']
+                                estrategia_key = f"{nombre_estrategia} - {activo_estrategia}"
+                                df_estrategia = datos_estrategia['df'].copy()
+                                profit_col_estr = datos_estrategia['profit_col']
+                                open_time_col_estr = datos_estrategia.get('open_time_col')
+                                
+                                # Ordenar por tiempo si está disponible
+                                if open_time_col_estr and open_time_col_estr in df_estrategia.columns:
+                                    try:
+                                        df_estrategia[open_time_col_estr] = pd.to_datetime(df_estrategia[open_time_col_estr], errors='coerce')
+                                        df_estrategia = df_estrategia.sort_values(by=open_time_col_estr).dropna(subset=[open_time_col_estr])
+                                        # Agrupar por día y sumar profits
+                                        df_estrategia['fecha'] = df_estrategia[open_time_col_estr].dt.date
+                                        profits_diarios = df_estrategia.groupby('fecha')[profit_col_estr].sum()
+                                    except:
+                                        # Si no se puede ordenar por fecha, usar profits en orden
+                                        profits_diarios = pd.Series(df_estrategia[profit_col_estr].values)
                                 else:
-                                    # Si no tiene índice de fechas, crear uno secuencial
-                                    df_correlacion[estrategia_key] = profits.values[:len(df_correlacion)]
+                                    # Si no hay fecha, usar profits en orden
+                                    profits_diarios = pd.Series(df_estrategia[profit_col_estr].values)
+                                
+                                estrategias_nombres.append(estrategia_key)
+                                profits_por_estrategia[estrategia_key] = profits_diarios
                             
-                            # Calcular matriz de correlación
-                            matriz_correlacion = df_correlacion.corr().values
-                            
-                            # Preparar texto para la matriz
-                            text_matrix = []
-                            for row in matriz_correlacion:
-                                text_row = []
-                                for val in row:
-                                    if not np.isnan(val):
-                                        text_row.append(f"{val:.3f}")
+                            # Crear DataFrame con todos los profits alineados por fecha
+                            if len(estrategias_nombres) > 1:
+                                # Encontrar todas las fechas únicas
+                                todas_fechas = set()
+                                for profits in profits_por_estrategia.values():
+                                    if hasattr(profits, 'index'):
+                                        todas_fechas.update(profits.index)
+                                
+                                # Crear DataFrame con fechas como índice
+                                df_correlacion = pd.DataFrame(index=sorted(todas_fechas))
+                                
+                                # Añadir profits de cada estrategia
+                                for estrategia_key in estrategias_nombres:
+                                    profits = profits_por_estrategia[estrategia_key]
+                                    if hasattr(profits, 'index'):
+                                        df_correlacion[estrategia_key] = profits
                                     else:
-                                        text_row.append("N/A")
-                                text_matrix.append(text_row)
-                            
-                            # Escala de colores: < 0.4 verde, 0.4-0.7 naranja, > 0.7 rojo
-                            colorscale_custom = [
-                                [0,    '#46D285'],   # Verde para valores < 0.4
-                                [0.4,  '#46D285'],   # Verde hasta 0.4
-                                [0.4,  '#FBBE5B'],   # Naranja desde 0.4
-                                [0.7,  '#FBBE5B'],   # Naranja hasta 0.7
-                                [0.7,  '#FA5A5A'],   # Rojo desde 0.7
-                                [1,    '#FA5A5A']    # Rojo para valores > 0.7
-                            ]
-                            
-                            # Función para obtener el color de borde
-                            def obtener_color_borde(valor):
-                                if pd.isna(valor):
-                                    return None
-                                return '#d5d5da'  # Todos los bordes del mismo color
-                            
-                            # Añadir bordes de colores a cada celda usando shapes
-                            shapes = []
-                            n = len(estrategias_nombres)
-                            for i in range(n):
-                                for j in range(n):
-                                    valor = matriz_correlacion[i, j]
-                                    if not np.isnan(valor):
-                                        color_borde = obtener_color_borde(valor)
-                                        if color_borde:
-                                            shapes.append(dict(
-                                                type="rect",
-                                                xref="x",
-                                                yref="y",
-                                                x0=j - 0.5,
-                                                y0=i - 0.5,
-                                                x1=j + 0.5,
-                                                y1=i + 0.5,
-                                                line=dict(color=color_borde, width=2),
-                                                fillcolor="rgba(0,0,0,0)",  # Transparente, solo borde
-                                                layer="above"
-                                            ))
-                            
-                            fig_heatmap = go.Figure(data=go.Heatmap(
-                                z=matriz_correlacion,
-                                x=estrategias_nombres,
-                                y=estrategias_nombres,
-                                colorscale=colorscale_custom,
-                                zmin=0,
-                                zmax=1,
-                                text=text_matrix,
-                                texttemplate="%{text}",
-                                textfont={"size": 10},
-                                showscale=False,
-                                xgap=2,
-                                ygap=2
-                            ))
-                            
-                            fig_heatmap.update_layout(
-                                width=500,
-                                height=500,
-                                margin=dict(l=120, r=20, t=60, b=120),
-                                plot_bgcolor='#f8f9fa',
-                                paper_bgcolor='#f8f9fa',
-                                shapes=shapes,
-                                xaxis=dict(side="bottom", tickangle=-45),
-                                yaxis=dict(side="left")
-                            )
-                            
-                            st.plotly_chart(fig_heatmap, use_container_width=True)
+                                        # Si no tiene índice de fechas, crear uno secuencial
+                                        df_correlacion[estrategia_key] = profits.values[:len(df_correlacion)]
+                                
+                                # Calcular matriz de correlación
+                                matriz_correlacion = df_correlacion.corr().values
+                                
+                                # Preparar texto para la matriz
+                                text_matrix = []
+                                for row in matriz_correlacion:
+                                    text_row = []
+                                    for val in row:
+                                        if not np.isnan(val):
+                                            text_row.append(f"{val:.3f}")
+                                        else:
+                                            text_row.append("N/A")
+                                    text_matrix.append(text_row)
+                                
+                                # Escala de colores: < 0.4 verde, 0.4-0.7 naranja, > 0.7 rojo
+                                colorscale_custom = [
+                                    [0,    '#46D285'],   # Verde para valores < 0.4
+                                    [0.4,  '#46D285'],   # Verde hasta 0.4
+                                    [0.4,  '#FBBE5B'],   # Naranja desde 0.4
+                                    [0.7,  '#FBBE5B'],   # Naranja hasta 0.7
+                                    [0.7,  '#FA5A5A'],   # Rojo desde 0.7
+                                    [1,    '#FA5A5A']    # Rojo para valores > 0.7
+                                ]
+                                
+                                # Función para obtener el color de borde
+                                def obtener_color_borde(valor):
+                                    if pd.isna(valor):
+                                        return None
+                                    return '#d5d5da'  # Todos los bordes del mismo color
+                                
+                                # Añadir bordes de colores a cada celda usando shapes
+                                shapes = []
+                                n = len(estrategias_nombres)
+                                for i in range(n):
+                                    for j in range(n):
+                                        valor = matriz_correlacion[i, j]
+                                        if not np.isnan(valor):
+                                            color_borde = obtener_color_borde(valor)
+                                            if color_borde:
+                                                shapes.append(dict(
+                                                    type="rect",
+                                                    xref="x",
+                                                    yref="y",
+                                                    x0=j - 0.5,
+                                                    y0=i - 0.5,
+                                                    x1=j + 0.5,
+                                                    y1=i + 0.5,
+                                                    line=dict(color=color_borde, width=2),
+                                                    fillcolor="rgba(0,0,0,0)",  # Transparente, solo borde
+                                                    layer="above"
+                                                ))
+                                
+                                fig_heatmap = go.Figure(data=go.Heatmap(
+                                    z=matriz_correlacion,
+                                    x=estrategias_nombres,
+                                    y=estrategias_nombres,
+                                    colorscale=colorscale_custom,
+                                    zmin=0,
+                                    zmax=1,
+                                    text=text_matrix,
+                                    texttemplate="%{text}",
+                                    textfont={"size": 10},
+                                    showscale=False,
+                                    xgap=2,
+                                    ygap=2
+                                ))
+                                
+                                fig_heatmap.update_layout(
+                                    width=500,
+                                    height=500,
+                                    margin=dict(l=120, r=20, t=60, b=120),
+                                    plot_bgcolor='white',
+                                    paper_bgcolor='white',
+                                    shapes=shapes,
+                                    xaxis=dict(side="bottom", tickangle=-45),
+                                    yaxis=dict(side="left")
+                                )
+                                
+                                st.plotly_chart(fig_heatmap, use_container_width=True)
                     
                     # Sección de Crear Portafolio
                     if len(resultados) > 1:
