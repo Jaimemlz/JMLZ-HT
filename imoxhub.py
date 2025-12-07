@@ -6060,9 +6060,10 @@ with tab1:
                     # Matriz de Correlación de Estrategias (basada en profits)
                     if len(resultados) > 1 and len(datos_estrategias) > 1:
                         st.markdown("""
-                        <div style="margin-top: 2rem; margin-bottom: 2.5rem;">
+                        <div style="margin-top: 2rem;">
                             <h4>Matriz de Correlación de Estrategias</h4>
-                            <p style="color: #6c757d; font-size: 0.9em;">Matriz de correlación entre estrategias basada en los profits de las operaciones. Valores cercanos a 1 indican que las estrategias tienen comportamientos similares, valores cercanos a 0 indican comportamientos independientes.</p>
+                            <p style="color: #6c757d; font-size: 0.9em;">Matriz de correlación entre estrategias. Valores cercanos a 1 indican que las estrategias tienen comportamientos similares, valores cercanos a 0 indican comportamientos independientes.</p>
+                            <p style="color: #6c757d; font-size: 0.9em; margin-top: 0.5rem;">🟢 < 0.4    🟠 0.4 - 0.7    🔴 > 0.7</p>
                         </div>
                         """, unsafe_allow_html=True)
                         
@@ -6183,14 +6184,10 @@ with tab1:
                                 ygap=2
                             ))
                             
-                            # Crear título con leyenda de colores
-                            titulo_con_leyenda = f"Matriz de Correlación                    🟢 < 0.4    🟠 0.4 - 0.7    🔴 > 0.7"
-                            
                             fig_heatmap.update_layout(
-                                title=titulo_con_leyenda,
-                                width=800,
-                                height=800,
-                                margin=dict(l=150, r=20, t=80, b=150),
+                                width=500,
+                                height=500,
+                                margin=dict(l=120, r=20, t=60, b=120),
                                 plot_bgcolor='#f8f9fa',
                                 paper_bgcolor='#f8f9fa',
                                 shapes=shapes,
