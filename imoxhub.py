@@ -2887,7 +2887,7 @@ st.markdown('<div class="main-container">', unsafe_allow_html=True)
 # Panel central con contenido dinámico según el tab
 with tab1:
     # Crear tabs anidados dentro del tab 1
-    sub_tab1, sub_tab2, sub_tab3 = st.tabs(["Análisis de Portafolio", "Análisis de EA", "Análisis de Prop Firm"])
+    sub_tab1, sub_tab2, sub_tab3 = st.tabs(["Análisis de instancia mt4", "Análisis y creación de portfolios", "Análisis de Prop Firm"])
     
     with sub_tab1:
         # Tarjeta de carga de archivo
