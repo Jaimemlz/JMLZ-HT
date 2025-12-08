@@ -6013,17 +6013,17 @@ with tab1:
                     # Ordenar por retdd de forma descendente (mayor a menor)
                     df_resultados = df_resultados.sort_values(by='retdd', ascending=False)
                     
-                    # Función para estilizar Calmar según umbrales (igual que en "estrategias por mes")
+                    # Función para estilizar Calmar según umbrales (usando los mismos colores que la matriz)
                     def estilizar_calmar(valor):
                         if isinstance(valor, (int, float)):
                             if valor >= 3.0:
-                                return 'background-color: #28a745'  # Verde (Excelente)
+                                return 'background-color: #46D285'  # Verde (Excelente) - mismo color que matriz
                             elif valor >= 2.0:
-                                return 'background-color: #fd7e14'  # Naranja (Muy bueno)
+                                return 'background-color: #FBBE5B'  # Naranja (Muy bueno) - mismo color que matriz
                             elif valor >= 1.0:
-                                return 'background-color: #ffc107'  # Amarillo (Aceptable)
+                                return 'background-color: #FBBE5B'  # Naranja (Aceptable) - mismo color que matriz
                             else:
-                                return 'background-color: #dc3545'  # Rojo (Débil)
+                                return 'background-color: #FA5A5A'  # Rojo (Débil) - mismo color que matriz
                         return ''
                     
                     # Aplicar estilo solo a la columna Calmar
