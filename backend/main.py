@@ -166,22 +166,9 @@ try:
     else:
         print("✅ Columna password_hash ya existe en la base de datos")
     
-    # Resetear todas las contraseñas automáticamente la primera vez
-    # Esto permite que todos los usuarios (incluido el admin) establezcan su contraseña en el primer login
-    # Solo se ejecuta si acabamos de agregar la columna O si hay usuarios con contraseñas establecidas
-    with engine.begin() as conn:
-        # Verificar si hay usuarios con contraseñas
-        result = conn.execute(text("SELECT COUNT(*) FROM users WHERE password_hash IS NOT NULL AND password_hash != ''"))
-        users_with_passwords = result.scalar()
-        
-        if password_hash_just_added or users_with_passwords > 0:
-            print("🔄 Reseteando todas las contraseñas para permitir que los usuarios establezcan nuevas contraseñas...")
-            result = conn.execute(text("SELECT COUNT(*) FROM users"))
-            total_users = result.scalar()
-            if total_users > 0:
-                conn.execute(text("UPDATE users SET password_hash = NULL"))
-                print(f"✅ Se han reseteado las contraseñas de {total_users} usuario(s)")
-                print("💡 Todos los usuarios deberán establecer una nueva contraseña en su próximo login")
+    # NOTA: El reseteo automático de contraseñas ha sido eliminado
+    # Las contraseñas solo se resetean manualmente a través del endpoint /auth/reset-password
+    # o usando el script reset_all_passwords.py si es necesario
 except Exception as e:
     print(f"⚠️  Advertencia al verificar migración de password_hash: {str(e)}")
     # Continuar de todos modos, el servidor puede funcionar sin la migración
