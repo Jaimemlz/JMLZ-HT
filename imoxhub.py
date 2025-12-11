@@ -3546,6 +3546,405 @@ with tab1:
                         )
                     else:
                         st.warning("⚠️ No se pudo generar la tabla de análisis. Verifica que los archivos contengan datos válidos.")
+                    
+                    # Sección de Correlación (antes de "Combinar Estrategias")
+                    if len(df) > 0:
+                        # Preparar nombres de estrategias desde df
+                        estrategias_nombres_corr = []
+                        estrategias_datos_corr = {}
+                        
+                        # Agrupar por EA y Símbolo para crear las estrategias
+                        for (ea, simbolo), grupo in df.groupby(["EA", "Símbolo"]):
+                            estrategia_key = f"{ea} - {simbolo.upper()}"
+                            estrategias_nombres_corr.append(estrategia_key)
+                            estrategias_datos_corr[estrategia_key] = {
+                                'nombre': ea,
+                                'activo': simbolo.upper(),
+                                'df': grupo.copy(),
+                                'profit_col': 'Beneficio',
+                                'open_time_col': 'Open',
+                                'open_price_col': 'PrecioOpen'
+                            }
+                        
+                        if len(estrategias_nombres_corr) > 1:
+                            with st.expander("Correlación", expanded=False):
+                                # Selector de estrategias para las matrices
+                                estrategias_seleccionadas_corr = st.multiselect(
+                                    "Selecciona las estrategias para las matrices de correlación:",
+                                    options=estrategias_nombres_corr,
+                                    default=[],
+                                    key="estrategias_correlacion_mt4_comb",
+                                    help="Selecciona las estrategias que deseas incluir en las matrices de correlación. Mínimo 2 estrategias."
+                                )
+                                
+                                # Filtrar estrategias según la selección
+                                if len(estrategias_seleccionadas_corr) >= 2:
+                                    estrategias_nombres_filtradas_corr = estrategias_seleccionadas_corr
+                                    estrategias_datos_filtradas_corr = {key: estrategias_datos_corr[key] for key in estrategias_seleccionadas_corr if key in estrategias_datos_corr}
+                                else:
+                                    estrategias_nombres_filtradas_corr = []
+                                    estrategias_datos_filtradas_corr = {}
+                                
+                                # Sliders para tolerancias
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    tolerancia_temporal_corr = st.slider(
+                                        "Tolerancia temporal (minutos)",
+                                        min_value=1,
+                                        max_value=60,
+                                        value=1,
+                                        step=1,
+                                        key="tolerancia_temporal_corr_mt4_comb",
+                                        help="Tolerancia en minutos para considerar que dos trades ocurren al mismo tiempo"
+                                    )
+                                
+                                with col2:
+                                    tolerancia_precio_corr = st.slider(
+                                        "Tolerancia precio (%)",
+                                        min_value=0.01,
+                                        max_value=5.0,
+                                        value=0.2,
+                                        step=0.01,
+                                        key="tolerancia_precio_corr_mt4_comb",
+                                        help="Tolerancia en porcentaje para considerar que dos trades entran a precios similares"
+                                    )
+                                
+                                # Solo calcular y mostrar matrices si hay al menos 2 estrategias seleccionadas
+                                if len(estrategias_nombres_filtradas_corr) < 2:
+                                    st.info("ℹ️ Selecciona al menos 2 estrategias para ver las matrices de correlación.")
+                                
+                                # Función para obtener el color de fondo según el valor de correlación
+                                def obtener_color_fondo_corr(valor):
+                                    if pd.isna(valor):
+                                        return '#ffffff'  # Blanco para NaN
+                                    if valor < 0.4:
+                                        return '#46D285'  # Verde
+                                    elif valor < 0.7:
+                                        return '#FBBE5B'  # Naranja
+                                    else:
+                                        return '#FA5A5A'  # Rojo
+                                
+                                # Función para calcular correlación por profit/loss (optimizada)
+                                def calcular_correlacion_profit_loss_corr(estrategia1_key, estrategia2_key, tol_temporal):
+                                    if estrategia1_key == estrategia2_key:
+                                        return 1.0
+                                    
+                                    datos1 = estrategias_datos_filtradas_corr[estrategia1_key]
+                                    datos2 = estrategias_datos_filtradas_corr[estrategia2_key]
+                                    
+                                    df1 = datos1['df'].copy()
+                                    df2 = datos2['df'].copy()
+                                    profit_col1 = datos1['profit_col']
+                                    profit_col2 = datos2['profit_col']
+                                    open_time_col1 = datos1.get('open_time_col')
+                                    open_time_col2 = datos2.get('open_time_col')
+                                    
+                                    # Verificar que ambas estrategias tengan datos de tiempo
+                                    if not open_time_col1 or open_time_col1 not in df1.columns:
+                                        return np.nan
+                                    if not open_time_col2 or open_time_col2 not in df2.columns:
+                                        return np.nan
+                                    
+                                    try:
+                                        # Convertir a datetime y ordenar
+                                        df1[open_time_col1] = pd.to_datetime(df1[open_time_col1], errors='coerce')
+                                        df2[open_time_col2] = pd.to_datetime(df2[open_time_col2], errors='coerce')
+                                        df1 = df1.dropna(subset=[open_time_col1]).sort_values(open_time_col1)
+                                        df2 = df2.dropna(subset=[open_time_col2]).sort_values(open_time_col2)
+                                        
+                                        if len(df1) == 0 or len(df2) == 0:
+                                            return np.nan
+                                        
+                                        # Crear columnas de signo usando operación vectorizada
+                                        df1['signo'] = np.where(df1[profit_col1] > 0, 1, np.where(df1[profit_col1] < 0, -1, 0))
+                                        df2['signo'] = np.where(df2[profit_col2] > 0, 1, np.where(df2[profit_col2] < 0, -1, 0))
+                                        
+                                        # Preparar DataFrames para merge_asof (solo las columnas necesarias)
+                                        # Asegurar que estén ordenados por tiempo
+                                        df1_clean = pd.DataFrame({
+                                            'time': df1[open_time_col1].values,
+                                            'signo': df1['signo'].values
+                                        }).sort_values('time').reset_index(drop=True)
+                                        
+                                        df2_clean = pd.DataFrame({
+                                            'time': df2[open_time_col2].values,
+                                            'signo': df2['signo'].values
+                                        }).sort_values('time').reset_index(drop=True)
+                                        
+                                        # Crear ventana de tolerancia (asegurar que sea un Timedelta)
+                                        # Forzar conversión a float y luego a Timedelta
+                                        tol_minutes = float(tol_temporal)
+                                        tolerance = pd.Timedelta(minutes=tol_minutes)
+                                        
+                                        # Usar merge_asof para encontrar el trade más cercano
+                                        # merge_asof requiere que los DataFrames estén ordenados por la columna 'on'
+                                        merged = pd.merge_asof(
+                                            df1_clean,
+                                            df2_clean,
+                                            on='time',
+                                            direction='nearest',
+                                            tolerance=tolerance,
+                                            suffixes=('_1', '_2'),
+                                            allow_exact_matches=True
+                                        )
+                                        
+                                        if len(merged) == 0:
+                                            return np.nan
+                                        
+                                        # Contar coincidencias de signo
+                                        coincidencias = (merged['signo_1'] == merged['signo_2']).sum()
+                                        total_comparaciones = len(merged)
+                                        
+                                        # Correlación = proporción de coincidencias
+                                        correlacion = coincidencias / total_comparaciones
+                                        return correlacion
+                                    
+                                    except Exception as e:
+                                        return np.nan
+                                
+                                # Función para calcular correlación por entrada (hora/precio) (optimizada)
+                                def calcular_correlacion_entrada_corr(estrategia1_key, estrategia2_key, tol_temporal, tol_precio):
+                                    if estrategia1_key == estrategia2_key:
+                                        return 1.0
+                                    
+                                    datos1 = estrategias_datos_filtradas_corr[estrategia1_key]
+                                    datos2 = estrategias_datos_filtradas_corr[estrategia2_key]
+                                    
+                                    df1 = datos1['df'].copy()
+                                    df2 = datos2['df'].copy()
+                                    open_time_col1 = datos1.get('open_time_col')
+                                    open_time_col2 = datos2.get('open_time_col')
+                                    open_price_col1 = datos1.get('open_price_col')
+                                    open_price_col2 = datos2.get('open_price_col')
+                                    
+                                    # Verificar que ambas estrategias tengan datos de tiempo y precio
+                                    if not open_time_col1 or open_time_col1 not in df1.columns:
+                                        return np.nan
+                                    if not open_time_col2 or open_time_col2 not in df2.columns:
+                                        return np.nan
+                                    if not open_price_col1 or open_price_col1 not in df1.columns:
+                                        return np.nan
+                                    if not open_price_col2 or open_price_col2 not in df2.columns:
+                                        return np.nan
+                                    
+                                    try:
+                                        # Convertir a datetime y ordenar
+                                        df1[open_time_col1] = pd.to_datetime(df1[open_time_col1], errors='coerce')
+                                        df2[open_time_col2] = pd.to_datetime(df2[open_time_col2], errors='coerce')
+                                        df1 = df1.dropna(subset=[open_time_col1, open_price_col1]).sort_values(open_time_col1)
+                                        df2 = df2.dropna(subset=[open_time_col2, open_price_col2]).sort_values(open_time_col2)
+                                        
+                                        if len(df1) == 0 or len(df2) == 0:
+                                            return np.nan
+                                        
+                                        # Preparar DataFrames para merge_asof (solo las columnas necesarias)
+                                        # Asegurar que estén ordenados por tiempo
+                                        df1_clean = pd.DataFrame({
+                                            'time': df1[open_time_col1].values,
+                                            'price': df1[open_price_col1].values
+                                        }).sort_values('time').reset_index(drop=True)
+                                        
+                                        df2_clean = pd.DataFrame({
+                                            'time': df2[open_time_col2].values,
+                                            'price': df2[open_price_col2].values
+                                        }).sort_values('time').reset_index(drop=True)
+                                        
+                                        # Crear ventana de tolerancia temporal (asegurar que sea un Timedelta)
+                                        tolerance = pd.Timedelta(minutes=float(tol_temporal))
+                                        
+                                        # Usar merge_asof para encontrar trades cercanos en tiempo
+                                        # merge_asof requiere que los DataFrames estén ordenados por la columna 'on'
+                                        merged = pd.merge_asof(
+                                            df1_clean,
+                                            df2_clean,
+                                            on='time',
+                                            direction='nearest',
+                                            tolerance=tolerance,
+                                            suffixes=('_1', '_2'),
+                                            allow_exact_matches=True
+                                        )
+                                        
+                                        if len(merged) == 0:
+                                            return np.nan
+                                        
+                                        # Filtrar por tolerancia de precio usando operación vectorizada
+                                        # Asegurar que tol_precio sea float
+                                        tol_prec = float(tol_precio)
+                                        precio_min = merged['price_1'] * (1 - tol_prec / 100)
+                                        precio_max = merged['price_1'] * (1 + tol_prec / 100)
+                                        
+                                        coincidencias = (
+                                            (merged['price_2'] >= precio_min) & 
+                                            (merged['price_2'] <= precio_max)
+                                        ).sum()
+                                        
+                                        total_comparaciones = len(merged)
+                                        
+                                        if total_comparaciones == 0:
+                                            return np.nan
+                                        
+                                        # Correlación = proporción de coincidencias
+                                        correlacion = coincidencias / total_comparaciones
+                                        return correlacion
+                                    
+                                    except Exception as e:
+                                        return np.nan
+                                
+                                # Calcular matrices de correlación solo si hay al menos 2 estrategias seleccionadas
+                                if len(estrategias_nombres_filtradas_corr) >= 2:
+                                    # Leer valores directamente de los sliders (forzar lectura fresca)
+                                    tol_temp = float(tolerancia_temporal_corr)
+                                    tol_prec = float(tolerancia_precio_corr)
+                                    
+                                    n_corr = len(estrategias_nombres_filtradas_corr)
+                                    matriz_profit_loss_corr = np.full((n_corr, n_corr), np.nan)
+                                    matriz_entrada_corr = np.full((n_corr, n_corr), np.nan)
+                                    
+                                    # Mostrar indicador de progreso
+                                    progress_bar_corr = st.progress(0)
+                                    status_text_corr = st.empty()
+                                    
+                                    total_calculos_corr = n_corr * n_corr * 2
+                                    calculos_realizados_corr = 0
+                                    
+                                    for i in range(n_corr):
+                                        for j in range(n_corr):
+                                            try:
+                                                # Pasar los valores explícitamente como float
+                                                # Usar los valores directamente sin variables intermedias
+                                                matriz_profit_loss_corr[i, j] = calcular_correlacion_profit_loss_corr(
+                                                    estrategias_nombres_filtradas_corr[i], 
+                                                    estrategias_nombres_filtradas_corr[j],
+                                                    tol_temp
+                                                )
+                                                calculos_realizados_corr += 1
+                                                progress_bar_corr.progress(calculos_realizados_corr / total_calculos_corr)
+                                                
+                                                matriz_entrada_corr[i, j] = calcular_correlacion_entrada_corr(
+                                                    estrategias_nombres_filtradas_corr[i], 
+                                                    estrategias_nombres_filtradas_corr[j],
+                                                    tol_temp,
+                                                    tol_prec
+                                                )
+                                                calculos_realizados_corr += 1
+                                                progress_bar_corr.progress(calculos_realizados_corr / total_calculos_corr)
+                                            except Exception as e:
+                                                matriz_profit_loss_corr[i, j] = np.nan
+                                                matriz_entrada_corr[i, j] = np.nan
+                                                calculos_realizados_corr += 2
+                                                progress_bar_corr.progress(calculos_realizados_corr / total_calculos_corr)
+                                    
+                                    progress_bar_corr.empty()
+                                    status_text_corr.empty()
+                                else:
+                                    matriz_profit_loss_corr = None
+                                    matriz_entrada_corr = None
+                                    n_corr = 0
+                                
+                                # Función para construir tabla HTML
+                                def construir_tabla_html_corr(matriz, titulo):
+                                    html_table = f"""
+                                    <style>
+                                    .correlation-table {{
+                                        border-collapse: collapse;
+                                        width: 100%;
+                                        margin: 10px auto;
+                                        background-color: white;
+                                    }}
+                                    .correlation-table th, .correlation-table td {{
+                                        padding: 6px;
+                                        text-align: center;
+                                        font-size: 9px;
+                                    }}
+                                    .correlation-table th {{
+                                        background-color: #f0f0f0;
+                                        font-weight: bold;
+                                    }}
+                                    .correlation-table td.correlation-value {{
+                                        color: #333;
+                                        font-weight: 500;
+                                    }}
+                                    .correlation-title {{
+                                        text-align: center;
+                                        font-weight: bold;
+                                        margin-bottom: 10px;
+                                        font-size: 12px;
+                                    }}
+                                    </style>
+                                    <div class="correlation-title">{titulo}</div>
+                                    <table class="correlation-table">
+                                    """
+                                    
+                                    # Primera fila: encabezados de columna
+                                    html_table += "<tr>"
+                                    html_table += '<th style="background-color: #f0f0f0;"></th>'
+                                    for nombre in estrategias_nombres_filtradas_corr:
+                                        html_table += f'<th style="background-color: #f0f0f0;">{nombre}</th>'
+                                    html_table += "</tr>"
+                                    
+                                    # Filas siguientes
+                                    for i in range(n_corr):
+                                        html_table += "<tr>"
+                                        html_table += f'<th style="background-color: #f0f0f0;">{estrategias_nombres_filtradas_corr[i]}</th>'
+                                        
+                                        for j in range(n_corr):
+                                            valor = matriz[i, j]
+                                            if not np.isnan(valor):
+                                                color_fondo = obtener_color_fondo_corr(valor)
+                                                valor_texto = f"{valor:.3f}"
+                                            else:
+                                                color_fondo = '#ffffff'
+                                                valor_texto = "N/A"
+                                            
+                                            html_table += f'<td class="correlation-value" style="background-color: {color_fondo};">{valor_texto}</td>'
+                                        
+                                        html_table += "</tr>"
+                                    
+                                    html_table += "</table>"
+                                    return html_table
+                                
+                                # Mostrar matrices solo si hay al menos 2 estrategias seleccionadas
+                                if matriz_profit_loss_corr is not None and matriz_entrada_corr is not None:
+                                    # Leyenda de colores (arriba)
+                                    st.markdown("""
+                                    <p style="color: #6c757d; font-size: 0.9em; text-align: center; margin-bottom: 20px;">
+                                        <span style="display: inline-block; width: 12px; height: 12px; background-color: #46D285; border: 1px solid #d5d5da; margin-right: 5px; vertical-align: middle;"></span> Baja (< 0.4 )    
+                                        <span style="display: inline-block; width: 12px; height: 12px; background-color: #FBBE5B; border: 1px solid #d5d5da; margin-left: 15px; margin-right: 5px; vertical-align: middle;"></span> Media ( 0.4 - 0.7 )    
+                                        <span style="display: inline-block; width: 12px; height: 12px; background-color: #FA5A5A; border: 1px solid #d5d5da; margin-left: 15px; margin-right: 5px; vertical-align: middle;"></span> Alta ( > 0.7 )
+                                    </p>
+                                    """, unsafe_allow_html=True)
+                                    
+                                    # Mostrar las matrices: lado a lado si hay 6 o menos estrategias, una debajo de otra si hay más
+                                    if n_corr <= 6:
+                                        # Mostrar las dos matrices lado a lado
+                                        col_matriz1, col_matriz2 = st.columns(2)
+                                        
+                                        with col_matriz1:
+                                            html_profit_loss = construir_tabla_html_corr(
+                                                matriz_profit_loss_corr, 
+                                                "Correlación por Profit/Loss (miden si las estrategias ganan/pierden al mismo tiempo)"
+                                            )
+                                            st.markdown(html_profit_loss, unsafe_allow_html=True)
+                                        
+                                        with col_matriz2:
+                                            html_entrada = construir_tabla_html_corr(
+                                                matriz_entrada_corr, 
+                                                "Correlación por Entrada (hora/precio) (miden si las estrategias entran a horas y precios similares)"
+                                            )
+                                            st.markdown(html_entrada, unsafe_allow_html=True)
+                                    else:
+                                        # Mostrar las matrices una debajo de la otra
+                                        html_profit_loss = construir_tabla_html_corr(
+                                            matriz_profit_loss_corr, 
+                                            "Correlación por Profit/Loss (miden si las estrategias ganan/pierden al mismo tiempo)"
+                                        )
+                                        st.markdown(html_profit_loss, unsafe_allow_html=True)
+                                        
+                                        html_entrada = construir_tabla_html_corr(
+                                            matriz_entrada_corr, 
+                                            "Correlación por Entrada (hora/precio) (miden si las estrategias entran a horas y precios similares)"
+                                        )
+                                        st.markdown(html_entrada, unsafe_allow_html=True)
                         
                     # Selector de estrategias para combinar
                     # Obtener el rango de fechas disponible del dataframe completo
@@ -3991,233 +4390,404 @@ with tab1:
                                                 column_config=column_config_mes_comb
                                             )
                                             
-                                            # Análisis de correlación de precios de entrada por activo
-                                            # Agrupar estrategias por activo
-                                            estrategias_por_activo = {}
-                                            for ea_nombre, activo in estrategias_filtradas:
-                                                if activo not in estrategias_por_activo:
-                                                    estrategias_por_activo[activo] = []
-                                                estrategias_por_activo[activo].append(ea_nombre)
-                                            
-                                            # Mostrar matriz de correlación solo para activos con más de una estrategia
-                                            activos_con_multiples = {activo: eas for activo, eas in estrategias_por_activo.items() if len(eas) > 1}
-                                            
-                                            if activos_con_multiples:
-                                                st.markdown("""
-                                                <div style="margin-top: 2rem; margin-bottom: 2.5rem;">
-                                                    <h4>Matriz de Correlación de Timing y Dirección de Entrada</h4>
-                                                    <p style="color: #6c757d; font-size: 0.9em;">Matriz de correlación entre estrategias del mismo activo basada en timing de entrada (hora del día, día de la semana) y dirección de operación (Buy/Sell). Valores cercanos a 1 indican que las estrategias tienen comportamientos similares (o inversos), valores cercanos a 0 indican comportamientos independientes.</p>
-                                                    <p style="color: #6c757d; font-size: 0.85em; font-style: italic;">Nota: La correlación se calcula comparando el timing de entrada y la dirección de operación (dentro de 7 días), usando el valor absoluto para mostrar solo valores entre 0 y 1. "N/A" aparece cuando no hay suficientes trades coincidentes (mínimo 3 puntos).</p>
-                                                </div>
-                                                """, unsafe_allow_html=True)
-                                                
-                                                # Función helper para calcular correlación entre dos estrategias
-                                                def calcular_correlacion_estrategias(ea1, ea2, activo, df_data):
-                                                    """Calcula la correlación basada en timing de entrada y dirección de operación"""
-                                                    df_ea1 = df_data[
-                                                        (df_data['EA'] == ea1) & 
-                                                        (df_data['Símbolo'].str.lower() == activo)
-                                                    ][['Open', 'Tipo']].copy()
-                                                    df_ea2 = df_data[
-                                                        (df_data['EA'] == ea2) & 
-                                                        (df_data['Símbolo'].str.lower() == activo)
-                                                    ][['Open', 'Tipo']].copy()
+                                            # Sección de Correlación (igual que en "Análisis y creación de portafolios")
+                                            if len(estrategias_filtradas) > 1:
+                                                with st.expander("Correlación", expanded=False):
+                                                    # Preparar nombres de estrategias desde df_combinado
+                                                    estrategias_nombres = []
+                                                    estrategias_datos = {}
                                                     
-                                                    if len(df_ea1) == 0 or len(df_ea2) == 0:
-                                                        return np.nan
+                                                    # Agrupar por EA y Símbolo para crear las estrategias
+                                                    for (ea, simbolo), grupo in df_combinado.groupby(["EA", "Símbolo"]):
+                                                        estrategia_key = f"{ea} - {simbolo.upper()}"
+                                                        estrategias_nombres.append(estrategia_key)
+                                                        estrategias_datos[estrategia_key] = {
+                                                            'nombre': ea,
+                                                            'activo': simbolo.upper(),
+                                                            'df': grupo.copy(),
+                                                            'profit_col': 'Beneficio',
+                                                            'open_time_col': 'Open',
+                                                            'open_price_col': 'PrecioOpen'
+                                                        }
                                                     
-                                                    # Calcular características de entrada para cada estrategia
-                                                    # 1. Hora del día (0-23) normalizada a 0-1
-                                                    # 2. Día de la semana (0-6) normalizado a 0-1
-                                                    # 3. Dirección (1 para Buy, -1 para Sell)
-                                                    
-                                                    caracteristicas_ea1 = []
-                                                    caracteristicas_ea2 = []
-                                                    
-                                                    # Ventana amplia para encontrar coincidencias
-                                                    ventana = pd.Timedelta(days=7)  # Una semana completa
-                                                    
-                                                    for _, row1 in df_ea1.iterrows():
-                                                        fecha1 = row1['Open']
-                                                        df_cercanos = df_ea2[
-                                                            (df_ea2['Open'] >= fecha1 - ventana) & 
-                                                            (df_ea2['Open'] <= fecha1 + ventana)
-                                                        ]
-                                                        if len(df_cercanos) > 0:
-                                                            # Encontrar el más cercano en tiempo
-                                                            df_cercanos = df_cercanos.copy()
-                                                            df_cercanos['diff'] = abs(df_cercanos['Open'] - fecha1)
-                                                            mas_cercano = df_cercanos.nsmallest(1, 'diff').iloc[0]
-                                                            
-                                                            # Características de la estrategia 1
-                                                            hora1 = fecha1.hour / 23.0  # Normalizar a 0-1
-                                                            dia_semana1 = fecha1.weekday() / 6.0  # Normalizar a 0-1
-                                                            tipo1 = 1.0 if row1['Tipo'] == 'Buy' else -1.0
-                                                            
-                                                            # Características de la estrategia 2
-                                                            fecha2 = mas_cercano['Open']
-                                                            hora2 = fecha2.hour / 23.0
-                                                            dia_semana2 = fecha2.weekday() / 6.0
-                                                            tipo2 = 1.0 if mas_cercano['Tipo'] == 'Buy' else -1.0
-                                                            
-                                                            # Crear vector de características (combinación ponderada)
-                                                            # Peso mayor a la dirección y hora del día
-                                                            caracteristica1 = hora1 * 0.4 + dia_semana1 * 0.2 + tipo1 * 0.4
-                                                            caracteristica2 = hora2 * 0.4 + dia_semana2 * 0.2 + tipo2 * 0.4
-                                                            
-                                                            caracteristicas_ea1.append(caracteristica1)
-                                                            caracteristicas_ea2.append(caracteristica2)
-                                                    
-                                                    # Calcular correlación de las características
-                                                    if len(caracteristicas_ea1) >= 3:
-                                                        try:
-                                                            correlacion = np.corrcoef(caracteristicas_ea1, caracteristicas_ea2)[0, 1]
-                                                            # Usar valor absoluto para que la correlación esté entre 0 y 1
-                                                            # 0 = sin correlación, 1 = correlación perfecta (positiva o negativa)
-                                                            if not np.isnan(correlacion):
-                                                                return abs(correlacion)
-                                                            return np.nan
-                                                        except:
-                                                            return np.nan
-                                                    return np.nan
-                                                
-                                                for activo, eas in activos_con_multiples.items():
-                                                    # Crear matriz de correlación
-                                                    n_estrategias = len(eas)
-                                                    matriz_correlacion = np.full((n_estrategias, n_estrategias), np.nan)
-                                                    
-                                                    # Calcular correlación para cada par de estrategias
-                                                    for i in range(n_estrategias):
-                                                        for j in range(n_estrategias):
-                                                            if i == j:
-                                                                # Diagonal: correlación consigo mismo es 1.0
-                                                                matriz_correlacion[i, j] = 1.0
-                                                            elif i < j:
-                                                                # Calcular correlación solo una vez para cada par
-                                                                corr = calcular_correlacion_estrategias(eas[i], eas[j], activo, df_combinado)
-                                                                matriz_correlacion[i, j] = corr
-                                                                matriz_correlacion[j, i] = corr  # Matriz simétrica
-                                                    
-                                                    # Crear DataFrame para la matriz
-                                                    df_matriz = pd.DataFrame(
-                                                        matriz_correlacion,
-                                                        index=eas,
-                                                        columns=eas
-                                                    )
-                                                    
-                                                    # Crear heatmap con plotly
-                                                    # Preparar texto con mejor contraste
-                                                    text_matrix = []
-                                                    for row in matriz_correlacion:
-                                                        text_row = []
-                                                        for val in row:
-                                                            if not np.isnan(val):
-                                                                text_row.append(f"{val:.3f}")
+                                                    if len(estrategias_nombres) > 1:
+                                                        # Selector de estrategias para las matrices
+                                                        estrategias_seleccionadas_corr = st.multiselect(
+                                                            "Selecciona las estrategias para las matrices de correlación:",
+                                                            options=estrategias_nombres,
+                                                            default=[],
+                                                            key="estrategias_correlacion_mt4",
+                                                            help="Selecciona las estrategias que deseas incluir en las matrices de correlación. Mínimo 2 estrategias."
+                                                        )
+                                                        
+                                                        # Filtrar estrategias según la selección
+                                                        if len(estrategias_seleccionadas_corr) >= 2:
+                                                            estrategias_nombres_filtradas = estrategias_seleccionadas_corr
+                                                            estrategias_datos_filtradas = {key: estrategias_datos[key] for key in estrategias_seleccionadas_corr if key in estrategias_datos}
+                                                        else:
+                                                            estrategias_nombres_filtradas = []
+                                                            estrategias_datos_filtradas = {}
+                                                        
+                                                        # Sliders para tolerancias
+                                                        col1, col2 = st.columns(2)
+                                                        with col1:
+                                                            tolerancia_temporal = st.slider(
+                                                                "Tolerancia temporal (minutos)",
+                                                                min_value=1,
+                                                                max_value=60,
+                                                                value=1,
+                                                                step=1,
+                                                                key="tolerancia_temporal_corr_mt4",
+                                                                help="Tolerancia en minutos para considerar que dos trades ocurren al mismo tiempo"
+                                                            )
+                                                        
+                                                        with col2:
+                                                            tolerancia_precio = st.slider(
+                                                                "Tolerancia precio (%)",
+                                                                min_value=0.01,
+                                                                max_value=5.0,
+                                                                value=0.2,
+                                                                step=0.01,
+                                                                key="tolerancia_precio_corr_mt4",
+                                                                help="Tolerancia en porcentaje para considerar que dos trades entran a precios similares"
+                                                            )
+                                                        
+                                                        # Solo calcular y mostrar matrices si hay al menos 2 estrategias seleccionadas
+                                                        if len(estrategias_nombres_filtradas) < 2:
+                                                            st.info("ℹ️ Selecciona al menos 2 estrategias para ver las matrices de correlación.")
+                                                        
+                                                        # Función para obtener el color de fondo según el valor de correlación
+                                                        def obtener_color_fondo(valor):
+                                                            if pd.isna(valor):
+                                                                return '#ffffff'  # Blanco para NaN
+                                                            if valor < 0.4:
+                                                                return '#46D285'  # Verde
+                                                            elif valor < 0.7:
+                                                                return '#FBBE5B'  # Naranja
                                                             else:
-                                                                text_row.append("N/A")
-                                                        text_matrix.append(text_row)
-                                                    
-                                                    # Escala de colores: < 0.4 verde, 0.4-0.7 naranja, > 0.7 rojo
-                                                    colorscale_custom = [
-                                                        [0,    '#48F94A'],   # Verde para valores < 0.4
-                                                        [0.4,  '#48F94A'],   # Verde hasta 0.4
-                                                        [0.4,  '#F98948'],   # Naranja desde 0.4
-                                                        [0.7,  '#F98948'],   # Naranja hasta 0.7
-                                                        [0.7,  '#F93636'],   # Rojo desde 0.7
-                                                        [1,    '#F93636']    # Rojo para valores > 0.7
-                                                    ]
-                                                    
-                                                    # Función para obtener el color de borde (todos los bordes del mismo color)
-                                                    def obtener_color_borde(valor):
-                                                        if pd.isna(valor):
-                                                            return None
-                                                        return '#d5d5da'  # Todos los bordes del mismo color
-                                                    
-                                                    # Añadir bordes de colores a cada celda usando shapes
-                                                    shapes = []
-                                                    n = len(eas)
-                                                    for i in range(n):
-                                                        for j in range(n):
-                                                            valor = matriz_correlacion[i, j]
-                                                            if not pd.isna(valor):
-                                                                color_borde = obtener_color_borde(valor)
-                                                                if color_borde:
-                                                                    # Usar las etiquetas de las estrategias como coordenadas
-                                                                    x0 = eas[j] if j > 0 else eas[0]
-                                                                    x1 = eas[j] if j < n-1 else eas[n-1]
-                                                                    y0 = eas[i] if i > 0 else eas[0]
-                                                                    y1 = eas[i] if i < n-1 else eas[n-1]
+                                                                return '#FA5A5A'  # Rojo
+                                                        
+                                                        # Función para calcular correlación por profit/loss (optimizada)
+                                                        def calcular_correlacion_profit_loss(estrategia1_key, estrategia2_key, tol_temporal):
+                                                            if estrategia1_key == estrategia2_key:
+                                                                return 1.0
+                                                            
+                                                            datos1 = estrategias_datos_filtradas[estrategia1_key]
+                                                            datos2 = estrategias_datos_filtradas[estrategia2_key]
+                                                            
+                                                            df1 = datos1['df'].copy()
+                                                            df2 = datos2['df'].copy()
+                                                            profit_col1 = datos1['profit_col']
+                                                            profit_col2 = datos2['profit_col']
+                                                            open_time_col1 = datos1.get('open_time_col')
+                                                            open_time_col2 = datos2.get('open_time_col')
+                                                            
+                                                            # Verificar que ambas estrategias tengan datos de tiempo
+                                                            if not open_time_col1 or open_time_col1 not in df1.columns:
+                                                                return np.nan
+                                                            if not open_time_col2 or open_time_col2 not in df2.columns:
+                                                                return np.nan
+                                                            
+                                                            try:
+                                                                # Convertir a datetime y ordenar
+                                                                df1[open_time_col1] = pd.to_datetime(df1[open_time_col1], errors='coerce')
+                                                                df2[open_time_col2] = pd.to_datetime(df2[open_time_col2], errors='coerce')
+                                                                df1 = df1.dropna(subset=[open_time_col1]).sort_values(open_time_col1)
+                                                                df2 = df2.dropna(subset=[open_time_col2]).sort_values(open_time_col2)
+                                                                
+                                                                if len(df1) == 0 or len(df2) == 0:
+                                                                    return np.nan
+                                                                
+                                                                # Crear columnas de signo usando operación vectorizada
+                                                                df1['signo'] = np.where(df1[profit_col1] > 0, 1, np.where(df1[profit_col1] < 0, -1, 0))
+                                                                df2['signo'] = np.where(df2[profit_col2] > 0, 1, np.where(df2[profit_col2] < 0, -1, 0))
+                                                                
+                                                                # Preparar DataFrames para merge_asof (solo las columnas necesarias)
+                                                                # Asegurar que estén ordenados por tiempo
+                                                                df1_clean = pd.DataFrame({
+                                                                    'time': df1[open_time_col1].values,
+                                                                    'signo': df1['signo'].values
+                                                                }).sort_values('time').reset_index(drop=True)
+                                                                
+                                                                df2_clean = pd.DataFrame({
+                                                                    'time': df2[open_time_col2].values,
+                                                                    'signo': df2['signo'].values
+                                                                }).sort_values('time').reset_index(drop=True)
+                                                                
+                                                                # Crear ventana de tolerancia (asegurar que sea un Timedelta)
+                                                                # Forzar conversión a float y luego a Timedelta
+                                                                tol_minutes = float(tol_temporal)
+                                                                tolerance = pd.Timedelta(minutes=tol_minutes)
+                                                                
+                                                                # Usar merge_asof para encontrar el trade más cercano
+                                                                # merge_asof requiere que los DataFrames estén ordenados por la columna 'on'
+                                                                merged = pd.merge_asof(
+                                                                    df1_clean,
+                                                                    df2_clean,
+                                                                    on='time',
+                                                                    direction='nearest',
+                                                                    tolerance=tolerance,
+                                                                    suffixes=('_1', '_2'),
+                                                                    allow_exact_matches=True
+                                                                )
+                                                                
+                                                                if len(merged) == 0:
+                                                                    return np.nan
+                                                                
+                                                                # Contar coincidencias de signo
+                                                                coincidencias = (merged['signo_1'] == merged['signo_2']).sum()
+                                                                total_comparaciones = len(merged)
+                                                                
+                                                                # Correlación = proporción de coincidencias
+                                                                correlacion = coincidencias / total_comparaciones
+                                                                return correlacion
+                                                            
+                                                            except Exception as e:
+                                                                return np.nan
+                                                        
+                                                        # Función para calcular correlación por entrada (hora/precio) (optimizada)
+                                                        def calcular_correlacion_entrada(estrategia1_key, estrategia2_key, tol_temporal, tol_precio):
+                                                            if estrategia1_key == estrategia2_key:
+                                                                return 1.0
+                                                            
+                                                            datos1 = estrategias_datos_filtradas[estrategia1_key]
+                                                            datos2 = estrategias_datos_filtradas[estrategia2_key]
+                                                            
+                                                            df1 = datos1['df'].copy()
+                                                            df2 = datos2['df'].copy()
+                                                            open_time_col1 = datos1.get('open_time_col')
+                                                            open_time_col2 = datos2.get('open_time_col')
+                                                            open_price_col1 = datos1.get('open_price_col')
+                                                            open_price_col2 = datos2.get('open_price_col')
+                                                            
+                                                            # Verificar que ambas estrategias tengan datos de tiempo y precio
+                                                            if not open_time_col1 or open_time_col1 not in df1.columns:
+                                                                return np.nan
+                                                            if not open_time_col2 or open_time_col2 not in df2.columns:
+                                                                return np.nan
+                                                            if not open_price_col1 or open_price_col1 not in df1.columns:
+                                                                return np.nan
+                                                            if not open_price_col2 or open_price_col2 not in df2.columns:
+                                                                return np.nan
+                                                            
+                                                            try:
+                                                                # Convertir a datetime y ordenar
+                                                                df1[open_time_col1] = pd.to_datetime(df1[open_time_col1], errors='coerce')
+                                                                df2[open_time_col2] = pd.to_datetime(df2[open_time_col2], errors='coerce')
+                                                                df1 = df1.dropna(subset=[open_time_col1, open_price_col1]).sort_values(open_time_col1)
+                                                                df2 = df2.dropna(subset=[open_time_col2, open_price_col2]).sort_values(open_time_col2)
+                                                                
+                                                                if len(df1) == 0 or len(df2) == 0:
+                                                                    return np.nan
+                                                                
+                                                                # Preparar DataFrames para merge_asof (solo las columnas necesarias)
+                                                                # Asegurar que estén ordenados por tiempo
+                                                                df1_clean = pd.DataFrame({
+                                                                    'time': df1[open_time_col1].values,
+                                                                    'price': df1[open_price_col1].values
+                                                                }).sort_values('time').reset_index(drop=True)
+                                                                
+                                                                df2_clean = pd.DataFrame({
+                                                                    'time': df2[open_time_col2].values,
+                                                                    'price': df2[open_price_col2].values
+                                                                }).sort_values('time').reset_index(drop=True)
+                                                                
+                                                                # Crear ventana de tolerancia temporal (asegurar que sea un Timedelta)
+                                                                tolerance = pd.Timedelta(minutes=float(tol_temporal))
+                                                                
+                                                                # Usar merge_asof para encontrar trades cercanos en tiempo
+                                                                # merge_asof requiere que los DataFrames estén ordenados por la columna 'on'
+                                                                merged = pd.merge_asof(
+                                                                    df1_clean,
+                                                                    df2_clean,
+                                                                    on='time',
+                                                                    direction='nearest',
+                                                                    tolerance=tolerance,
+                                                                    suffixes=('_1', '_2'),
+                                                                    allow_exact_matches=True
+                                                                )
+                                                                
+                                                                if len(merged) == 0:
+                                                                    return np.nan
+                                                                
+                                                                # Filtrar por tolerancia de precio usando operación vectorizada
+                                                                # Asegurar que tol_precio sea float
+                                                                tol_prec = float(tol_precio)
+                                                                precio_min = merged['price_1'] * (1 - tol_prec / 100)
+                                                                precio_max = merged['price_1'] * (1 + tol_prec / 100)
+                                                                
+                                                                coincidencias = (
+                                                                    (merged['price_2'] >= precio_min) & 
+                                                                    (merged['price_2'] <= precio_max)
+                                                                ).sum()
+                                                                
+                                                                total_comparaciones = len(merged)
+                                                                
+                                                                if total_comparaciones == 0:
+                                                                    return np.nan
+                                                                
+                                                                # Correlación = proporción de coincidencias
+                                                                correlacion = coincidencias / total_comparaciones
+                                                                return correlacion
+                                                            
+                                                            except Exception as e:
+                                                                return np.nan
+                                                        
+                                                        # Calcular matrices de correlación solo si hay al menos 2 estrategias seleccionadas
+                                                        if len(estrategias_nombres_filtradas) >= 2:
+                                                            # Leer valores directamente de los sliders (forzar lectura fresca)
+                                                            tol_temp = float(tolerancia_temporal)
+                                                            tol_prec = float(tolerancia_precio)
+                                                            
+                                                            n = len(estrategias_nombres_filtradas)
+                                                            matriz_profit_loss = np.full((n, n), np.nan)
+                                                            matriz_entrada = np.full((n, n), np.nan)
+                                                            
+                                                            # Mostrar indicador de progreso
+                                                            progress_bar = st.progress(0)
+                                                            status_text = st.empty()
+                                                            
+                                                            total_calculos = n * n * 2
+                                                            calculos_realizados = 0
+                                                            
+                                                            for i in range(n):
+                                                                for j in range(n):
+                                                                    try:
+                                                                        # Pasar los valores explícitamente como float
+                                                                        # Usar los valores directamente sin variables intermedias
+                                                                        matriz_profit_loss[i, j] = calcular_correlacion_profit_loss(
+                                                                            estrategias_nombres_filtradas[i], 
+                                                                            estrategias_nombres_filtradas[j],
+                                                                            tol_temp
+                                                                        )
+                                                                        calculos_realizados += 1
+                                                                        progress_bar.progress(calculos_realizados / total_calculos)
+                                                                        
+                                                                        matriz_entrada[i, j] = calcular_correlacion_entrada(
+                                                                            estrategias_nombres_filtradas[i], 
+                                                                            estrategias_nombres_filtradas[j],
+                                                                            tol_temp,
+                                                                            tol_prec
+                                                                        )
+                                                                        calculos_realizados += 1
+                                                                        progress_bar.progress(calculos_realizados / total_calculos)
+                                                                    except Exception as e:
+                                                                        matriz_profit_loss[i, j] = np.nan
+                                                                        matriz_entrada[i, j] = np.nan
+                                                                        calculos_realizados += 2
+                                                                        progress_bar.progress(calculos_realizados / total_calculos)
+                                                            
+                                                            progress_bar.empty()
+                                                            status_text.empty()
+                                                        else:
+                                                            matriz_profit_loss = None
+                                                            matriz_entrada = None
+                                                            n = 0
+                                                        
+                                                        # Función para construir tabla HTML
+                                                        def construir_tabla_html(matriz, titulo):
+                                                            html_table = f"""
+                                                            <style>
+                                                            .correlation-table {{
+                                                                border-collapse: collapse;
+                                                                width: 100%;
+                                                                margin: 10px auto;
+                                                                background-color: white;
+                                                            }}
+                                                            .correlation-table th, .correlation-table td {{
+                                                                padding: 6px;
+                                                                text-align: center;
+                                                                font-size: 9px;
+                                                            }}
+                                                            .correlation-table th {{
+                                                                background-color: #f0f0f0;
+                                                                font-weight: bold;
+                                                            }}
+                                                            .correlation-table td.correlation-value {{
+                                                                color: #333;
+                                                                font-weight: 500;
+                                                            }}
+                                                            .correlation-title {{
+                                                                text-align: center;
+                                                                font-weight: bold;
+                                                                margin-bottom: 10px;
+                                                                font-size: 12px;
+                                                            }}
+                                                            </style>
+                                                            <div class="correlation-title">{titulo}</div>
+                                                            <table class="correlation-table">
+                                                            """
+                                                            
+                                                            # Primera fila: encabezados de columna
+                                                            html_table += "<tr>"
+                                                            html_table += '<th style="background-color: #f0f0f0;"></th>'
+                                                            for nombre in estrategias_nombres_filtradas:
+                                                                html_table += f'<th style="background-color: #f0f0f0;">{nombre}</th>'
+                                                            html_table += "</tr>"
+                                                            
+                                                            # Filas siguientes
+                                                            for i in range(n):
+                                                                html_table += "<tr>"
+                                                                html_table += f'<th style="background-color: #f0f0f0;">{estrategias_nombres_filtradas[i]}</th>'
+                                                                
+                                                                for j in range(n):
+                                                                    valor = matriz[i, j]
+                                                                    if not np.isnan(valor):
+                                                                        color_fondo = obtener_color_fondo(valor)
+                                                                        valor_texto = f"{valor:.3f}"
+                                                                    else:
+                                                                        color_fondo = '#ffffff'
+                                                                        valor_texto = "N/A"
                                                                     
-                                                                    # Crear rectángulo para el borde usando coordenadas de categorías
-                                                                    shapes.append(dict(
-                                                                        type="rect",
-                                                                        xref="x",
-                                                                        yref="y",
-                                                                        x0=j - 0.5,
-                                                                        y0=i - 0.5,
-                                                                        x1=j + 0.5,
-                                                                        y1=i + 0.5,
-                                                                        line=dict(color=color_borde, width=2),
-                                                                        fillcolor="rgba(0,0,0,0)",  # Transparente, solo borde
-                                                                        layer="above"
-                                                                    ))
-                                                    
-                                                    fig_heatmap = go.Figure(data=go.Heatmap(
-                                                        z=matriz_correlacion,
-                                                        x=eas,
-                                                        y=eas,
-                                                        colorscale=colorscale_custom,
-                                                        zmin=0,
-                                                        zmax=1,
-                                                        text=text_matrix,
-                                                        texttemplate="%{text}",
-                                                        textfont={"size": 13},  # Texto gris/negro por defecto (mejor contraste con fondos claros)
-                                                        showscale=False,  # Ocultar la leyenda (colorbar)
-                                                        xgap=2,  # Espacio horizontal entre celdas
-                                                        ygap=2   # Espacio vertical entre celdas
-                                                    ))
-                                                    
-                                                    # Crear título con leyenda de colores
-                                                    titulo_con_leyenda = f"Matriz de Correlación - {activo.upper()}                    🟢 < 0.4    🟠 0.4-0.7    🔴 > 0.7"
-                                                    
-                                                    fig_heatmap.update_layout(
-                                                        title=titulo_con_leyenda,
-                                                        width=600,
-                                                        height=600,
-                                                        margin=dict(l=80, r=20, t=60, b=60),  # Margen izquierdo más amplio para separar del borde
-                                                        plot_bgcolor='#f8f9fa',  # Fondo del área del gráfico
-                                                        paper_bgcolor='#f8f9fa',  # Fondo del papel/contenedor
-                                                        xaxis=dict(showgrid=False, zeroline=False, showline=False),  # Quitar líneas y bordes del eje X
-                                                        yaxis=dict(showgrid=False, zeroline=False, showline=False),  # Quitar líneas y bordes del eje Y
-                                                        shapes=shapes
-                                                    )
-                                                    
-                                                    st.plotly_chart(fig_heatmap, use_container_width=True)
-                                                    
-                                                    # Mostrar también como tabla para mejor legibilidad
-                                                    st.markdown(f"**Tabla de Correlación - {activo.upper()}**")
-                                                    
-                                                    # Formatear valores para la tabla
-                                                    df_matriz_display = df_matriz.copy()
-                                                    for col in df_matriz_display.columns:
-                                                        df_matriz_display[col] = df_matriz_display[col].apply(
-                                                            lambda x: f"{x:.3f}" if not np.isnan(x) else "N/A"
-                                                        )
-                                                    
-                                                    # Configurar columnas para la tabla
-                                                    column_config_matriz = {}
-                                                    for col in df_matriz_display.columns:
-                                                        column_config_matriz[col] = st.column_config.TextColumn(
-                                                            col,
-                                                            help=f"Correlación con {col}"
-                                                        )
-                                                    
-                                                    st.dataframe(
-                                                        df_matriz_display,
-                                                        use_container_width=True,
-                                                        column_config=column_config_matriz,
-                                                        hide_index=False
-                                                    )
+                                                                    html_table += f'<td class="correlation-value" style="background-color: {color_fondo};">{valor_texto}</td>'
+                                                                
+                                                                html_table += "</tr>"
+                                                            
+                                                            html_table += "</table>"
+                                                            return html_table
+                                                        
+                                                        # Mostrar matrices solo si hay al menos 2 estrategias seleccionadas
+                                                        if matriz_profit_loss is not None and matriz_entrada is not None:
+                                                            # Leyenda de colores (arriba)
+                                                            st.markdown("""
+                                                            <p style="color: #6c757d; font-size: 0.9em; text-align: center; margin-bottom: 20px;">
+                                                                <span style="display: inline-block; width: 12px; height: 12px; background-color: #46D285; border: 1px solid #d5d5da; margin-right: 5px; vertical-align: middle;"></span> Baja (< 0.4 )    
+                                                                <span style="display: inline-block; width: 12px; height: 12px; background-color: #FBBE5B; border: 1px solid #d5d5da; margin-left: 15px; margin-right: 5px; vertical-align: middle;"></span> Media ( 0.4 - 0.7 )    
+                                                                <span style="display: inline-block; width: 12px; height: 12px; background-color: #FA5A5A; border: 1px solid #d5d5da; margin-left: 15px; margin-right: 5px; vertical-align: middle;"></span> Alta ( > 0.7 )
+                                                            </p>
+                                                            """, unsafe_allow_html=True)
+                                                            
+                                                            # Mostrar las matrices: lado a lado si hay 6 o menos estrategias, una debajo de otra si hay más
+                                                            if n <= 6:
+                                                                # Mostrar las dos matrices lado a lado
+                                                                col_matriz1, col_matriz2 = st.columns(2)
+                                                                
+                                                                with col_matriz1:
+                                                                    html_profit_loss = construir_tabla_html(
+                                                                        matriz_profit_loss, 
+                                                                        "Correlación por Profit/Loss (miden si las estrategias ganan/pierden al mismo tiempo)"
+                                                                    )
+                                                                    st.markdown(html_profit_loss, unsafe_allow_html=True)
+                                                                
+                                                                with col_matriz2:
+                                                                    html_entrada = construir_tabla_html(
+                                                                        matriz_entrada, 
+                                                                        "Correlación por Entrada (hora/precio) (miden si las estrategias entran a horas y precios similares)"
+                                                                    )
+                                                                    st.markdown(html_entrada, unsafe_allow_html=True)
+                                                            else:
+                                                                # Mostrar las matrices una debajo de la otra
+                                                                html_profit_loss = construir_tabla_html(
+                                                                    matriz_profit_loss, 
+                                                                    "Correlación por Profit/Loss (miden si las estrategias ganan/pierden al mismo tiempo)"
+                                                                )
+                                                                st.markdown(html_profit_loss, unsafe_allow_html=True)
+                                                                
+                                                                html_entrada = construir_tabla_html(
+                                                                    matriz_entrada, 
+                                                                    "Correlación por Entrada (hora/precio) (miden si las estrategias entran a horas y precios similares)"
+                                                                )
+                                                                st.markdown(html_entrada, unsafe_allow_html=True)
                                             
                                             # Preparar datos de cada estrategia individual
                                             df_combinado['Fecha'] = df_combinado['Close'].dt.date
@@ -4610,234 +5180,6 @@ with tab1:
                                                 column_config=column_config_mes_comb
                                             )
                                             
-                                            # Análisis de correlación de precios de entrada por activo
-                                            # Agrupar estrategias por activo
-                                            estrategias_por_activo = {}
-                                            for ea_nombre, activo in estrategias_filtradas:
-                                                if activo not in estrategias_por_activo:
-                                                    estrategias_por_activo[activo] = []
-                                                estrategias_por_activo[activo].append(ea_nombre)
-                                            
-                                            # Mostrar matriz de correlación solo para activos con más de una estrategia
-                                            activos_con_multiples = {activo: eas for activo, eas in estrategias_por_activo.items() if len(eas) > 1}
-                                            
-                                            if activos_con_multiples:
-                                                st.markdown("""
-                                                <div style="margin-top: 2rem; margin-bottom: 2.5rem;">
-                                                    <h4>Matriz de Correlación de Timing y Dirección de Entrada</h4>
-                                                    <p style="color: #6c757d; font-size: 0.9em;">Matriz de correlación entre estrategias del mismo activo basada en timing de entrada (hora del día, día de la semana) y dirección de operación (Buy/Sell). Valores cercanos a 1 indican que las estrategias tienen comportamientos similares (o inversos), valores cercanos a 0 indican comportamientos independientes.</p>
-                                                    <p style="color: #6c757d; font-size: 0.85em; font-style: italic;">Nota: La correlación se calcula comparando el timing de entrada y la dirección de operación (dentro de 7 días), usando el valor absoluto para mostrar solo valores entre 0 y 1. "N/A" aparece cuando no hay suficientes trades coincidentes (mínimo 3 puntos).</p>
-                                                </div>
-                                                """, unsafe_allow_html=True)
-                                                
-                                                # Función helper para calcular correlación entre dos estrategias
-                                                def calcular_correlacion_estrategias(ea1, ea2, activo, df_data):
-                                                    """Calcula la correlación basada en timing de entrada y dirección de operación"""
-                                                    df_ea1 = df_data[
-                                                        (df_data['EA'] == ea1) & 
-                                                        (df_data['Símbolo'].str.lower() == activo)
-                                                    ][['Open', 'Tipo']].copy()
-                                                    df_ea2 = df_data[
-                                                        (df_data['EA'] == ea2) & 
-                                                        (df_data['Símbolo'].str.lower() == activo)
-                                                    ][['Open', 'Tipo']].copy()
-                                                    
-                                                    if len(df_ea1) == 0 or len(df_ea2) == 0:
-                                                        return np.nan
-                                                    
-                                                    # Calcular características de entrada para cada estrategia
-                                                    # 1. Hora del día (0-23) normalizada a 0-1
-                                                    # 2. Día de la semana (0-6) normalizado a 0-1
-                                                    # 3. Dirección (1 para Buy, -1 para Sell)
-                                                    
-                                                    caracteristicas_ea1 = []
-                                                    caracteristicas_ea2 = []
-                                                    
-                                                    # Ventana amplia para encontrar coincidencias
-                                                    ventana = pd.Timedelta(days=7)  # Una semana completa
-                                                    
-                                                    for _, row1 in df_ea1.iterrows():
-                                                        fecha1 = row1['Open']
-                                                        df_cercanos = df_ea2[
-                                                            (df_ea2['Open'] >= fecha1 - ventana) & 
-                                                            (df_ea2['Open'] <= fecha1 + ventana)
-                                                        ]
-                                                        if len(df_cercanos) > 0:
-                                                            # Encontrar el más cercano en tiempo
-                                                            df_cercanos = df_cercanos.copy()
-                                                            df_cercanos['diff'] = abs(df_cercanos['Open'] - fecha1)
-                                                            mas_cercano = df_cercanos.nsmallest(1, 'diff').iloc[0]
-                                                            
-                                                            # Características de la estrategia 1
-                                                            hora1 = fecha1.hour / 23.0  # Normalizar a 0-1
-                                                            dia_semana1 = fecha1.weekday() / 6.0  # Normalizar a 0-1
-                                                            tipo1 = 1.0 if row1['Tipo'] == 'Buy' else -1.0
-                                                            
-                                                            # Características de la estrategia 2
-                                                            fecha2 = mas_cercano['Open']
-                                                            hora2 = fecha2.hour / 23.0
-                                                            dia_semana2 = fecha2.weekday() / 6.0
-                                                            tipo2 = 1.0 if mas_cercano['Tipo'] == 'Buy' else -1.0
-                                                            
-                                                            # Crear vector de características (combinación ponderada)
-                                                            # Peso mayor a la dirección y hora del día
-                                                            caracteristica1 = hora1 * 0.4 + dia_semana1 * 0.2 + tipo1 * 0.4
-                                                            caracteristica2 = hora2 * 0.4 + dia_semana2 * 0.2 + tipo2 * 0.4
-                                                            
-                                                            caracteristicas_ea1.append(caracteristica1)
-                                                            caracteristicas_ea2.append(caracteristica2)
-                                                    
-                                                    # Calcular correlación de las características
-                                                    if len(caracteristicas_ea1) >= 3:
-                                                        try:
-                                                            correlacion = np.corrcoef(caracteristicas_ea1, caracteristicas_ea2)[0, 1]
-                                                            # Usar valor absoluto para que la correlación esté entre 0 y 1
-                                                            # 0 = sin correlación, 1 = correlación perfecta (positiva o negativa)
-                                                            if not np.isnan(correlacion):
-                                                                return abs(correlacion)
-                                                            return np.nan
-                                                        except:
-                                                            return np.nan
-                                                    return np.nan
-                                                
-                                                for activo, eas in activos_con_multiples.items():
-                                                    # Crear matriz de correlación
-                                                    n_estrategias = len(eas)
-                                                    matriz_correlacion = np.full((n_estrategias, n_estrategias), np.nan)
-                                                    
-                                                    # Calcular correlación para cada par de estrategias
-                                                    for i in range(n_estrategias):
-                                                        for j in range(n_estrategias):
-                                                            if i == j:
-                                                                # Diagonal: correlación consigo mismo es 1.0
-                                                                matriz_correlacion[i, j] = 1.0
-                                                            elif i < j:
-                                                                # Calcular correlación solo una vez para cada par
-                                                                corr = calcular_correlacion_estrategias(eas[i], eas[j], activo, df_combinado)
-                                                                matriz_correlacion[i, j] = corr
-                                                                matriz_correlacion[j, i] = corr  # Matriz simétrica
-                                                    
-                                                    # Crear DataFrame para la matriz
-                                                    df_matriz = pd.DataFrame(
-                                                        matriz_correlacion,
-                                                        index=eas,
-                                                        columns=eas
-                                                    )
-                                                    
-                                                    # Crear heatmap con plotly
-                                                    # Preparar texto con mejor contraste
-                                                    text_matrix = []
-                                                    for row in matriz_correlacion:
-                                                        text_row = []
-                                                        for val in row:
-                                                            if not np.isnan(val):
-                                                                text_row.append(f"{val:.3f}")
-                                                            else:
-                                                                text_row.append("N/A")
-                                                        text_matrix.append(text_row)
-                                                    
-                                                    # Escala de colores: < 0.4 verde, 0.4-0.7 naranja, > 0.7 rojo
-                                                    colorscale_custom = [
-                                                        [0,    '#46D285'],   # Verde para valores < 0.4
-                                                        [0.4,  '#46D285'],   # Verde hasta 0.4
-                                                        [0.4,  '#FBBE5B'],   # Naranja desde 0.4
-                                                        [0.7,  '#FBBE5B'],   # Naranja hasta 0.7
-                                                        [0.7,  '#FA5A5A'],   # Rojo desde 0.7
-                                                        [1,    '#FA5A5A']    # Rojo para valores > 0.7
-                                                    ]
-                                                    
-                                                    # Función para obtener el color de borde (todos los bordes del mismo color)
-                                                    def obtener_color_borde(valor):
-                                                        if pd.isna(valor):
-                                                            return None
-                                                        return '#d5d5da'  # Todos los bordes del mismo color
-                                                    
-                                                    # Añadir bordes de colores a cada celda usando shapes
-                                                    shapes = []
-                                                    n = len(eas)
-                                                    for i in range(n):
-                                                        for j in range(n):
-                                                            valor = matriz_correlacion[i, j]
-                                                            if not pd.isna(valor):
-                                                                color_borde = obtener_color_borde(valor)
-                                                                if color_borde:
-                                                                    # Usar las etiquetas de las estrategias como coordenadas
-                                                                    x0 = eas[j] if j > 0 else eas[0]
-                                                                    x1 = eas[j] if j < n-1 else eas[n-1]
-                                                                    y0 = eas[i] if i > 0 else eas[0]
-                                                                    y1 = eas[i] if i < n-1 else eas[n-1]
-                                                                    
-                                                                    # Crear rectángulo para el borde usando coordenadas de categorías
-                                                                    shapes.append(dict(
-                                                                        type="rect",
-                                                                        xref="x",
-                                                                        yref="y",
-                                                                        x0=j - 0.5,
-                                                                        y0=i - 0.5,
-                                                                        x1=j + 0.5,
-                                                                        y1=i + 0.5,
-                                                                        line=dict(color=color_borde, width=2),
-                                                                        fillcolor="rgba(0,0,0,0)",  # Transparente, solo borde
-                                                                        layer="above"
-                                                                    ))
-                                                    
-                                                    fig_heatmap = go.Figure(data=go.Heatmap(
-                                                        z=matriz_correlacion,
-                                                        x=eas,
-                                                        y=eas,
-                                                        colorscale=colorscale_custom,
-                                                        zmin=0,
-                                                        zmax=1,
-                                                        text=text_matrix,
-                                                        texttemplate="%{text}",
-                                                        textfont={"size": 13},  # Texto gris/negro por defecto (mejor contraste con fondos claros)
-                                                        showscale=False,  # Ocultar la leyenda (colorbar)
-                                                        xgap=2,  # Espacio horizontal entre celdas
-                                                        ygap=2   # Espacio vertical entre celdas
-                                                    ))
-                                                    
-                                                    # Crear título con leyenda de colores
-                                                    titulo_con_leyenda = f"Matriz de Correlación - {activo.upper()}                    🟢 < 0.4    🟠 0.4 - 0.7    🔴 > 0.7"
-                                                    
-                                                    fig_heatmap.update_layout(
-                                                        title=titulo_con_leyenda,
-                                                        width=600,
-                                                        height=600,
-                                                        margin=dict(l=80, r=20, t=60, b=60),  # Margen izquierdo más amplio para separar del borde
-                                                        plot_bgcolor='#f8f9fa',  # Fondo del área del gráfico
-                                                        paper_bgcolor='#f8f9fa',  # Fondo del papel/contenedor
-                                                        xaxis=dict(showgrid=False, zeroline=False, showline=False),  # Quitar líneas y bordes del eje X
-                                                        yaxis=dict(showgrid=False, zeroline=False, showline=False),  # Quitar líneas y bordes del eje Y
-                                                        shapes=shapes
-                                                    )
-                                                    
-                                                    st.plotly_chart(fig_heatmap, use_container_width=True)
-                                                    
-                                                    # Mostrar también como tabla para mejor legibilidad
-                                                    st.markdown(f"**Tabla de Correlación - {activo.upper()}**")
-                                                    
-                                                    # Formatear valores para la tabla
-                                                    df_matriz_display = df_matriz.copy()
-                                                    for col in df_matriz_display.columns:
-                                                        df_matriz_display[col] = df_matriz_display[col].apply(
-                                                            lambda x: f"{x:.3f}" if not np.isnan(x) else "N/A"
-                                                        )
-                                                    
-                                                    # Configurar columnas para la tabla
-                                                    column_config_matriz = {}
-                                                    for col in df_matriz_display.columns:
-                                                        column_config_matriz[col] = st.column_config.TextColumn(
-                                                            col,
-                                                            help=f"Correlación con {col}"
-                                                        )
-                                                    
-                                                    st.dataframe(
-                                                        df_matriz_display,
-                                                        use_container_width=True,
-                                                        column_config=column_config_matriz,
-                                                        hide_index=False
-                                                    )
-                                        
                                         # Preparar datos de cada estrategia individual
                                         df_combinado['Fecha'] = df_combinado['Close'].dt.date
                                         
