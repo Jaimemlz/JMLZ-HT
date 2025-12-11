@@ -3247,6 +3247,14 @@ with tab1:
                         try:
                             ordenado = grupo.sort_values(by='Open')
                             
+                            # Inicializar contadores (deben estar fuera del if para que siempre se calculen)
+                            sl_directos = 0
+                            sl_trailing = 0
+                            tsp = 0  # Trailing Stop Positivo
+                            tsl = 0  # Trailing Stop Loss
+                            perdidas_nulas = 0
+                            riesgo_ea = 0
+                            
                             # Detectar múltiples niveles de SL (para manejar días de alta volatilidad)
                             perdidas = ordenado[ordenado['Beneficio'] < 0]['Beneficio'].abs()
                             
@@ -3266,13 +3274,6 @@ with tab1:
                             
                                 # Usar el nivel más común como riesgo_ea para compatibilidad (pero usaremos todos los niveles)
                                 riesgo_ea = niveles_sl[0] if len(niveles_sl) > 0 else perdidas.max()
-                                
-                                # Analizar SL directo vs trailing stop (positivo y loss)
-                                sl_directos = 0
-                                sl_trailing = 0
-                                tsp = 0  # Trailing Stop Positivo
-                                tsl = 0  # Trailing Stop Loss
-                                perdidas_nulas = 0
                             
                                 # Margen de tolerancia (15% para considerar múltiples niveles)
                                 margen_tolerancia = riesgo_ea * 0.15
@@ -3366,14 +3367,25 @@ with tab1:
                                         # Break-even -> lo consideramos TS (sin ganancia ni pérdida, lo contamos como TSL)
                                         sl_trailing += 1
                                         tsl += 1
-                            else:
-                                # No hay pérdidas, no podemos calcular el riesgo
-                                riesgo_ea = 0
-                                sl_directos = 0
-                                sl_trailing = 0
-                                tsp = 0
-                                tsl = 0
-                                perdidas_nulas = 0
+                            
+                            # Si no hay pérdidas, aún debemos calcular TSP (trades con ganancia que no tocaron TP)
+                            if len(perdidas) == 0:
+                                # Recorrer todos los trades para contar TSP
+                                for _, trade in ordenado.iterrows():
+                                    beneficio = trade['Beneficio']
+                                    tipo_cierre = trade.get('TipoCierre')
+                                    
+                                    if beneficio > 0:  # Ganancia
+                                        if tipo_cierre == 'TP':
+                                            # TP real, no contar como TSP
+                                            pass
+                                        elif es_tp_real(trade):
+                                            # TP real por cálculo, no contar como TSP
+                                            pass
+                                        else:
+                                            # TS positivo (ganancia que no tocó TP)
+                                            sl_trailing += 1
+                                            tsp += 1
                             
                             # Calcular métricas completas
                             net_profit = ordenado['Beneficio'].sum()
