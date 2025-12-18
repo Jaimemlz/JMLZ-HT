@@ -2471,7 +2471,7 @@ st.markdown("""
         background-color: #495057 !important;
     }
 
-    span.st-ae.st-af.st-ag.st-ah.st-ai.st-aj.st-cj {
+    span.st-ae.st-af.st-ag.st-ah.st-ai.st-aj.st-cj, .st-ed {
         background-color: white !important;
     }
     
